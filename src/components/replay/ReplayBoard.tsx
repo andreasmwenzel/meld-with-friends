@@ -52,14 +52,15 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit, ani
   const seatAt = (r: number): SeatIndex => (((bottom + r) % 4) as SeatIndex);
   const rel = (seat: SeatIndex): 0 | 1 | 2 | 3 => (((seat - bottom + 4) % 4) as 0 | 1 | 2 | 3);
   const lit = new Set(move.cards);
-  const melding = frame.phase === "melding";
-  const hand = (seat: SeatIndex) => sortHand(frame.players[seat].hand, frame.trump, prefs.sort);
-  // Lit cards lift wherever they now sit: a pass lights up in the hand that received it.
-  const raised = (seat: SeatIndex): Set<CardId> => {
-    const cards = new Set<CardId>(frame.players[seat].hand.filter(c => lit.has(c)));
-    if (melding) for (const item of frame.players[seat].meld) for (const c of item.cards) cards.add(c);
-    return cards;
+  // Meld lies on the table in front of each player from the first lay-down until the first lead.
+  const meldOut = frame.phase === "melding" || move.kind === "meld";
+  const meldOf = (seat: SeatIndex): CardId[] => meldOut ? sortHand([...new Set(frame.players[seat].meld.flatMap(item => item.cards))], frame.trump, prefs.sort) : [];
+  const hand = (seat: SeatIndex) => {
+    const out = new Set(meldOf(seat));
+    return sortHand(frame.players[seat].hand.filter(c => !out.has(c)), frame.trump, prefs.sort);
   };
+  // Lit cards lift wherever they now sit: a pass lights up in the hand that received it.
+  const raised = (seat: SeatIndex): Set<CardId> => new Set<CardId>(frame.players[seat].hand.filter(c => lit.has(c)));
   const trick: Trick | null = frame.currentTrick?.plays.length ? frame.currentTrick : move.trick;
   const at = SEAT_AT[phone ? "phone" : "desktop"];
   // Cards in flight this move: a pass travels from the passer's hand, a deal fans out from the middle.
@@ -73,6 +74,13 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit, ani
       hand(seat).forEach((c, i) => flights.set(c, flight([0, 0], at[rel(seat)], (i * 4 + order) * 28, 360)));
     }
   }
+  if (animate && move.kind === "meld") {
+    // Laid down from the hand: a short slide toward the middle.
+    for (const seat of [0, 1, 2, 3] as SeatIndex[]) for (const c of meldOf(seat)) if (lit.has(c)) {
+      const [x, y] = at[rel(seat)];
+      flights.set(c, flight([x, y], [x * 0.75, y * 0.75], 0, 320));
+    }
+  }
   const flying: CardId | null = animate && move.kind === "play" ? move.cards[0] ?? null : null;
   const status = (seat: SeatIndex): string | null => {
     const bid = frame.bids.filter(b => b.seat === seat).at(-1);
@@ -81,13 +89,13 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit, ani
     if (frame.dealer === seat) parts.push("dealer");
     if (frame.phase === "bidding" && bid) parts.push(bid.amount === null ? "passed" : bid.shoot ? "shoots" : `bid ${bid.amount}`);
     if (frame.phase !== "bidding" && frame.bidder === seat) parts.push(frame.highBid?.shoot ? "shooting" : `took it at ${frame.highBid?.amount}`);
-    if ((melding || frame.phase === "playing") && frame.players[seat].meldPoints > 0) parts.push(`meld ${frame.players[seat].meldPoints}`);
+    if ((frame.phase === "melding" || frame.phase === "playing") && frame.players[seat].meldPoints > 0) parts.push(`meld ${frame.players[seat].meldPoints}`);
     return parts.length ? parts.join(", ") : null;
   };
   // A bidder holds 16 cards after the pass; fans tighten to stay inside the row.
   const sizes = phone ? { south: 44, north: 34, side: 30, budget: 340 } : { south: 60, north: 44, side: 38, budget: 680 };
 
-  const chair = (seat: SeatIndex) => ({ seat, info: seats[seat], status: status(seat), active: move.actor === seat, cards: hand(seat), raised: raised(seat), prefs, atBottom: seat === bottom, onSit, flights });
+  const chair = (seat: SeatIndex) => ({ seat, info: seats[seat], status: status(seat), active: move.actor === seat, cards: hand(seat), meld: meldOf(seat), lit, raised: raised(seat), prefs, atBottom: seat === bottom, onSit, flights });
   return (
     <div ref={root} className={`mx-auto w-full max-w-[760px] ${turn.className}`} data-motion={motion}
       style={{ ...turn.style, "--pm": `${slideMs}ms` } as CSSProperties}>
@@ -102,8 +110,10 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit, ani
   );
 }
 
-function SeatRow({ seat, info, status, active, cards, raised, prefs, width, align, big = false, budget = Infinity, atBottom, onSit, flights }: {
-  seat: SeatIndex; info: SeatInfo; status: string | null; active: boolean; cards: CardId[]; raised: Set<CardId>;
+function SeatRow({ seat, info, status, active, cards, meld, lit, raised, prefs, width, align, big = false, budget = Infinity, atBottom, onSit, flights }: {
+  seat: SeatIndex; info: SeatInfo; status: string | null; active: boolean; cards: CardId[];
+  /** cards lying on the table as meld, shown between the hand and the middle */
+  meld: CardId[]; lit: Set<CardId>; raised: Set<CardId>;
   prefs: ReturnType<typeof useCardPrefs>["prefs"]; width: number; align: "left" | "center" | "right"; big?: boolean;
   atBottom: boolean; onSit: (seat: SeatIndex) => void; flights: Map<CardId, CSSProperties>;
   /** widest a horizontal fan may grow, in px */
@@ -115,8 +125,32 @@ function SeatRow({ seat, info, status, active, cards, raised, prefs, width, alig
   const step = Math.round(vertical || cards.length < 2 ? natural : Math.min(natural, (budget - width) / (cards.length - 1)));
   const h = (width * 7) / 5;
   const items = align === "left" ? "items-start" : align === "right" ? "items-end" : "items-center";
+  // Lifted cards move toward the middle of the table, whichever side they are on.
+  const lift = big ? "translateY(-10px)" : "translateY(10px)";
+  const meldW = Math.round(width * 0.8);
+  const laid = meld.length > 0 && (
+    <div className={`flex ${vertical ? "flex-col" : "flex-row"} items-center`} aria-label={`${info.name}'s meld: ${meld.length} cards`}
+      style={vertical ? { padding: "0 4px" } : { paddingLeft: Math.round(meldW * 0.5) }}>
+      {meld.map((c, i) => {
+        const fly = flights.get(c);
+        return vertical ? (
+          <div key={c} className="relative shrink-0" style={{ width: (meldW * 7) / 5, height: i === meld.length - 1 ? meldW : Math.round(meldW * 0.6), zIndex: align === "right" ? meld.length - i : i }}>
+            <div className={fly ? "trick-card absolute inset-0" : "absolute inset-0"} style={fly}>
+              <PlayingCard card={c} width={meldW} prefs={prefs} selected={lit.has(c)}
+                style={{ position: "absolute", left: "50%", top: meldW / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg)` }} />
+            </div>
+          </div>
+        ) : (
+          <span key={c} className={`shrink-0 ${fly ? "trick-card" : ""}`} style={{ marginLeft: -Math.round(meldW * 0.5), ...fly }}>
+            <PlayingCard card={c} width={meldW} prefs={prefs} selected={lit.has(c)} />
+          </span>
+        );
+      })}
+    </div>
+  );
   return (
     <div className={`flex min-w-0 flex-col ${items} gap-1 ${big ? "mt-3" : "py-1"}`}>
+      {big && laid}
       <button type="button" data-chip="" onClick={() => { if (!atBottom) onSit(seat); }} aria-pressed={atBottom}
         aria-label={atBottom ? `${info.name}, at the bottom of the table` : `See the table from ${info.name}'s seat`}
         title={atBottom ? undefined : `See it from ${info.name}'s seat`}
@@ -129,6 +163,7 @@ function SeatRow({ seat, info, status, active, cards, raised, prefs, width, alig
       {cards.length === 0 ? (
         <span className="text-xs text-chalk-faint" style={{ minHeight: vertical ? undefined : h + 8 }}>{big || !vertical ? "No cards left" : ""}</span>
       ) : vertical ? (
+        <div className={`flex items-start ${align === "right" ? "flex-row-reverse" : "flex-row"}`}>
         <div className="flex flex-col" style={{ padding: "0 6px" }} aria-label={`${info.name}: ${cards.length} cards`}>
           {cards.map((c, i) => {
             const up = raised.has(c);
@@ -137,11 +172,13 @@ function SeatRow({ seat, info, status, active, cards, raised, prefs, width, alig
               <div key={c} className="relative shrink-0" style={{ width: h, height: i === cards.length - 1 ? width : step, zIndex: align === "right" ? cards.length - i : i }}>
                 <div className={fly ? "trick-card absolute inset-0" : "absolute inset-0"} style={fly}>
                   <PlayingCard card={c} width={width} prefs={prefs} selected={up}
-                    style={{ position: "absolute", left: "50%", top: width / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg) ${up ? `translateY(${align === "left" ? "-8px" : "8px"})` : ""}` }} />
+                    style={{ position: "absolute", left: "50%", top: width / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg) ${up ? "translateY(-8px)" : ""}` }} />
                 </div>
               </div>
             );
           })}
+        </div>
+        {laid}
         </div>
       ) : (
         <div className="flex items-end" style={{ paddingTop: 10, paddingLeft: width - step }} aria-label={`${info.name}: ${cards.length} cards`}>
@@ -150,7 +187,7 @@ function SeatRow({ seat, info, status, active, cards, raised, prefs, width, alig
             const fly = flights.get(c);
             return (
               <span key={c} className={`shrink-0 ${fly ? "trick-card" : ""}`} style={{ marginLeft: step - width, ...fly }}>
-                <span className="block" style={{ transform: up ? "translateY(-10px)" : undefined, transition: "transform .14s ease" }}>
+                <span className="block" style={{ transform: up ? lift : undefined, transition: "transform .14s ease" }}>
                   <PlayingCard card={c} width={width} prefs={prefs} selected={up} />
                 </span>
               </span>
@@ -158,6 +195,7 @@ function SeatRow({ seat, info, status, active, cards, raised, prefs, width, alig
           })}
         </div>
       )}
+      {!big && !vertical && laid}
     </div>
   );
 }
