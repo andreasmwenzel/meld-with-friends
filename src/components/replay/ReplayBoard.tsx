@@ -99,7 +99,8 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit, ani
   const flying: CardId | null = animate && move.kind === "play" ? move.cards[0] ?? null : null;
   // Numbers only, no sentences: the taker carries the contract and the side's running total, each
   // defender a small number for their own meld. The breakdown is a tap away.
-  const recap = viewFor(frame, 0).recap;
+  const view = viewFor(frame, 0);
+  const recap = view.recap;
   const sideTotal = (team: Team) => {
     const meld = frame.players.filter(p => teamOf(p.seat) === team).reduce((n, p) => n + p.meldPoints, 0);
     return meld + recap.counters[team];
@@ -107,23 +108,26 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit, ani
   const scoreOf = (seat: SeatIndex): SeatScore => {
     const bid = frame.bids.filter(b => b.seat === seat).at(-1);
     const dealer = frame.dealer === seat;
-    const record = frame.history.find(h => h.handNumber === frame.handNumber) ?? null;
+    const record = view.history.find(h => h.handNumber === frame.handNumber) ?? null;
+    const playing = frame.phase === "playing" || frame.phase === "hand_over" || frame.phase === "game_over";
     if (frame.phase === "bidding") {
       return { dealer, main: bid ? (bid.amount === null ? "–" : bid.shoot ? "moon" : String(bid.amount)) : null, suit: null, total: null, small: null, rows: [] };
     }
     const team = teamOf(seat);
     const mates = frame.players.filter(p => teamOf(p.seat) === team);
     const rows: [string, string][] = mates.filter(p => p.meldPoints > 0 || meldOut).map(p => [`${seats[p.seat].name} meld`, String(p.meldPoints)]);
-    if (recap.counters[team] > 0 || frame.phase !== "melding") rows.push(["Counters", String(recap.counters[team])]);
+    if (playing) rows.push(["Counters", String(recap.counters[team])]);
     if (record) {
       const b = record.breakdown[team];
+      if (b.meldDeclared > 0 && b.meldSaved === 0) rows.push(["Meld lost, no trick", `-${b.meldDeclared}`]);
       if (b.lastTrick) rows.push(["Last trick", String(b.lastTrick)]);
       if (b.setPenalty) rows.push(["Set", `-${b.setPenalty}`]);
       if (b.shoot) rows.push(["Shoot", String(b.shoot)]);
       rows.push(["This hand", `${record.delta[team] > 0 ? "+" : ""}${record.delta[team]}`]);
     } else rows.push(["So far", String(sideTotal(team))]);
     if (frame.bidder === seat && frame.highBid) {
-      return { dealer, main: frame.highBid.shoot ? "moon" : String(frame.highBid.amount), suit: frame.trump, total: record ? record.delta[team] : sideTotal(team), small: null, rows: [["Bid", frame.highBid.shoot ? "the moon" : String(frame.highBid.amount)], ...rows] };
+      const total = record ? record.delta[team] : frame.phase === "melding" || playing ? sideTotal(team) : null;
+      return { dealer, main: frame.highBid.shoot ? "moon" : String(frame.highBid.amount), suit: frame.trump, total, small: null, rows: [["Bid", frame.highBid.shoot ? "the moon" : String(frame.highBid.amount)], ...rows] };
     }
     if (frame.bidder !== null && teamOf(frame.bidder) === team) return { dealer, main: null, suit: null, total: null, small: null, rows: [] };
     const own = frame.players[seat].meldPoints;
@@ -132,23 +136,23 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit, ani
   // A bidder holds 16 cards after the pass; fans tighten to stay inside the row.
   const sizes = phone ? { south: 44, north: 34, side: 30, budget: 340 } : { south: 60, north: 44, side: 38, budget: 680 };
 
-  const chair = (seat: SeatIndex) => ({ seat, info: seats[seat], score: scoreOf(seat), active: move.actor === seat, cards: hand(seat), meld: meldOf(seat), lit, raised: raised(seat), prefs, atBottom: seat === bottom, onSit, flights });
+  const chair = (seat: SeatIndex) => ({ seat, info: seats[seat], score: scoreOf(seat), mine: seat === viewerSeat, active: move.actor === seat, cards: hand(seat), meld: meldOf(seat), lit, raised: raised(seat), prefs, atBottom: seat === bottom, onSit, flights });
   return (
     <div ref={root} className={`mx-auto w-full max-w-[760px] ${turn.className}`} data-motion={motion}
       style={{ ...turn.style, "--pm": `${slideMs}ms` } as CSSProperties}>
-      <SeatRow {...chair(seatAt(2))} width={sizes.north} budget={sizes.budget * 0.8} align="center" />
+      <SeatRow key={seatAt(2)} {...chair(seatAt(2))} width={sizes.north} budget={sizes.budget * 0.8} align="center" />
       <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
-        <SeatRow {...chair(seatAt(1))} width={sizes.side} align="left" />
+        <SeatRow key={seatAt(1)} {...chair(seatAt(1))} width={sizes.side} align="left" />
         <Centre frame={frame} trick={trick} rel={rel} nameOf={s => seats[s].name} compact={phone} flying={flying} />
-        <SeatRow {...chair(seatAt(3))} width={sizes.side} align="right" />
+        <SeatRow key={seatAt(3)} {...chair(seatAt(3))} width={sizes.side} align="right" />
       </div>
-      <SeatRow {...chair(seatAt(0))} width={sizes.south} budget={sizes.budget} align="center" big />
+      <SeatRow key={seatAt(0)} {...chair(seatAt(0))} width={sizes.south} budget={sizes.budget} align="center" big />
     </div>
   );
 }
 
-function SeatRow({ seat, info, score, active, cards, meld, lit, raised, prefs, width, align, big = false, budget = Infinity, atBottom, onSit, flights }: {
-  seat: SeatIndex; info: SeatInfo; score: SeatScore; active: boolean; cards: CardId[];
+function SeatRow({ seat, info, score, mine, active, cards, meld, lit, raised, prefs, width, align, big = false, budget = Infinity, atBottom, onSit, flights }: {
+  seat: SeatIndex; info: SeatInfo; score: SeatScore; mine: boolean; active: boolean; cards: CardId[];
   /** cards lying on the table as meld, shown between the hand and the middle */
   meld: CardId[]; lit: Set<CardId>; raised: Set<CardId>;
   prefs: ReturnType<typeof useCardPrefs>["prefs"]; width: number; align: "left" | "center" | "right"; big?: boolean;
@@ -190,15 +194,15 @@ function SeatRow({ seat, info, score, active, cards, meld, lit, raised, prefs, w
       {big && laid}
       <div className={`flex max-w-full items-center gap-1 ${vertical ? "flex-col" : "flex-row"}`}>
         <button type="button" data-chip="" onClick={() => { if (!atBottom) onSit(seat); }} aria-pressed={atBottom}
-          aria-label={atBottom ? `${info.name}, at the bottom of the table` : `See the table from ${info.name}'s seat`}
+          aria-label={`${atBottom ? `${info.name}, at the bottom of the table` : `See the table from ${info.name}'s seat`}${mine ? " (you)" : ""}${score.dealer ? ", dealer" : ""}`}
           title={atBottom ? undefined : `See it from ${info.name}'s seat`}
           className={`flex max-w-full items-center gap-1.5 rounded-2xl px-2 py-1 text-left transition-colors ${vertical ? "flex-col" : "flex-row"} ${atBottom ? "cursor-default" : "hover:bg-chalk-ghost focus-visible:bg-chalk-ghost"}`}
           style={active ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
           <span className="relative">
             <Avatar name={info.name} team={team} size={26} bot={info.bot} />
-            {score.dealer && <span aria-label="dealer" title="Dealer" className="absolute -bottom-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-chalk text-[9px] font-bold leading-none text-ink">D</span>}
+            {score.dealer && <span aria-hidden title="Dealer" className="absolute -bottom-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-chalk text-[9px] font-bold leading-none text-ink">D</span>}
           </span>
-          <span className={`truncate text-xs font-semibold ${vertical ? "max-w-[72px]" : "max-w-[140px]"}`}>{info.name}</span>
+          <span className={`truncate text-xs font-semibold ${vertical ? "max-w-[72px]" : "max-w-[140px]"} ${mine ? "text-brass" : ""}`} title={mine ? "You" : undefined}>{info.name}</span>
         </button>
         <ScoreTag score={score} name={info.name} align={align} />
       </div>
@@ -268,10 +272,12 @@ function ScoreTag({ score, name, align }: { score: SeatScore; name: string; alig
     ? `${name}: bid ${score.main}${score.suit ? ` in ${{ S: "spades", H: "hearts", D: "diamonds", C: "clubs" }[score.suit]}` : ""}${score.total !== null ? `, ${score.total} this hand` : ""}`
     : `${name}: meld ${score.small}`;
   const side = align === "left" ? "left-0" : align === "right" ? "right-0" : "left-1/2 -translate-x-1/2";
+  const cls = "flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs leading-5";
+  if (!detail) return <span aria-label={label} className={cls}>{body}</span>;
   return (
     <div ref={root} className="relative">
-      <button type="button" disabled={!detail} aria-label={label} aria-expanded={detail ? open : undefined} onClick={() => setOpen(o => !o)}
-        className={`flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs leading-5 ${detail ? "hover:bg-chalk-ghost focus-visible:bg-chalk-ghost" : ""}`}>
+      <button type="button" aria-label={label} aria-expanded={open} onClick={() => setOpen(o => !o)}
+        className={`${cls} hover:bg-chalk-ghost focus-visible:bg-chalk-ghost`}>
         {body}
       </button>
       {open && (
