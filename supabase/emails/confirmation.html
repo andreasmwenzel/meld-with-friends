@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>Confirm your email</title>
+</head>
+<body style="margin:0;padding:0;background-color:#46141b;color:#241d1d;-webkit-text-size-adjust:100%;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">Confirm your email for Meld.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#46141b" style="background-color:#46141b;">
+<tr><td align="center" style="padding:32px 16px;">
+  <!--[if mso]><table role="presentation" width="520" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;width:100%;">
+    <tr><td bgcolor="#5b1d25" style="background-color:#5b1d25;padding:24px 28px;border-radius:12px 12px 0 0;border-bottom:2px solid #d6a64a;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td valign="middle" style="font-family:Georgia,'Times New Roman',serif;font-size:38px;line-height:44px;">
+            <a href="{{ .SiteURL }}" style="color:#f5efe3;text-decoration:none;">Meld</a>
+          </td>
+          <td align="right" valign="middle" aria-hidden="true">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" bgcolor="#f5efe3" width="28" style="width:28px;padding:4px 3px;border:1px solid #e6dccb;border-radius:4px;font-family:Georgia,'Times New Roman',serif;font-size:18px;line-height:20px;color:#241d1d;">Q<br>&#9824;</td>
+                <td width="6" style="width:6px;font-size:0;">&nbsp;</td>
+                <td align="center" bgcolor="#f5efe3" width="28" style="width:28px;padding:4px 3px;border:1px solid #e6dccb;border-radius:4px;font-family:Georgia,'Times New Roman',serif;font-size:18px;line-height:20px;color:#a52639;">J<br>&#9830;</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+    <tr><td bgcolor="#f5efe3" style="background-color:#f5efe3;padding:32px 28px 28px;border-radius:0 0 12px 12px;font-family:Arial,Helvetica,sans-serif;color:#241d1d;">
+      <h1 style="margin:0 0 18px;font-family:Georgia,'Times New Roman',serif;font-size:32px;line-height:38px;font-weight:normal;color:#241d1d;">You have a seat.</h1>
+      <p style="margin:0 0 12px;font-size:16px;line-height:26px;color:#241d1d;">Confirm your email address to finish setting up your Meld account.</p>
+      <p style="margin:0 0 28px;font-size:14px;line-height:22px;color:#6b5e5a;overflow-wrap:anywhere;word-break:break-all;">{{ .Email }}</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;">
+        <tr><td align="center" bgcolor="#d6a64a" style="background-color:#d6a64a;border-radius:8px;mso-padding-alt:16px 24px;">
+          <a href="{{ .ConfirmationURL }}" style="display:block;padding:16px 24px;border:1px solid #d6a64a;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;font-weight:bold;text-align:center;text-decoration:none;color:#241d1d;mso-padding-alt:0;">Confirm email</a>
+        </td></tr>
+      </table>
+      <p style="margin:0 0 24px;font-size:13px;line-height:21px;color:#6b5e5a;">Button not working? <a href="{{ .ConfirmationURL }}" style="color:#2c4a8a;text-decoration:underline;">Open your confirmation link</a>.</p>
+      <p style="margin:0;padding-top:20px;border-top:1px solid #d9cdbb;font-size:13px;line-height:21px;color:#6b5e5a;">If you didn&rsquo;t ask for this email, you can ignore it.</p>
+    </td></tr>
+    <tr><td align="center" style="padding:20px 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:20px;color:#e6dccb;">Questions? Reply to this email.</td></tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
+</body>
+</html>

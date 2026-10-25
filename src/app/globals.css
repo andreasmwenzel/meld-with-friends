@@ -1,0 +1,212 @@
+@import "tailwindcss";
+
+/* A phone held sideways. Keep in step with SHORT_QUERY in src/lib/cardPrefs.ts. */
+@custom-variant short (@media (orientation: landscape) and (max-height: 500px));
+
+/* Meld — tokens. One table, two decks. */
+:root {
+  --cloth: #5b1d25;        /* oxblood oilcloth */
+  --cloth-deep: #46141b;
+  --cloth-edge: #7a2a33;
+  --chalk: #f5efe3;        /* card stock */
+  --chalk-dim: #e6dccb;
+  --chalk-faint: rgba(245, 239, 227, 0.62);
+  --chalk-ghost: rgba(245, 239, 227, 0.14);
+  --pip-red: #c1272d;
+  --pip-black: #1c1a19;
+  --pip-green: #1f6b45;    /* clubs in the four-colour deck */
+  --deck-blue: #2c4a8a;
+  --deck-blue-soft: #8ea3cf;
+  --deck-red: #b8343c;
+  --deck-red-soft: #e2969b;
+  --brass: #d6a64a;
+  --brass-deep: #a97d2b;
+  --ink: #241d1d;          /* text on chalk */
+  --ink-soft: #6b5e5a;
+  --radius-card: 10px;
+  --radius-panel: 14px;
+  --shadow-card: 0 1px 0 rgba(0,0,0,.25), 0 10px 24px -12px rgba(0,0,0,.6);
+}
+
+@theme inline {
+  --color-cloth: var(--cloth);
+  --color-cloth-deep: var(--cloth-deep);
+  --color-cloth-edge: var(--cloth-edge);
+  --color-chalk: var(--chalk);
+  --color-chalk-dim: var(--chalk-dim);
+  --color-chalk-faint: var(--chalk-faint);
+  --color-chalk-ghost: var(--chalk-ghost);
+  --color-pip-red: var(--pip-red);
+  --color-pip-black: var(--pip-black);
+  --color-pip-green: var(--pip-green);
+  --color-deck-blue: var(--deck-blue);
+  --color-deck-blue-soft: var(--deck-blue-soft);
+  --color-deck-red: var(--deck-red);
+  --color-deck-red-soft: var(--deck-red-soft);
+  --color-brass: var(--brass);
+  --color-brass-deep: var(--brass-deep);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --font-display: var(--font-bodoni);
+  --font-sans: var(--font-albert);
+  --radius-card: var(--radius-card);
+  --radius-panel: var(--radius-panel);
+}
+
+html { background: var(--cloth); }
+
+body {
+  background:
+    radial-gradient(120% 90% at 50% 0%, var(--cloth-edge) 0%, var(--cloth) 45%, var(--cloth-deep) 100%);
+  color: var(--chalk);
+  font-family: var(--font-albert), system-ui, sans-serif;
+  font-feature-settings: "tnum" 1, "ss01" 1;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100%;
+}
+
+.display {
+  font-family: var(--font-bodoni), Didot, "Bodoni MT", serif;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  line-height: 0.98;
+  font-optical-sizing: auto;
+}
+
+.display-italic { font-style: italic; }
+
+/* chalk panels are literal cards */
+.panel {
+  background: var(--chalk);
+  color: var(--ink);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-card);
+}
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  height: 2.75rem; padding: 0 1.25rem; border-radius: 999px;
+  font-weight: 600; font-size: .95rem; line-height: 1;
+  transition: transform .12s ease, background-color .12s ease, color .12s ease;
+  cursor: pointer; white-space: nowrap;
+}
+.btn:active { transform: translateY(1px); }
+.btn-chalk { background: var(--chalk); color: var(--ink); }
+.btn-chalk:hover { background: #fff; }
+.btn-ghost { background: transparent; color: var(--chalk); box-shadow: inset 0 0 0 1.5px var(--chalk-ghost); }
+.btn-ghost:hover { box-shadow: inset 0 0 0 1.5px var(--chalk-faint); }
+.btn-ink { background: var(--ink); color: var(--chalk); }
+.btn-ink:hover { background: #000; }
+.btn-brass { background: var(--brass); color: var(--ink); }
+.btn-brass:hover { background: #e4b85f; }
+.btn[disabled] { opacity: .45; cursor: not-allowed; transform: none; }
+
+.field {
+  height: 2.75rem; padding: 0 .9rem; border-radius: 10px; width: 100%;
+  background: #fff; color: var(--ink); border: 1.5px solid var(--chalk-dim);
+  font-size: 1rem;
+}
+.field:focus { outline: none; border-color: var(--deck-blue); box-shadow: 0 0 0 3px rgba(44,74,138,.18); }
+
+.code {
+  font-family: var(--font-bodoni), serif; font-size: 2.6rem; letter-spacing: .18em; line-height: 1;
+}
+
+:focus-visible { outline: 3px solid var(--brass); outline-offset: 3px; border-radius: 6px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
+
+/* Wide hands scroll sideways on phones; the bar stays out of the way. */
+.hand-scroll { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.hand-scroll::-webkit-scrollbar { display: none; }
+
+/* Phone polish utilities. */
+@media (max-width: 480px) {
+  .btn-compact { padding: 0 .95rem; font-size: .875rem; }
+}
+/* Small text-button actions keep their text-link look but get a 44px-tall hit area.
+   .tap-link also pads sideways (and pulls the padding back out with a negative margin) so the
+   text sits where it always did while neighbouring links no longer share an edge. */
+.tap { display: inline-flex; align-items: center; min-height: 44px; }
+.tap-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 .5rem; margin: 0 -.25rem; }
+/* Wide tables scroll inside their own box rather than the page. */
+.scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* Card play: slide in from the owning seat, then sweep to the trick winner. */
+@keyframes card-play {
+  from { transform: translate(var(--fx), var(--fy)) rotate(var(--fr)) scale(var(--fs)); opacity: 0; }
+  25% { opacity: 1; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes card-sweep {
+  to { transform: translate(var(--sx), var(--sy)) scale(.8); opacity: 0; }
+}
+.trick-card { animation: card-play var(--pm, 280ms) cubic-bezier(.2,.8,.25,1) both; will-change: transform; }
+.trick-card[data-sweep] {
+  animation: card-play var(--pm, 280ms) cubic-bezier(.2,.8,.25,1) both, card-sweep var(--sm) cubic-bezier(.5,0,.8,.4) var(--sd) forwards;
+}
+@keyframes card-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes card-fade-out { to { opacity: 0; } }
+[data-motion="off"] .trick-card { animation: card-fade var(--pm) linear both; }
+[data-motion="off"] .trick-card[data-sweep] { animation: card-fade var(--pm) linear both, card-fade-out var(--pm) linear var(--pm) forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .trick-card { animation: card-fade 150ms linear both; animation-duration: 150ms !important; }
+  .trick-card[data-sweep] { animation: card-fade 150ms linear both, card-fade-out 150ms linear 150ms forwards; animation-duration: 150ms, 150ms !important; }
+}
+
+/* The table on a phone held sideways: one screen, no scrolling.
+   The board's wrappers flatten (display: contents) so every piece lands in one grid:
+   opponents around the trick on the left, the scoreboard and your actions in a column on the right,
+   your hand along the bottom. Table chrome (settings, the table code) sits just below the fold.
+   Upright phones and desktops never see any of this; the board's Tailwind classes still apply there. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .board {
+    display: grid;
+    max-width: none;
+    grid-template-columns: auto minmax(0, 1fr) auto clamp(15.5rem, 33vw, 18rem);
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "banner banner banner banner"
+      "note   note   note   note"
+      "west   north  east   score"
+      "west   centre east   action"
+      "hand   hand   hand   action"
+      "foot   foot   foot   foot";
+    column-gap: .75rem;
+    row-gap: 0;
+    padding: .375rem max(.75rem, env(safe-area-inset-right)) 0 max(.75rem, env(safe-area-inset-left));
+    --board-bottom: max(.375rem, env(safe-area-inset-bottom));
+  }
+  /* The first five rows fill exactly one screen; the flexible row takes what the others leave. */
+  .board::before { content: ""; grid-column: 1; grid-row: 1 / 6; height: calc(100dvh - .375rem - var(--board-bottom)); width: 0; }
+  .board-flat { display: contents; }
+  .board-flat[inert] > * { opacity: .7; }
+  /* At a real table the table talk button holds the top left corner. */
+  .board-banner { grid-area: banner; margin-bottom: .375rem; margin-left: var(--chat-room, 0px); }
+  .board-note { grid-area: note; }
+  .board-north { grid-area: north; }
+  .board-west { grid-area: west; align-self: center; }
+  .board-east { grid-area: east; align-self: center; }
+  .board-centre { grid-area: centre; align-self: center; }
+  .board-score { grid-area: score; align-self: start; }
+  /* Sized by the screen, not its contents: a long action list scrolls in place. */
+  .board-action {
+    grid-area: action; align-self: stretch; contain: size; margin-top: .5rem;
+    overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none;
+    padding-bottom: .25rem;
+  }
+  .board-action::-webkit-scrollbar { display: none; }
+  .board-armed { grid-area: hand; align-self: start; z-index: 30; }
+  .board-hand { grid-area: hand; margin-top: 0; }
+  /* Below the fold: the first five rows end a little above the screen edge. */
+  .board-foot { grid-area: foot; margin-top: var(--board-bottom); padding-block: .5rem .75rem; }
+  /* Opened on request, the full scorepad and the hand recap float over the board. */
+  .board-pad {
+    position: fixed; z-index: 35; top: .5rem; right: .5rem; bottom: .5rem;
+    width: min(20rem, calc(100vw - 1rem)); overflow-y: auto;
+  }
+  .board-recap { position: fixed; z-index: 35; inset: .5rem; }
+  .board-recap > section { margin: 0; max-height: 100%; height: 100%; }
+}

@@ -1,0 +1,87 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { api, ApiError, type Profile } from "@/lib/api";
+import { useTableChannel, useDisconnectedPolling, type TableEvent } from "@/lib/realtime/useTableChannel";
+import { usePresence } from "@/lib/realtime/usePresence";
+import { Wordmark } from "@/components/site/Wordmark";
+import { Seating } from "./Seating";
+import { Game } from "./Game";
+import { Chat } from "./Chat";
+import type { Snapshot } from "./types";
+
+export function TableRoom({ code, me, guest = false }: { code: string; me: Profile; guest?: boolean }) {
+  const [snap, setSnap] = useState<Snapshot | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [degraded, setDegraded] = useState(false);
+  const requests = useRef({ issued: 0, applied: 0 });
+  const [gameRev, setGameRev] = useState(0);
+  usePresence({ userId: me.id, handle: me.handle, tableCode: code });
+
+  const refresh = useCallback(async () => {
+    const request = ++requests.current.issued;
+    try {
+      const next = await api<Snapshot>(`/api/tables/${code}`);
+      if (request < requests.current.applied) return;
+      requests.current.applied = request;
+      setSnap(next); setError(null); setDegraded(false);
+    } catch (e) {
+      if (request < requests.current.applied) return;
+      requests.current.applied = request;
+      if (e instanceof ApiError && e.status === 404) setError("No table has this code.");
+      else setDegraded(true);
+    }
+  }, [code]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch, state is set after await
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  const onEvent = useCallback((ev: TableEvent) => {
+    if (ev.type === "game") { setGameRev(current => Math.max(current, ev.rev)); void refresh(); }
+    else void refresh();
+  }, [refresh]);
+  const { status } = useTableChannel(code, onEvent);
+  useDisconnectedPolling(status, refresh);
+  const connection = degraded || status !== "subscribed" ? "reconnecting" : "ok";
+
+  if (error) {
+    return (
+      <main className="flex-1">
+        <Header code={code} />
+        <div className="mx-auto max-w-md px-6 py-16">
+          <h1 className="display" style={{ fontSize: 44 }}>{error}</h1>
+          <p className="mt-3 text-chalk-faint">Check the code with whoever dealt the table.</p>
+          <Link href="/join" className="btn btn-chalk mt-6">Try another code</Link>
+        </div>
+      </main>
+    );
+  }
+  if (!snap) return <main className="flex-1"><Header code={code} /><p className="px-6 text-chalk-faint">Finding the table.</p></main>;
+
+  const atBoard = snap.table.status === "playing" || snap.table.status === "finished";
+  return (
+    <main className={`flex-1 flex flex-col ${snap.mySeat !== null ? "pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:pb-0 short:[--chat-room:7.5rem]" : ""}`}>
+      <Header code={code} belowBoard={atBoard} />
+      {atBoard ? (
+        <Game connection={connection} code={code} me={me} snap={snap} rev={gameRev} onTableChange={refresh} />
+      ) : (
+        <Seating code={code} me={me} snap={snap} onChange={refresh} guest={guest} />
+      )}
+      {snap.mySeat !== null && <Chat code={code} me={me} atBoard={atBoard} />}
+    </main>
+  );
+}
+
+/** `belowBoard`: sideways on a phone the board takes the whole screen, and the header follows it below the fold. */
+function Header({ code, belowBoard = false }: { code: string; belowBoard?: boolean }) {
+  return (
+    <header className={`mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-6 py-3 sm:py-4 ${belowBoard ? "short:order-last short:py-2" : ""}`}>
+      <Wordmark size={26} />
+      <div className="flex items-center gap-2 text-sm sm:gap-3 text-chalk-faint">
+        <span className="hidden min-[400px]:inline">Table</span>
+        <span className="code text-chalk" style={{ fontSize: 22, letterSpacing: ".14em" }}>{code}</span>
+        <Link href="/home" className="tap hover:text-chalk">Leave</Link>
+      </div>
+    </header>
+  );
+}
