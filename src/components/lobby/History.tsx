@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 
 interface HistoryEntry {
@@ -54,6 +55,7 @@ export function History() {
                   <p className="text-sm text-chalk-faint">
                     <time dateTime={g.finishedAt}>{dateFmt.format(new Date(g.finishedAt))}</time>
                   </p>
+                  <Link href={`/replay/${g.gameId}`} className="tap-link -mr-2 text-sm text-chalk underline underline-offset-4 hover:text-brass">Replay</Link>
                 </div>
               </li>
             );

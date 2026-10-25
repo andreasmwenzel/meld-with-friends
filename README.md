@@ -8,8 +8,9 @@ No account needed; guests can add an email later to keep history and friends. Sh
 can seat computer players that bid, pass, meld and play from the same information a human sees.
 New to the game? `/practice` walks you through a hand against three computers. Playing a trick a day
 with far-flung friends? Deal a table at a leisurely pace and the "This hand so far" recap keeps everyone
-caught up. How they
-think is written up in [docs/COMPUTER_PLAYERS.md](docs/COMPUTER_PLAYERS.md).
+caught up. Afterwards, step through every bid, pass, meld and trick of a finished game and share the
+replay link with anyone. How the computers think is written up in
+[docs/COMPUTER_PLAYERS.md](docs/COMPUTER_PLAYERS.md).
 
 Built with Next.js on Vercel and Supabase (Postgres, Auth, Realtime). Both run on their free tiers.
 

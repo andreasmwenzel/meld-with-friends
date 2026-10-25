@@ -51,6 +51,7 @@ Supabase Auth with magic link email and Google. `profiles` row is created by a t
 | `ticksPerTablePerHour` | 2000 per table | Bot worker before database reads and decisions, including automatic melding |
 | `friendRequestsPerHour` | 20 per user | `requestFriend` before lookup and insertion |
 | `profileEditsPerHour` | 30 per user | `PATCH /api/me` after body validation |
+| `replaysPerHour` | 120 per client address | `GET /api/replay/[id]` before any database read |
 | `idleTableHours` | 48 hours | Daily cron finishes open or playing tables with no recent game activity |
 | `retainFinishedDays` | 30 days | Daily cron deletes finished tables whose last activity predates retention |
 | `retainGuestDays` | 30 days | Daily cron deletes old anonymous auth users who occupy no seats and host no tables |
@@ -75,6 +76,34 @@ All `/api/admin/*` routes require `requireAdmin`, which checks a saved session a
 `POST /api/admin/tables/[code]/finish` sets the table status to `finished`, broadcasts `seats`, and returns `{ code, status: "finished" }`. It keeps the game state for inspection or rematch.
 
 `GET /api/admin/bans` returns `[{ user_id, reason, created_at }]`. `POST` accepts exactly one of `handle` or `userId`, plus an optional `reason`, and returns the saved ban row. `DELETE` accepts `{ userId }` and returns `{ ok: true }`. Ban lookups are cached for 30 seconds per process; local ban and unban calls invalidate that entry. Other instances may retain the previous result for up to 30 seconds. `requireUser` rejects banned accounts with 403 and `This account is suspended.`. `GET /api/me` passes `{ allowBanned: true }` so profile reads still work; profile writes remain blocked. The daily `prune_guests` function excludes banned users.
+
+## Game replay
+
+`GET /api/replay/[gameId]` needs no session for a finished game: a game id is an unguessable uuid
+that only its players receive (through the table snapshot and `/api/history`), so holding the link
+is the permission, and players share it deliberately. While a game is still going, only its seated
+players may open the replay (403 for anyone else); the link becomes public once the game is over.
+The handler is rate limited per forwarded client address.
+
+The server reads the game, its `game_actions` log and its `game_results` snapshot, then rebuilds the
+game with `rebuildFromLog` in `src/engine/replay.ts`: `newGame(seed, rules, dealer)` followed by every
+logged action, where the opening dealer is the seat before the first bidder. If the replay does not
+reach the stored state (an engine change since the game was played) the route answers 422.
+`buildReplay` then packs the result as `{ start, steps, hands, finished }`: `start` is the position
+after the first deal and each step is one action; a step that dealt cards (a new hand or an all-pass
+redeal) also carries the position after it. Every embedded position has its `seed` blanked and the
+browser replays actions with `applyAction`. For a game still in progress the steps stop at the last
+`hand_over`, so the hand being played and its deal never leave the server; before the first hand is
+over the route answers 404. Tables with `revealHands` off are
+replayable only once the game is over. The payload adds `seats` (display names and bot flags from the
+result snapshot, or the live seats for an unfinished game), the table `code`, `viewerSeat` for a
+signed-in player so the board faces them, and timestamps. No user ids are included.
+
+`/replay/[gameId]` renders it: `walk()` in `src/components/replay/model.ts` expands the steps into
+positions, merges a player's lay-down and confirm into one move, and groups moves into hands with
+their `HandRecord`. The address carries `?m=<frame>` so a copied link opens at that move. The live
+table links to the replay of its current game once a hand is complete; the lobby's past games link to
+theirs. `/dev/replay` (local only) shows the viewer on a game the bots play on the spot.
 
 ## Operational telemetry
 

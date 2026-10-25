@@ -25,8 +25,10 @@ function headline(view: PlayerView, nameOf: (s: SeatIndex) => string) {
 }
 
 /** Bottom sheet (phones) or centred card (desktop) over the table once a hand ends. */
-export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, readyInfo, which, setWhich, peek, setPeek, countdown, local = false }: {
+export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, readyInfo, which, setWhich, peek, setPeek, countdown, local = false, replayHref = null }: {
   local?: boolean;
+  /** where to step through every hand of this game, once a hand is complete */
+  replayHref?: string | null;
   view: PlayerView; nameOf: (s: SeatIndex) => string; host: string | null; busy: boolean;
   onNext: () => void; onRematch: () => void; readyInfo: ReadyInfo | null;
   which: Which; setWhich: (w: Which) => void; peek: boolean; setPeek: (p: boolean) => void;
@@ -117,6 +119,7 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
                 ? <button className="btn btn-brass" disabled={busy} onClick={onRematch}>Play again</button>
                 : <span className="text-sm text-ink-soft">Waiting for {host} to deal again.</span>}
               <Link href="/home" className={host === null ? "text-sm text-ink-soft underline hover:text-ink" : "btn btn-ink"}>Back to your tables</Link>
+              {replayHref && <Link href={replayHref} className="text-sm text-ink-soft underline hover:text-ink">Review every hand</Link>}
             </>
           ) : view.legal.canAdvanceHand ? next : <span className="text-sm text-ink-soft">Waiting for the next deal.</span>}
         </div>

@@ -32,6 +32,8 @@ export const limitsSchema = z.object({
   ticksPerTablePerHour: z.number().int().min(10).max(100000),
   friendRequestsPerHour: z.number().int().min(1).max(1000),
   profileEditsPerHour: z.number().int().min(1).max(1000),
+  /** public replay reads per client address */
+  replaysPerHour: z.number().int().min(1).max(100000),
   maxOpenTablesPerHost: z.number().int().min(1).max(50),
   /** finish tables with no activity for this many hours */
   idleTableHours: z.number().int().min(1).max(720),
@@ -53,7 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   limits: {
     tablesPerHour: 10, actionsPerHour: 600, ticksPerTablePerHour: 2000, friendRequestsPerHour: 20,
-    profileEditsPerHour: 30, maxOpenTablesPerHost: 3, idleTableHours: 48, leisurelyIdleDays: 60, retainFinishedDays: 30, retainGuestDays: 30,
+    profileEditsPerHour: 30, replaysPerHour: 120, maxOpenTablesPerHost: 3, idleTableHours: 48, leisurelyIdleDays: 60, retainFinishedDays: 30, retainGuestDays: 30,
   },
 };
 

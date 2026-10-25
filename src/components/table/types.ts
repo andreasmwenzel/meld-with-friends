@@ -3,7 +3,7 @@ import type { Profile } from "@/lib/api";
 
 export interface Seat { seat: SeatIndex; user_id: string | null; profile: Profile | null; /** computer player name when this chair holds a bot */ bot: string | null }
 export interface TradeOffer { id: string; from_user: string; to_user: string; from_seat: SeatIndex; to_seat: SeatIndex; status: string }
-export interface TableRow { id: string; code: string; host: string; status: "open" | "playing" | "finished"; rules: Record<string, unknown> }
+export interface TableRow { id: string; code: string; host: string; status: "open" | "playing" | "finished"; rules: Record<string, unknown>; current_game_id?: string | null }
 export interface PausedTable { by: string; name: string; reason: string | null; at: string }
 export interface Snapshot { table: TableRow; seats: Seat[]; offers: TradeOffer[]; mySeat: SeatIndex | null; ready?: SeatIndex[]; paused?: PausedTable | null }
 
