@@ -35,7 +35,8 @@ export function MeldReview({ melds, seat, nameOf, onHide, compact = false }: {
     if (open === null) return;
     const away = (e: PointerEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(null); };
     const key = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      // Only while focus is in this row: Escape elsewhere (the chat box, say) belongs to that control.
+      if (e.key !== "Escape" || !root.current?.contains(document.activeElement)) return;
       setOpen(null);
       root.current?.querySelector<HTMLButtonElement>(`[data-meld-seat="${open}"]`)?.focus();
     };

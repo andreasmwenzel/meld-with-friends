@@ -171,8 +171,14 @@ export function adviseBid(view: PlayerView, options: AdviceOptions = {}): Advice
     : `${capital(partner)} usually adds about ${roundPoints(est.partner)}`;
   const worth = `Your meld in ${SUIT_WORD[est.trump]} is ${est.meld}, and your tricks should bring about ${roundPoints(est.tricks)}. ${partnerWord}.${near}`;
   if (!L.canBid) {
-    return { action: { type: 'pass_bid', seat: view.seat }, cards: meldCards, headline: `Take it at ${view.rules.minBid}`,
+    // Passing is the only move. What it does depends on why: a shoot is on, or everyone else passed to the dealer.
+    const shooter = view.bids.find(b => b.shoot);
+    if (shooter) return { action: { type: 'pass_bid', seat: view.seat }, cards: [], headline: 'Pass',
+      reason: `${capital(name(shooter.seat))} shot the moon, so the only call left is a pass.` };
+    if (view.rules.dealerStuck) return { action: { type: 'pass_bid', seat: view.seat }, cards: meldCards, headline: `Take it at ${view.rules.minBid}`,
       reason: `Everyone else passed, so as dealer you must take the bid. ${worth}` };
+    return { action: { type: 'pass_bid', seat: view.seat }, cards: [], headline: 'Pass',
+      reason: 'Everyone else passed. Passing as dealer throws the hand in for a redeal.' };
   }
   const min = L.minBid!;
   if (min > est.ceiling) {

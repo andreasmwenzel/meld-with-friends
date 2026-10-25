@@ -354,6 +354,14 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   // unless dismissed; after that "Review meld" brings it back.
   const [meldHidden, setMeldHidden] = useState<number | null>(null);
   const [meldAsked, setMeldAsked] = useState<number | null>(null);
+  // A rematch starts again at hand 1 without remounting, so forget the choice when a game ends.
+  const gameOver = view?.phase === "game_over";
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- resets per-game display choices
+  useEffect(() => { if (gameOver) { setMeldHidden(null); setMeldAsked(null); } }, [gameOver]);
+  // Hide removes the button that had focus; hand it to the "Review meld" link that replaces the row.
+  const reviewLink = useRef<HTMLButtonElement>(null);
+  const focusReview = useRef(false);
+  useEffect(() => { if (focusReview.current) { focusReview.current = false; reviewLink.current?.focus(); } });
   // A choice made in one phase never carries into the next (an outside move, such as the practice coach, can change it).
   const phaseKey = view ? `${view.handNumber}:${view.phase}` : "";
   // eslint-disable-next-line react-hooks/set-state-in-effect -- drops a stale choice when the phase moves on
@@ -487,11 +495,11 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
             (view.playedCards.length < 4 && meldHidden !== view.handNumber) || meldAsked === view.handNumber ? (
               <div className="mt-1">
                 <MeldReview key={view.handNumber} melds={view.melds} seat={view.seat} nameOf={nameOf} compact={short}
-                  onHide={() => { setMeldHidden(view.handNumber); setMeldAsked(null); }} />
+                  onHide={() => { focusReview.current = true; setMeldHidden(view.handNumber); setMeldAsked(null); }} />
               </div>
             ) : (
               <div className="flex justify-center">
-                <button type="button" className="tap-link text-xs text-chalk-faint underline underline-offset-4 hover:text-chalk"
+                <button ref={reviewLink} type="button" className="tap-link text-xs text-chalk-faint underline underline-offset-4 hover:text-chalk"
                   onClick={() => setMeldAsked(view.handNumber)}>Review meld</button>
               </div>
             )

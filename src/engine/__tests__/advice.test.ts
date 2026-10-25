@@ -164,3 +164,14 @@ describe('advice helpers', () => {
     expect(listCards(['AS0'])).toBe('A♠');
   });
 });
+
+describe('bid advice when passing is the only call', () => {
+  it('says the dealer takes it when stuck, and passes otherwise', () => {
+    const stuck = buildScenario({ dealer: 0, bids: [null, null, null] }).state;
+    expect(adviseBid(viewFor(stuck, 0))?.headline).toMatch(/^Take it at/);
+    const redeal = buildScenario({ dealer: 0, rules: { dealerStuck: false }, bids: [null, null, null] }).state;
+    expect(adviseBid(viewFor(redeal, 0))).toMatchObject({ headline: 'Pass', reason: expect.stringMatching(/redeal/) });
+    const shot = buildScenario({ dealer: 0, rules: { shoot: 'points' }, bids: ['shoot', null, null] }).state;
+    expect(adviseBid(viewFor(shot, 0))).toMatchObject({ headline: 'Pass', reason: expect.stringMatching(/shot the moon/) });
+  });
+});
