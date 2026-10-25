@@ -37,11 +37,16 @@ Everything committed, and every issue, PR and comment, is world-readable. Before
 5. Review: an agent may review and merge its own PR, but the review must be a separate pass with fresh
    context (a second agent given the diff, not the author's conclusions). Address findings or reply to them.
 6. Merge with `gh pr merge --squash --delete-branch` once CI is green and the review is resolved.
-7. Merging to `main` deploys production through Vercel's Git integration (PRs get preview builds).
-   Check the production deployment is READY, then run `node scripts/smoke.mjs <production URL>`.
-   `./scripts/deploy.sh` (owner tooling) triggers a deploy by hand if the integration ever misses one.
-   The smoke test uses four disposable confirmed users via admin magic links (captcha stays on) and
-   removes them afterwards.
+7. Merging to `main` deploys production through Vercel's Git integration; PRs get preview builds, and
+   the "Vercel" check on the PR shows the build state. After a merge, wait until
+   `gh api repos/andreasmwenzel/meld-with-friends/commits/main/status -q .state` says `success`,
+   then smoke-test production.
+   The rest is maintainer tooling and needs the owner's credentials (Supabase service key in `.env.local`,
+   Vercel token in the owner's local env file). Without them, stop at the merge and say the smoke test
+   is left to the maintainer.
+   - `node scripts/smoke.mjs <production URL>` plays a full hand through the API with four disposable
+     confirmed users (admin magic links, captcha stays on) and deletes them afterwards.
+   - `./scripts/deploy.sh` triggers a production deploy by hand if the integration ever misses one.
 
 ### Issue maintenance
 - Close with a reason: `gh issue close N -c "one line why"`. Duplicates: `--reason "not planned"` plus a link.
