@@ -51,7 +51,7 @@ console.log("smoke passed");
 async function runSmoke() {
   console.log("players:", players.map((p) => `${p.name}=${p.id.slice(0, 8)}`).join(" "));
 
-  const rules = { counting: "classic", shoot: "points", shootPoints: 500, revealHands: true };
+  const rules = { scoring: "classic", counting: "classic", shoot: "points", shootPoints: 500, revealHands: true };
   const { code } = await players[0].api("/api/tables", { method: "POST", body: { gameKind: "pinochle", rules: {} } });
   await players[0].api(`/api/tables/${code}`, { method: "PATCH", body: { rules } });
   await players[1].api(`/api/tables/${code}`, { method: "PATCH", body: { rules } }).then(() => { throw new Error("non-host changed rules"); }, () => {});

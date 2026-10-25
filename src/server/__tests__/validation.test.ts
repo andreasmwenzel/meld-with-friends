@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { POINT_OPTIONS, changeScoring } from "@/components/rules/rules";
 import { DEFAULT_RULES } from "@/engine/types";
 import { actionSchema, rulesSchema } from "@/server/validation";
 
@@ -24,6 +25,28 @@ describe("table rules validation", () => {
     { setPenaltyIsBid: false }, { unexpected: true },
     { shoot: "invalid" }, { shootPoints: 90 }, { shootPoints: 5010 }, { shootPoints: 105 },
   ])("rejects unsupported rules %j", rules => {
+    expect(rulesSchema.safeParse(rules).success).toBe(false);
+  });
+
+  it("accepts every form point option in its scale", () => {
+    for (const scoring of ["modern", "classic"] as const) {
+      for (const [key, values] of Object.entries(POINT_OPTIONS[scoring])) {
+        for (const value of values) expect(rulesSchema.safeParse({ scoring, [key]: value }).success).toBe(true);
+      }
+      expect(rulesSchema.safeParse(changeScoring({}, scoring)).success).toBe(true);
+    }
+  });
+
+  it.each([
+    { scoring: "modern", counting: "classic" },
+    { scoring: "modern", target: 29 }, { scoring: "modern", target: 501 },
+    { scoring: "modern", minBid: 9 }, { scoring: "modern", minBid: 101 },
+    { scoring: "modern", shootPoints: 9 }, { scoring: "modern", shootPoints: 501 },
+    { scoring: "modern", counterValue: 10 }, { scoring: "modern", bidStep: 10 },
+    { scoring: "modern", lastTrickBonus: 6 },
+    { scoring: "classic", counterValue: 1 }, { scoring: "classic", bidStep: 1 },
+    { scoring: "future" }, { minBid: 25 }, { counterValue: 1 },
+  ])("rejects mixed scales or invalid modern bounds %j", rules => {
     expect(rulesSchema.safeParse(rules).success).toBe(false);
   });
 

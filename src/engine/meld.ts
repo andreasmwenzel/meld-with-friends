@@ -1,4 +1,6 @@
 import { SUITS } from './deck';
+import { DEFAULT_RULES, type RulesConfig } from './types';
+import { scoringFactor } from './scoring';
 import type { CardId, MeldItem, MeldKind, Rank, Suit } from './types';
 
 export const MELD_POINTS: Readonly<Record<MeldKind, number>> = {
@@ -9,11 +11,11 @@ export const MELD_POINTS: Readonly<Record<MeldKind, number>> = {
   double_queens_around: 600, double_jacks_around: 400,
 };
 
-export function computeMeld(cards: CardId[], trump: Suit): { items: MeldItem[]; total: number } {
+export function computeMeld(cards: CardId[], trump: Suit, rules: Pick<RulesConfig, 'scoring'> = DEFAULT_RULES): { items: MeldItem[]; total: number } {
   const unique = [...new Set(cards)];
   const matching = (rank: Rank, suit: Suit) => unique.filter(c => c[0] === rank && c[1] === suit).sort();
   const items: MeldItem[] = [];
-  const add = (kind: MeldKind, used: CardId[]) => items.push({ kind, cards: used, points: MELD_POINTS[kind] });
+  const add = (kind: MeldKind, used: CardId[]) => items.push({ kind, cards: used, points: MELD_POINTS[kind] * scoringFactor(rules) });
   const runRanks: Rank[] = ['A', 'T', 'K', 'Q', 'J'];
   const runs = Math.min(...runRanks.map(rank => matching(rank, trump).length));
   const runCards = runRanks.flatMap(rank => matching(rank, trump).slice(0, runs));

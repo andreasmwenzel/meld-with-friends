@@ -4,7 +4,7 @@ import { buildScenario, checkState, resolveCards, stackDeal } from '../scenario'
 import { PRESETS } from '../scenarios';
 import { newGame } from '../game';
 import { buildDeck, type CardId } from '..';
-import { fuzz, leakedCards } from '../fuzz';
+import { fuzz, fuzzRules, leakedCards } from '../fuzz';
 
 describe('scenario builder', () => {
   it('resolves short names to free copies and refuses a third copy', () => {
@@ -21,20 +21,20 @@ describe('scenario builder', () => {
   });
 
   it('replays to the same state from its base', () => {
-    const s = buildScenario({ bidder: 2, bid: 300, to: 'playing', tricks: 4, turn: 1 });
+    const s = buildScenario({ bidder: 2, bid: 30, to: 'playing', tricks: 4, turn: 1 });
     expect(s.actions.reduce(applyAction, s.base)).toEqual(s.state);
     expect(s.state.tricksTaken.red.length + s.state.tricksTaken.blue.length).toBe(4);
     expect(s.state.turn).toBe(1);
   });
 
   it('gives the dealer a contract above the minimum by letting someone open first', () => {
-    const s = buildScenario({ dealer: 0, bidder: 0, bid: 400, to: 'declaring_trump' });
+    const s = buildScenario({ dealer: 0, bidder: 0, bid: 40, to: 'declaring_trump' });
     expect(s.state.bidder).toBe(0);
-    expect(s.state.highBid?.amount).toBe(400);
+    expect(s.state.highBid?.amount).toBe(40);
   });
 
   it('synthesises history that adds up to the requested score', () => {
-    const s = buildScenario({ handNumber: 6, score: { red: 1210, blue: -90 } });
+    const s = buildScenario({ handNumber: 6, score: { red: 121, blue: -9 } });
     expect(s.state.history).toHaveLength(5);
     expect(checkState(s.state)).toEqual([]);
   });
@@ -53,6 +53,11 @@ describe('presets', () => {
     expect(checkState(s.state)).toEqual([]);
     const target = preset.spec.to ?? 'bidding';
     expect(s.state.phase === target || (target === 'game_over' && s.state.phase === 'game_over')).toBe(true);
+  });
+
+  it('includes modern play and classic counting examples', () => {
+    expect(buildScenario(PRESETS.find(p => p.id === 'play-lead')!.spec).state.rules.scoring).toBe('modern');
+    expect(buildScenario(PRESETS.find(p => p.id === 'rules-classic')!.spec).state.rules.scoring).toBe('classic');
   });
 
   const constraint = (id: string) => viewFor(buildScenario(PRESETS.find(p => p.id === id)!.spec).state, 0).legal.playConstraint?.reason;
@@ -77,6 +82,16 @@ describe('presets', () => {
 });
 
 describe('fuzz', () => {
+  it('covers both scales without mixing old-style counting into modern games', () => {
+    const rules = Array.from({ length: 128 }, (_, n) => fuzzRules(n));
+    expect(new Set(rules.map(rule => rule.scoring))).toEqual(new Set(['modern', 'classic']));
+    for (const rule of rules) {
+      if (rule.scoring === 'modern') expect(rule.counting).toBe('tens');
+      for (const key of ['target', 'minBid', 'bidStep', 'lastTrickBonus', 'shootPoints', 'counterValue'] as const) {
+        if (rule[key] !== undefined) expect(Number.isInteger(rule[key])).toBe(true);
+      }
+    }
+  });
   it('plays random-rules games with bots and no broken invariants', () => {
     const result = fuzz(3, 'vitest');
     expect(result.failures.map(f => `${f.seed}: ${f.error}`)).toEqual([]);

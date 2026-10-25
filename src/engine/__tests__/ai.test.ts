@@ -12,7 +12,7 @@ describe('public-information computer players',()=>{
   it('plays thousands of seeded legal positions to game over, with constrained deals',()=>{
     let positions=0;
     for(let i=0;i<12;i++) {
-      let state=newGame(`fuzz:${i}`,{target:500, counting:i%2?'classic':'tens',passCount:i%3?4:0});
+      let state=newGame(`fuzz:${i}`,{scoring:'classic',target:500, counting:i%2?'classic':'tens',passCount:i%3?4:0});
       for(let step=0;state.phase!=='game_over';step++) {
         expect(step).toBeLessThan(10000);
         const seat=(state.phase==='melding'?state.players.find(p=>!p.meldConfirmed)!.seat:state.turn??0) as SeatIndex;
@@ -44,7 +44,7 @@ describe('public-information computer players',()=>{
     const hands = 80;
     let sets = 0;
     for (let i = 0; i < hands; i++) {
-      let state = newGame(`pass-value:${i}`, { minBid: 150, passCount: 0, counting: 'tens', shoot: 'off' }, (i % 4) as SeatIndex);
+      let state = newGame(`pass-value:${i}`, { scoring: 'classic', minBid: 150, passCount: 0, counting: 'tens', shoot: 'off' }, (i % 4) as SeatIndex);
       while (!state.history.length) {
         const seat = state.phase === 'melding'
           ? state.players.find(p => !p.meldConfirmed)!.seat
@@ -84,7 +84,7 @@ describe('public-information computer players',()=>{
     for(const name of readdirSync(dir).filter(n=>n.endsWith('.ts') && n !== 'arena.ts')) {
       const source=readFileSync(new URL(name,dir),'utf8');
       expect(source).not.toMatch(/GameState|\.revealed|from ['"](?:\.\.\/(?:game|index|deck)|node:|@\/server)/);
-      for(const match of source.matchAll(/from ['"]([^'"]+)['"]/g)) expect(match[1]).toMatch(/^(?:\.\/[^/]+|\.\.\/(?:types|meld|rules)|\.\.\/\.\.\/lib\/settings)$/);
+      for(const match of source.matchAll(/from ['"]([^'"]+)['"]/g)) expect(match[1]).toMatch(/^(?:\.\/[^/]+|\.\.\/(?:types|meld|rules|scoring)|\.\.\/\.\.\/lib\/settings)$/);
     }
   });
   it('uses Monte Carlo legally and deterministically with a seed',()=>{

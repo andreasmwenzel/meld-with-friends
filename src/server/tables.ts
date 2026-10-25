@@ -2,6 +2,7 @@ import "server-only";
 import { bump } from "./metrics";
 import { getSettings } from "./settings";
 import { enforce } from "./limits";
+import { resolveRules } from "@/engine/scoring";
 import { newGame } from "@/engine";
 import type { GameState, RulesConfig, SeatIndex } from "@/engine/types";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -36,7 +37,7 @@ export async function createTable(gameKind: "pinochle", rules: Partial<RulesConf
   checkDb(count.error);
   if ((count.count ?? 0) >= limits.maxOpenTablesPerHost) { bump("rate_limited"); throw new ApiError(429, "Slow down: too many unfinished tables"); }
   for (let attempt = 0; attempt < 8; attempt++) {
-    const { data, error } = await admin.rpc("create_table", { p_code: generateTableCode(), p_user: userId, p_kind: gameKind, p_rules: rules });
+    const { data, error } = await admin.rpc("create_table", { p_code: generateTableCode(), p_user: userId, p_kind: gameKind, p_rules: resolveRules(rulesSchema.parse(rules)) });
     if (error?.code === "23505") continue;
     checkDb(error);
     return data as TableRow;
@@ -54,7 +55,7 @@ export async function updateTableRules(code: string, rules: Partial<RulesConfig>
   if (table.status !== "open") throw new ApiError(409, "Rules can only change while the table is open");
   const validatedRules = rulesSchema.parse(rules);
   const { data, error } = await createAdminClient().from("tables")
-    .update({ rules: validatedRules }).eq("id", table.id).eq("host", userId).eq("status", "open")
+    .update({ rules: resolveRules(validatedRules) }).eq("id", table.id).eq("host", userId).eq("status", "open")
     .select("id").maybeSingle();
   checkDb(error);
   if (!data) throw new ApiError(409, "Table changed before rules could be updated");

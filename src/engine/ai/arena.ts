@@ -37,3 +37,33 @@ export function arena(n: number, budgetMs=0, prefix='arena', config?: Partial<Bo
   }
   return {games:n, botWins:wins, randomWins:n-wins, avgDecisionMs:elapsed/decisions, avgGameMs:(performance.now()-started)/n, avgBidMade:hands?made/hands:0, wins,winRate:wins/n,averageDecisionMs:elapsed/decisions,decisions,positions};
 }
+
+/** Paired deals isolate score-unit changes from deal and sampling variance. */
+export function compareScoring(hands = 300, budgetMs = 0, prefix = 'scoring') {
+  const results = (['modern', 'classic'] as const).map(scoring => {
+    let sets = 0, contracts = 0, totalBid = 0, shoots = 0;
+    const decisions: string[][] = [];
+    for (let i = 0; i < hands; i++) {
+      let state = newGame(`${prefix}:${i}`, { scoring }, (i % 4) as SeatIndex);
+      const actions: string[] = [];
+      while (!state.history.length) {
+        if (actions.length > 1000) throw new Error(`Scoring hand did not finish: ${i}`);
+        const seat = state.phase === 'melding' ? state.players.find(p => !p.meldConfirmed)!.seat : state.turn!;
+        const action = chooseAction(viewFor(state, seat), { budgetMs, seed: `${prefix}:${i}:${state.rev}` });
+        actions.push(JSON.stringify(action.type === 'bid' && scoring === 'classic' ? { ...action, amount: action.amount / 10 } : action));
+        state = applyAction(state, action);
+      }
+      const record = state.history[0];
+      sets += Number(record.wentSet);
+      shoots += Number(record.shotMade !== undefined);
+      contracts += Number(record.shotMade === undefined);
+      totalBid += record.bid;
+      decisions.push(actions);
+    }
+    return { scoring, hands, contracts, shoots, sets, setRate: sets / hands, meanBid: totalBid / hands, decisions };
+  });
+  const [modern, classic] = results;
+  const mismatchedHands = modern.decisions.reduce((n, actions, i) => n + Number(JSON.stringify(actions) !== JSON.stringify(classic.decisions[i])), 0);
+  // Keep the public result small enough for CLI and admin diagnostics.
+  return { modern: { ...modern, decisions: undefined }, classic: { ...classic, decisions: undefined }, mismatchedHands };
+}

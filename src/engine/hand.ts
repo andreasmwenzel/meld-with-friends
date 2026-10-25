@@ -1,6 +1,7 @@
 import { parseCard, RANK_ORDER } from './deck';
 import { computeMeld } from './meld';
-import type { CardId, MeldItem, Suit } from './types';
+import { DEFAULT_RULES } from './types';
+import type { CardId, MeldItem, Suit, RulesConfig } from './types';
 
 export type HandSortOrder = 'trump-first' | 'suits' | 'alternating';
 export type RankDirection = 'high-first' | 'low-first';
@@ -45,9 +46,9 @@ export interface SuitMeld {
 }
 
 /** Evaluate each hypothetical trump in S H C D order, including zero meld. */
-export function meldBySuit(hand: CardId[]): SuitMeld[] {
+export function meldBySuit(hand: CardId[], rules: RulesConfig = DEFAULT_RULES): SuitMeld[] {
   return SUIT_ORDER.map(suit => {
-    const { items, total } = computeMeld(hand, suit);
+    const { items, total } = computeMeld(hand, suit, rules);
     return { suit, items, total, cards: meldCards(items) };
   });
 }

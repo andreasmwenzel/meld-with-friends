@@ -67,7 +67,7 @@ export function coachLines(view: PlayerView, autoMeld = true): string[] {
     }
 
     case "melding": {
-      const total = view.trump ? computeMeld(view.hand, view.trump).total : 0;
+      const total = view.trump ? computeMeld(view.hand, view.trump, view.rules).total : 0;
       if (view.meldConfirmed[0]) return ["You are laid down. The others are doing the same, then the play begins."];
       return [
         `Meld is a set of card combinations that count points before a single trick is played. Lay everything down and the table counts it for you. This hand is worth ${total} with ${trump} as trump.`,

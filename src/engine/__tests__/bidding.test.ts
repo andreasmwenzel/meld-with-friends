@@ -7,7 +7,7 @@ import { IllegalAction, type RulesConfig, type SeatIndex } from '../types';
 const seats = [0, 1, 2, 3] as const;
 
 function allOthersPassed(rules: Partial<RulesConfig> = {}, dealer: SeatIndex = 0) {
-  let state = newGame('all-pass-regression', rules, dealer);
+  let state = newGame('all-pass-regression', { scoring: 'classic', ...rules }, dealer);
   for (let i = 0; i < 3; i++) {
     state = applyAction(state, { type: 'pass_bid', seat: state.turn! });
   }
@@ -58,7 +58,7 @@ describe('all-pass dealer decision', () => {
   });
 
   it.each(seats)('automatically awards an existing high bid to seat %s', bidder => {
-    let state = newGame('existing-bid', {}, ((bidder + 3) % 4) as SeatIndex);
+    let state = newGame('existing-bid', { scoring: 'classic' }, ((bidder + 3) % 4) as SeatIndex);
     state = applyAction(state, { type: 'bid', seat: bidder, amount: 300 });
     for (let i = 0; i < 3; i++) state = applyAction(state, { type: 'pass_bid', seat: state.turn! });
     expect(state).toMatchObject({ phase: 'declaring_trump', bidder, turn: bidder, highBid: { seat: bidder, amount: 300 } });
@@ -66,7 +66,7 @@ describe('all-pass dealer decision', () => {
   });
 
   it('keeps ordinary bids available before the third pass and with an outstanding bid', () => {
-    let state = newGame('ordinary-auction');
+    let state = newGame('ordinary-auction', { scoring: 'classic' });
     for (const seat of [1, 2] as const) state = applyAction(state, { type: 'pass_bid', seat });
     expect(legalActionsFor(state, 3)).toMatchObject({ canBid: true, minBid: 250 });
     state = applyAction(state, { type: 'bid', seat: 3, amount: 250 });

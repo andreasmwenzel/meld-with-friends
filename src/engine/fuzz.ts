@@ -35,15 +35,18 @@ function pick<T>(seed: number, options: readonly T[]): T { return options[Math.a
 
 /** Rules spread over the settings tables actually use, varied by seed. */
 export function fuzzRules(n: number): Partial<RulesConfig> {
+  const scoring = n % 2 ? 'classic' : 'modern';
+  const unit = scoring === 'modern' ? 1 : 10;
   return {
-    target: pick(n, [500, 1000, 1500]), minBid: pick(n >> 2, [150, 250]), bidStep: pick(n >> 3, [5, 10]),
-    passCount: pick(n >> 4, [0, 3, 4, 5]), counting: pick(n >> 5, ['tens', 'classic'] as const),
-    shoot: pick(n >> 6, ['off', 'game', 'points'] as const), shootPoints: 500,
+    scoring,
+    target: pick(n, [50, 100, 150]) * unit, minBid: pick(n >> 2, [15, 25]) * unit, bidStep: pick(n >> 3, [1, 2]) * unit,
+    passCount: pick(n >> 4, [0, 3, 4, 5]), counting: scoring === 'classic' ? pick(n >> 5, ['tens', 'classic'] as const) : 'tens',
+    shoot: pick(n >> 6, ['off', 'game', 'points'] as const), shootPoints: 50 * unit,
     dealerStuck: pick(n >> 7, [true, false]), mustTakeTrickToSaveMeld: pick(n >> 8, [true, false]),
     ...(n >> 9) % 3 === 0 ? {
       // Rarer settings, about a third of games: long passes, no last-trick bonus, odd counter values, hidden hands.
-      passCount: pick(n >> 10, [6, 8, 12]), lastTrickBonus: pick(n >> 11, [0, 10, 25]),
-      counterValue: pick(n >> 12, [5, 10, 20]), revealHands: pick(n >> 13, [true, false]),
+      passCount: pick(n >> 10, [6, 8, 12]), lastTrickBonus: pick(n >> 11, [0, 1, 2]) * unit,
+      counterValue: pick(n >> 12, [1, 2, 3]) * unit, revealHands: pick(n >> 13, [true, false]),
     } : {},
   };
 }

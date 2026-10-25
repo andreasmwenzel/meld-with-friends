@@ -8,7 +8,7 @@ import type { Snapshot } from "@/components/table/types";
 export default function DevSeatingPage() {
   if (process.env.NODE_ENV === "production") notFound();
   const snap: Snapshot = {
-    table: { id: "t", code: "KQJ9TA", host: "u0", status: "open", rules: { target: 1500, passCount: 4 } },
+    table: { id: "t", code: "KQJ9TA", host: "u0", status: "open", rules: { scoring: "modern", target: 150, passCount: 4 } },
     seats: [
       { seat: 0, user_id: "u0", profile: { id: "u0", handle: "andreas", display_name: "Andreas", avatar_seed: "" }, bot: null },
       { seat: 1, user_id: "u1", profile: { id: "u1", handle: "margaret", display_name: "Margaret", avatar_seed: "" }, bot: null },

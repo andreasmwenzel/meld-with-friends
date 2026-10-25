@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildDeck, cardLabel, sortHand, type CardId, type GameState, type Phase, type SeatIndex, type Suit } from "@/engine";
 import { checkState, SEATS, type ScenarioSpec, type ScenarioTarget } from "@/engine/scenario";
+import { resolveRules, changeScoring } from "@/components/rules/rules";
 import { PRESETS, presetById } from "@/engine/scenarios";
 import { describeAction, encodeSpec, labStore, parseImport, type LabSnapshot } from "./labStore";
 
@@ -159,9 +160,22 @@ function startingSpec(snap: LabSnapshot): ScenarioSpec {
 function Build({ snap }: { snap: LabSnapshot }) {
   const [spec, setSpec] = useState<ScenarioSpec>(() => structuredClone(startingSpec(snap)));
   const [copied, setCopied] = useState(false);
-  const rules = spec.rules ?? {};
+  const rules = resolveRules(spec.rules);
   const set = (patch: Partial<ScenarioSpec>) => setSpec(s => ({ ...s, ...patch }));
-  const setRules = (patch: Partial<NonNullable<ScenarioSpec["rules"]>>) => setSpec(s => ({ ...s, rules: { ...s.rules, ...patch } }));
+  const setRules = (patch: Partial<NonNullable<ScenarioSpec["rules"]>>) => setSpec(s => ({ ...s, rules: { ...resolveRules(s.rules), ...patch } }));
+  const setScoring = (scoring: "modern" | "classic", oldStyle = false) => setSpec(s => {
+    const current = resolveRules(s.rules);
+    const next = changeScoring(current, scoring);
+    const factor = current.scoring === scoring ? 1 : scoring === "modern" ? 0.1 : 10;
+    const bid = (amount: number) => Math.max(next.minBid, Math.ceil(amount * factor / next.bidStep) * next.bidStep);
+    return {
+      ...s,
+      rules: { ...next, ...(oldStyle ? { counting: "classic" as const } : {}) },
+      bid: s.bid === undefined ? undefined : bid(s.bid),
+      bids: s.bids?.map(amount => typeof amount === "number" ? bid(amount) : amount),
+      score: s.score && Object.fromEntries(Object.entries(s.score).map(([team, amount]) => [team, Math.round(amount * factor)])),
+    };
+  });
   const num = (v: string) => (v === "" ? undefined : Number(v));
   const to = spec.to ?? "bidding";
   const past = (p: ScenarioTarget) => TARGETS.indexOf(to) > TARGETS.indexOf(p);
@@ -190,7 +204,7 @@ function Build({ snap }: { snap: LabSnapshot }) {
         <fieldset className="grid grid-cols-3 gap-2">
           <legend className="mb-1 font-display text-[15px]">Contract</legend>
           <Field label="Bidder"><SeatSelect value={spec.bidder} onChange={v => set({ bidder: v, bids: undefined })} allowBot /></Field>
-          <Field label="Bid"><input className={field} type="number" step={10} value={spec.bid ?? ""} onChange={e => set({ bid: num(e.target.value) })} /></Field>
+          <Field label="Bid"><input className={field} type="number" step={rules.bidStep} value={spec.bid ?? ""} onChange={e => set({ bid: num(e.target.value) })} /></Field>
           <Field label="Trump">
             <select className={field} value={spec.trump ?? ""} onChange={e => set({ trump: (e.target.value || undefined) as Suit | undefined })}>
               <option value="">Bot picks</option><option value="S">♠ Spades</option><option value="H">♥ Hearts</option><option value="D">♦ Diamonds</option><option value="C">♣ Clubs</option>
@@ -200,8 +214,8 @@ function Build({ snap }: { snap: LabSnapshot }) {
         </fieldset>
       )}
       {to === "bidding" && (
-        <Field label="Auction so far (from the dealer's left: 250, pass, shoot)" span={3}>
-          <input className={field} value={(spec.bids ?? []).map(b => (b === null ? "pass" : b)).join(", ")} placeholder="250, pass, 260"
+        <Field label={`Auction so far (from the dealer's left: ${rules.minBid}, pass, shoot)`} span={3}>
+          <input className={field} value={(spec.bids ?? []).map(b => (b === null ? "pass" : b)).join(", ")} placeholder={`${rules.minBid}, pass, ${rules.minBid + rules.bidStep}`}
             onChange={e => set({ bids: e.target.value.split(",").map(x => x.trim()).filter(Boolean).map(x => (x === "pass" ? null : x === "shoot" ? "shoot" : Number(x))) })} />
         </Field>
       )}
@@ -227,8 +241,9 @@ function Build({ snap }: { snap: LabSnapshot }) {
 
       <fieldset className="grid grid-cols-3 gap-2">
         <legend className="mb-1 font-display text-[15px]">Rules</legend>
-        <Field label="Target"><input className={field} type="number" step={50} value={rules.target ?? ""} placeholder="1500" onChange={e => setRules({ target: num(e.target.value) })} /></Field>
-        <Field label="Min bid"><input className={field} type="number" step={10} value={rules.minBid ?? ""} placeholder="250" onChange={e => setRules({ minBid: num(e.target.value) })} /></Field>
+        <Field label="Scoring"><select className={field} value={rules.scoring} onChange={e => setScoring(e.target.value as "modern" | "classic")}><option value="modern">Modern</option><option value="classic">Classic ×10</option></select></Field>
+        <Field label="Target"><input className={field} type="number" step={rules.scoring === "modern" ? 5 : 50} value={rules.target} onChange={e => setRules({ target: num(e.target.value) })} /></Field>
+        <Field label="Min bid"><input className={field} type="number" step={rules.bidStep} value={rules.minBid} onChange={e => setRules({ minBid: num(e.target.value) })} /></Field>
         <Field label="Pass"><input className={field} type="number" min={0} max={12} value={rules.passCount ?? ""} placeholder="4" onChange={e => setRules({ passCount: num(e.target.value) })} /></Field>
         <Field label="Shoot">
           <select className={field} value={rules.shoot ?? "off"} onChange={e => setRules({ shoot: e.target.value as "off" | "game" | "points" })}>
@@ -236,8 +251,8 @@ function Build({ snap }: { snap: LabSnapshot }) {
           </select>
         </Field>
         <Field label="Counting">
-          <select className={field} value={rules.counting ?? "tens"} onChange={e => setRules({ counting: e.target.value as "tens" | "classic" })}>
-            <option value="tens">Tens</option><option value="classic">Classic</option>
+          <select className={field} value={rules.counting ?? "tens"} onChange={e => e.target.value === "classic" ? setScoring("classic", true) : setRules({ counting: "tens" })}>
+            <option value="tens">Aces, tens, kings: {rules.counterValue}</option><option value="classic">Old-style 11 / 10 / 4 / 3 / 2</option>
           </select>
         </Field>
         <Field label="Pace">

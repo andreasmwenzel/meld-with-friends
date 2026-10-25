@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resolveRules } from "@/engine/scoring";
 import { GET, PATCH } from "@/app/api/me/route";
 
 const mocks = vi.hoisted(() => ({ getUser: vi.fn(), from: vi.fn(), update: vi.fn(), eq: vi.fn(), select: vi.fn(), single: vi.fn(), admin: vi.fn(), isBanned: vi.fn() }));
@@ -27,10 +28,10 @@ beforeEach(() => {
 
 describe("profile rules API contract", () => {
   it.each([{ revealHands: false }, {}, { passCount: 0, counting: "classic", shoot: "points", shootPoints: 1500 }])(
-    "saves strict partial defaults %j for the authenticated user", async defaultRules => {
+    "resolves partial defaults before saving %j for the authenticated user", async defaultRules => {
       const response = await PATCH(request({ defaultRules }));
       expect(response.status).toBe(200);
-      expect(mocks.update).toHaveBeenCalledWith({ default_rules: defaultRules });
+      expect(mocks.update).toHaveBeenCalledWith({ default_rules: resolveRules(defaultRules) });
       expect(mocks.from).toHaveBeenCalledWith("profiles");
       expect(mocks.eq).toHaveBeenCalledWith("id", "verified-user");
       expect(await response.json()).toEqual({ id: "verified-user", default_rules: { revealHands: false } });
@@ -40,7 +41,7 @@ describe("profile rules API contract", () => {
   it("accepts profile fields together with defaults", async () => {
     const response = await PATCH(request({ displayName: " Player ", handle: "PLAYER", defaultRules: {} }));
     expect(response.status).toBe(200);
-    expect(mocks.update).toHaveBeenCalledWith({ display_name: "Player", handle: "player", default_rules: {} });
+    expect(mocks.update).toHaveBeenCalledWith({ display_name: "Player", handle: "player", default_rules: resolveRules({}) });
   });
 
   it.each([{}, { defaultRules: null }, { defaultRules: { extra: true } }, { defaultRules: { revealHands: "false" } },
