@@ -67,7 +67,7 @@ export function walk(replay: Replay, nameOf: (seat: SeatIndex) => string): Walk 
   for (const chapter of chapters) {
     const end = frames[moves[chapter.last].frame];
     chapter.record = end.history.find(h => h.handNumber === chapter.hand) ?? null;
-    chapter.title = chapter.record ? handOutcome(chapter.record, nameOf) : `Everyone passed; ${nameOf(end.dealer)} redealt`;
+    chapter.title = chapter.record ? handOutcome(chapter.record, nameOf) : "Everyone passed and the cards were redealt";
   }
   return { frames, moves, chapters };
 }

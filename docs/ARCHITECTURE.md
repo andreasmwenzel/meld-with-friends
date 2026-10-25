@@ -79,9 +79,11 @@ All `/api/admin/*` routes require `requireAdmin`, which checks a saved session a
 
 ## Game replay
 
-`GET /api/replay/[gameId]` needs no session: a game id is an unguessable uuid that only its players
-receive (through the table snapshot and `/api/history`), so holding the link is the permission, and
-players share it deliberately. The handler is rate limited per forwarded client address.
+`GET /api/replay/[gameId]` needs no session for a finished game: a game id is an unguessable uuid
+that only its players receive (through the table snapshot and `/api/history`), so holding the link
+is the permission, and players share it deliberately. While a game is still going, only its seated
+players may open the replay (403 for anyone else); the link becomes public once the game is over.
+The handler is rate limited per forwarded client address.
 
 The server reads the game, its `game_actions` log and its `game_results` snapshot, then rebuilds the
 game with `rebuildFromLog` in `src/engine/replay.ts`: `newGame(seed, rules, dealer)` followed by every
@@ -89,10 +91,10 @@ logged action, where the opening dealer is the seat before the first bidder. If 
 reach the stored state (an engine change since the game was played) the route answers 422.
 `buildReplay` then packs the result as `{ start, steps, hands, finished }`: `start` is the position
 after the first deal and each step is one action; a step that dealt cards (a new hand or an all-pass
-redeal) also carries the position after it. Every embedded position has its `seed` blanked, so the
-browser can replay actions with `applyAction` but can never deal a hand itself. For a game still in
-progress the steps stop at the last `hand_over`, so the hand being played and its deal never leave the
-server; before the first hand is over the route answers 404. Tables with `revealHands` off are
+redeal) also carries the position after it. Every embedded position has its `seed` blanked and the
+browser replays actions with `applyAction`. For a game still in progress the steps stop at the last
+`hand_over`, so the hand being played and its deal never leave the server; before the first hand is
+over the route answers 404. Tables with `revealHands` off are
 replayable only once the game is over. The payload adds `seats` (display names and bot flags from the
 result snapshot, or the live seats for an unfinished game), the table `code`, `viewerSeat` for a
 signed-in player so the board faces them, and timestamps. No user ids are included.

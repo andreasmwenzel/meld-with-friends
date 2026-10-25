@@ -77,6 +77,9 @@ describe("getReplay", () => {
     ]);
     expect(replay.steps.length).toBeLessThan(actions.length);
     expect(replay.steps.some(step => step.state?.handNumber === 2)).toBe(false);
+    // Until the game is over, the link works only for the people at the table.
+    await expect(getReplay(GAME, null)).rejects.toMatchObject({ status: 403 });
+    await expect(getReplay(GAME, "stranger")).rejects.toMatchObject({ status: 403 });
   });
   it("rejects bad ids, missing games, private tables, broken logs and games without a finished hand", async () => {
     await expect(getReplay("not-a-uuid", null)).rejects.toMatchObject({ status: 404 });

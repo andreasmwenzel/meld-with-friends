@@ -456,7 +456,9 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   const isReady = (seat: SeatIndex) => readySeats.includes(seat) || snap.seats.find((x) => x.seat === seat)?.user_id === snap.table.host;
   const readyNames = humanSeats.filter(isReady).map(nameOf);
   const waitingNames = humanSeats.filter((s) => !isReady(s)).map(nameOf);
-  const replayHref = snap.table.current_game_id && (view.history.length > 0 || view.phase === "game_over") ? `/replay/${snap.table.current_game_id}` : null;
+  // Finished games replay for anyone; while a game is going, only seated players may, and only if the table reveals hands.
+  const replayable = view.phase === "game_over" || (view.history.length > 0 && snap.mySeat !== null && view.rules.revealHands);
+  const replayHref = snap.table.current_game_id && replayable ? `/replay/${snap.table.current_game_id}` : null;
   const readyInfo = view.phase === "hand_over" && snap.seats.filter((x) => x.user_id).length > 1
     ? { me: isReady(view.seat), all: waitingNames.length === 0, readyNames, waitingNames, post: postReady } : null;
   // On phones, tighten the fan until it fits the row; scroll only once cards would get too thin to tap.

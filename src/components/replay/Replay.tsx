@@ -18,6 +18,7 @@ export function ReplayLoader({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
+    setPayload(null); setError(null); // eslint-disable-line react-hooks/set-state-in-effect -- a new link starts over
     api<ReplayPayload>(`/api/replay/${id}`)
       .then((r) => { if (live) setPayload(r); })
       .catch((e: Error) => { if (live) setError(e.message); });
@@ -33,7 +34,7 @@ export function ReplayLoader({ id }: { id: string }) {
     );
   }
   if (!payload) return <p className="px-6 py-10 text-chalk-faint">Dealing the hands back out.</p>;
-  return <ReplayView payload={payload} />;
+  return <ReplayView key={payload.gameId} payload={payload} />;
 }
 
 /** Steps through every move of a game, with the board face up. */
@@ -62,7 +63,8 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).closest("input, textarea, select, button")) return;
+      // Buttons keep focus after a click; the arrows should still step. Text fields and the slider handle their own keys.
+      if ((e.target as HTMLElement).closest("input, textarea, select, [contenteditable]")) return;
       if (e.key === "ArrowRight") { if (e.shiftKey) nextHand(); else go(cursor + 1); }
       else if (e.key === "ArrowLeft") { if (e.shiftKey) prevHand(); else go(cursor - 1); }
       else if (e.key === "Home") go(0);
@@ -130,6 +132,7 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
           </div>
           <div className="flex items-center gap-3 text-sm">
             <button type="button" onClick={share} className="btn btn-ghost btn-compact">{copied ? "Link copied" : "Share this replay"}</button>
+            {!payload.finished && <span className="text-xs text-chalk-faint">Others can open it once the game is over.</span>}
           </div>
         </div>
 

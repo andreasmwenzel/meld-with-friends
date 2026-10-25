@@ -12,9 +12,9 @@ interface GameRow { id: string; table_id: string; state: GameState; rev: number;
 interface SnapshotSeat { seat: SeatIndex; user_id: string | null; name: string; bot: boolean }
 
 /**
- * A finished or in-progress game as a replay, for anyone holding its id. The id is an unguessable
- * uuid that only players receive, so holding it is the permission. Hands still being played are
- * never included, and the seed never leaves the server.
+ * A finished game as a replay for anyone holding its id (an unguessable uuid that only players
+ * receive, shared deliberately), or the completed hands of a game in progress for its seated
+ * players only. The hand being played is never included, and the seed never leaves the server.
  */
 export async function getReplay(gameId: string, viewerId: string | null): Promise<ReplayPayload> {
   if (!idSchema.safeParse(gameId).success) throw new ApiError(404, "No game has this link.");
@@ -58,6 +58,9 @@ export async function getReplay(gameId: string, viewerId: string | null): Promis
     return { seat, name: chair?.name || "Empty seat", bot: chair?.bot ?? false };
   });
   const viewerSeat = viewerId === null ? null : chairs.find(c => c.user_id === viewerId)?.seat ?? null;
+  if (!finished && viewerSeat === null) {
+    throw new ApiError(403, "While the game is going, only its players can review it. Share the link once it is over.");
+  }
   return {
     ...replay, gameId: game.id, code, seats, viewerSeat,
     startedAt: game.created_at, finishedAt: finished ? result?.finished_at ?? game.updated_at : null,
