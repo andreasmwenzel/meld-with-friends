@@ -6,6 +6,7 @@ import { PlayingCard, SUIT_GLYPH } from "@/components/cards/PlayingCard";
 import { Avatar } from "@/components/site/Avatar";
 import { useCardPrefs } from "@/lib/cardPrefs";
 import { teamOf } from "@/components/table/types";
+import { useEffect, useRef } from "react";
 import { useTableTurn } from "@/components/table/turn";
 import type { Move } from "./model";
 
@@ -24,6 +25,12 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit }: {
 }) {
   const { prefs, phone } = useCardPrefs();
   const turn = useTableTurn(bottom);
+  // The chips change places when the table turns; keyboard focus follows the chair the reader chose.
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!root.current?.contains(document.activeElement) || !document.activeElement?.closest("[data-chip]")) return;
+    root.current.querySelector<HTMLElement>('[data-chip][aria-pressed="true"]')?.focus();
+  }, [bottom]);
   const seatAt = (r: number): SeatIndex => (((bottom + r) % 4) as SeatIndex);
   const rel = (seat: SeatIndex): 0 | 1 | 2 | 3 => (((seat - bottom + 4) % 4) as 0 | 1 | 2 | 3);
   const lit = new Set(move.cards);
@@ -51,7 +58,7 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit }: {
 
   const chair = (seat: SeatIndex) => ({ seat, info: seats[seat], status: status(seat), active: move.actor === seat, cards: hand(seat), raised: raised(seat), prefs, atBottom: seat === bottom, onSit });
   return (
-    <div className={`mx-auto w-full max-w-[760px] ${turn.className}`} style={turn.style}>
+    <div ref={root} className={`mx-auto w-full max-w-[760px] ${turn.className}`} style={turn.style}>
       <SeatRow {...chair(seatAt(2))} width={sizes.north} budget={sizes.budget * 0.8} align="center" />
       <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
         <SeatRow {...chair(seatAt(1))} width={sizes.side} align="left" />
@@ -78,7 +85,7 @@ function SeatRow({ seat, info, status, active, cards, raised, prefs, width, alig
   const items = align === "left" ? "items-start" : align === "right" ? "items-end" : "items-center";
   return (
     <div className={`flex min-w-0 flex-col ${items} gap-1 ${big ? "mt-3" : "py-1"}`}>
-      <button type="button" onClick={() => { if (!atBottom) onSit(seat); }} aria-pressed={atBottom}
+      <button type="button" data-chip="" onClick={() => { if (!atBottom) onSit(seat); }} aria-pressed={atBottom}
         aria-label={atBottom ? `${info.name}, at the bottom of the table` : `See the table from ${info.name}'s seat`}
         title={atBottom ? undefined : `See it from ${info.name}'s seat`}
         className={`flex max-w-full items-center gap-1.5 rounded-2xl px-2 py-1 text-left transition-colors ${vertical ? "flex-col" : "flex-row"} ${atBottom ? "cursor-default" : "hover:bg-chalk-ghost focus-visible:bg-chalk-ghost"}`}
