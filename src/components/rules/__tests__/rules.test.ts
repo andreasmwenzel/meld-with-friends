@@ -10,9 +10,9 @@ describe("scoring selection", () => {
     expect(changeScoring(classic, "modern")).toEqual(modern);
   });
 
-  it("snaps the classic 25-point bid step to a supported integer modern option", () => {
+  it("snaps the classic 25-point bid step to a supported integer modern option that keeps 25 biddable", () => {
     const modern = changeScoring({ scoring: "classic", bidStep: 25 }, "modern");
-    expect(modern.bidStep).toBe(2);
+    expect(modern.bidStep).toBe(1);
     expect(Number.isInteger(modern.bidStep)).toBe(true);
   });
 
@@ -51,5 +51,15 @@ describe("rules summary", () => {
     expect(describeRules({ scoring: "classic" })).toContain("Aces, tens and kings count 10 each, plus 10 for the last trick.");
     expect(describeRules({ scoring: "classic", counting: "classic" }))
       .toContain("Old-style count: aces 11, tens 10, kings 4, queens 3, jacks 2, plus 10 for the last trick.");
+  });
+
+  it("keeps the minimum bid reachable after converting, and leaves values alone when the scale stays", () => {
+    const modern = changeScoring({ scoring: "classic", minBid: 250, bidStep: 25 }, "modern");
+    expect(modern.minBid % modern.bidStep).toBe(0);
+    expect(modern).toMatchObject({ minBid: 25, bidStep: 1 });
+    const classic = changeScoring({ scoring: "modern", minBid: 25, bidStep: 2 }, "classic");
+    expect(classic.minBid % classic.bidStep).toBe(0);
+    expect(changeScoring({ scoring: "classic", target: 3000, minBid: 350 }, "classic")).toMatchObject({ target: 3000, minBid: 350 });
+    expect(changeRule({ scoring: "classic", target: 3000 }, "counting", "classic")).toMatchObject({ target: 3000, counting: "classic" });
   });
 });

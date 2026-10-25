@@ -28,12 +28,21 @@ export const POINT_OPTIONS: Record<RulesConfig["scoring"], Record<PointField, nu
 /** Convert a form's current settings, snapping unsupported values to the nearest option. */
 export function changeScoring(patch: RulesPatch, scoring: RulesConfig["scoring"]): RulesConfig {
   const current = resolveRules(patch);
+  // Same scale: nothing to convert, so leave values the menus don't list untouched.
+  if (current.scoring === scoring) return { ...current };
   const next = { ...current, scoring };
-  const factor = current.scoring === scoring ? 1 : scoring === "modern" ? 0.1 : 10;
+  const factor = scoring === "modern" ? 0.1 : 10;
   for (const key of Object.keys(POINT_OPTIONS[scoring]) as PointField[]) {
     const converted = current[key] * factor;
     next[key] = POINT_OPTIONS[scoring][key].reduce((nearest, option) =>
       Math.abs(option - converted) < Math.abs(nearest - converted) ? option : nearest);
+  }
+  // A step that doesn't divide the minimum makes the minimum unbiddable (25 in steps of 2 opens at 26):
+  // use the listed step nearest the converted one that does divide it.
+  if (next.minBid % next.bidStep !== 0) {
+    const wanted = current.bidStep * factor;
+    next.bidStep = POINT_OPTIONS[scoring].bidStep.filter((step) => next.minBid % step === 0)
+      .sort((a, b) => Math.abs(a - wanted) - Math.abs(b - wanted))[0] ?? 1;
   }
   next.counterValue = scoring === "modern" ? 1 : 10;
   if (scoring === "modern") next.counting = "tens";
