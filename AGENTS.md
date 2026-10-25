@@ -37,7 +37,9 @@ Everything committed, and every issue, PR and comment, is world-readable. Before
 5. Review: an agent may review and merge its own PR, but the review must be a separate pass with fresh
    context (a second agent given the diff, not the author's conclusions). Address findings or reply to them.
 6. Merge with `gh pr merge --squash --delete-branch` once CI is green and the review is resolved.
-7. Deploy after merge (owner tooling: `./scripts/deploy.sh`), then `node scripts/smoke.mjs <production URL>`.
+7. Merging to `main` deploys production through Vercel's Git integration (PRs get preview builds).
+   Check the production deployment is READY, then run `node scripts/smoke.mjs <production URL>`.
+   `./scripts/deploy.sh` (owner tooling) triggers a deploy by hand if the integration ever misses one.
    The smoke test uses four disposable confirmed users via admin magic links (captcha stays on) and
    removes them afterwards.
 
