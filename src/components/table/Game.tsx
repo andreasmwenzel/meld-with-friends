@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useRouter } from "next/navigation";
 import { api, ApiError, isTransientError, type Profile } from "@/lib/api";
 import { useTableChannel, useDisconnectedPolling } from "@/lib/realtime/useTableChannel";
-import type { Action, CardId, MeldItem, PlayerView, SeatIndex, Suit, Team } from "@/engine/types";
+import type { Action, CardId, PlayerView, SeatIndex, Suit, Team } from "@/engine/types";
 import { PlayingCard, CardBack, SUIT_GLYPH, SUIT_NAME, RANK_LABEL, splitCard, cardName } from "@/components/cards/PlayingCard";
 import { Avatar } from "@/components/site/Avatar";
 import { SEAT_LABEL, teamOf, type Snapshot } from "./types";
@@ -13,7 +13,7 @@ import { BidPicker } from "./BidPicker";
 import { ResultSheet, type Which } from "./Result";
 import { canCountdownAdvance } from "./nextHandCountdown";
 import { Recap, useSeenReporting } from "./Recap";
-import { MeldReview } from "./MeldReview";
+import { MeldReview, itemLabel } from "./MeldReview";
 import { CardOptions } from "@/components/cards/CardOptions";
 import { useCardPrefs } from "@/lib/cardPrefs";
 import { usePushNotifications } from "@/lib/push";
@@ -35,8 +35,10 @@ function countersIn(trick: NonNullable<PlayerView["currentTrick"]>, rules: Playe
   }, 0);
 }
 
-export function Game({ code, me, snap, rev, onTableChange, connection = "ok", local = false }: {
+export function Game({ code, me, snap, rev, onTableChange, connection = "ok", local = false, suggested }: {
   code: string; me: Profile; snap: Snapshot; rev: number; onTableChange: () => void; connection?: "ok" | "reconnecting"; local?: boolean;
+  /** cards a coach suggests, outlined in the hand (practice) */
+  suggested?: CardId[];
 }) {
   const [view, setView] = useState<PlayerView | null>(null);
   const push = usePushNotifications();
@@ -348,6 +350,14 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- act is recreated each render; the revision key runs each step once
   }, [view, busy, error, snap.paused, cardPrefs.autoMeld]);
+  // Everyone's meld opens by itself when trick play starts and stays up through the first trick,
+  // unless dismissed; after that "Review meld" brings it back.
+  const [meldHidden, setMeldHidden] = useState<number | null>(null);
+  const [meldAsked, setMeldAsked] = useState<number | null>(null);
+  // A choice made in one phase never carries into the next (an outside move, such as the practice coach, can change it).
+  const phaseKey = view ? `${view.handNumber}:${view.phase}` : "";
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- drops a stale choice when the phase moves on
+  useEffect(() => { setSelected([]); }, [phaseKey]);
   const handRef = useRef<HTMLDivElement>(null);
   /** Keyboard users in the hand or action bar stay there: a played card's button, or the remounted action bar, would drop focus to the page. */
   const handFocused = useRef(false);
@@ -474,9 +484,17 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
         <div ref={actionRef} {...keepFocus} className="board-action mt-2 min-h-[64px] sm:mt-4 sm:min-h-[88px]">
           <ActionBar key={view.rev} view={view} isMyTurn={isMyTurn} selected={selected} busy={busy} act={act} nameOf={nameOf} autoMeld={cardPrefs.autoMeld} />
           {view.phase === "playing" && (
-            <div className="flex justify-center">
-              <MeldReview key={view.handNumber} melds={view.melds} seat={view.seat} handNumber={view.handNumber} nameOf={nameOf} />
-            </div>
+            (view.playedCards.length < 4 && meldHidden !== view.handNumber) || meldAsked === view.handNumber ? (
+              <div className="mt-1">
+                <MeldReview key={view.handNumber} melds={view.melds} seat={view.seat} nameOf={nameOf} compact={short}
+                  onHide={() => { setMeldHidden(view.handNumber); setMeldAsked(null); }} />
+              </div>
+            ) : (
+              <div className="flex justify-center">
+                <button type="button" className="tap-link text-xs text-chalk-faint underline underline-offset-4 hover:text-chalk"
+                  onClick={() => setMeldAsked(view.handNumber)}>Review meld</button>
+              </div>
+            )
           )}
           {(view.phase === "bidding" || (view.phase === "melding" && view.trump)) && (
             <MeldLine key={view.phase} rules={view.rules} hand={view.hand} trump={view.phase === "melding" ? view.trump : null} lit={lit} setLit={setLit} />
@@ -510,6 +528,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
                   <button onClick={() => toggle(c)} disabled={busy || !playable} aria-pressed={sel}
                     className="group relative block rounded-[10px] focus-visible:z-20 disabled:pointer-events-none"
                     style={{ transform: sel || lit?.includes(c) ? "translateY(-14px)" : undefined, transition: "transform .14s ease" }}>
+                    {suggested?.includes(c) && <SuggestedMark />}
                     <PlayingCard card={c} width={cardW} prefs={cardPrefs} selected={sel || (lit?.includes(c) ?? false)} dimmed={(view.phase === "playing" && isMyTurn && !playable) || (lit !== null && !lit.includes(c))}
                       {...(meldable.has(c) && !sel ? { style: { boxShadow: "0 0 0 2px var(--brass), var(--shadow-card)" }, title: `${cardName(c)}, scores in your meld` } : {})} />
                   </button>
@@ -558,6 +577,22 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
       <Announcer view={view} nameOf={nameOf} />
       <Scorepad view={view} myTeam={myTeam} nameOf={nameOf} />
     </div>
+  );
+}
+
+/**
+ * A coach suggestion on a card in your hand: a chalk-dashed outline, plus a chalk dot above the
+ * corner index that stays visible where the next card overlaps. Selection (lifted, brass ring) and
+ * the pick-your-own meld outline (solid brass) both read differently.
+ */
+function SuggestedMark() {
+  return (
+    <>
+      <span aria-hidden className="pointer-events-none absolute -inset-1 z-[1] rounded-[13px] border-2 border-dashed border-chalk">
+        <span className="absolute -top-[11px] left-[8px] size-1.5 rounded-full bg-chalk" />
+      </span>
+      <span className="sr-only">Suggested: </span>
+    </>
   );
 }
 
@@ -691,16 +726,6 @@ function SmallFan({ cards, perRow, label }: { cards: CardId[]; perRow: number; l
       {cards.map((c) => <PlayingCard key={c} card={c} width={w} style={{ marginLeft: peekX - w, marginTop: peekY - MELD_H, flexShrink: 0 }} />)}
     </div>
   );
-}
-
-const KIND_LABEL: Record<string, string> = {
-  run: "Run", double_run: "Double run", royal_marriage: "Royal marriage", marriage: "Marriage",
-  pinochle: "Pinochle", double_pinochle: "Double pinochle", dix: "Dix",
-};
-function itemLabel(it: MeldItem): string {
-  const base = KIND_LABEL[it.kind] ?? (it.kind.charAt(0).toUpperCase() + it.kind.slice(1).replaceAll("_", " "));
-  const suited = ["run", "double_run", "royal_marriage", "marriage"].includes(it.kind);
-  return suited ? `${base} in ${SUIT_GLYPH[splitCard(it.cards[0]).suit]}` : base;
 }
 
 /** Meld by suit while bidding, or the trump suit's items once trump is named. Tapping lights the cards in your hand. */
