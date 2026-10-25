@@ -53,6 +53,9 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
     return Number.isInteger(m) && m > 0 ? moveAtFrame(moves, m) : 0;
   });
   const [bottom, setBottom] = useState<SeatIndex>(payload.viewerSeat ?? 0);
+  // Cards travel only when the reader steps forward one move; jumps and steps back land at once.
+  const [stepped, setStepped] = useState({ cursor, forward: false });
+  if (stepped.cursor !== cursor) setStepped({ cursor, forward: cursor === stepped.cursor + 1 });
   const [copied, setCopied] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -142,7 +145,7 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
         </div>
 
         <div className="mt-2">
-          <ReplayBoard frame={frame} move={move} bottom={bottom} seats={seats} viewerSeat={payload.viewerSeat} onSit={setBottom} />
+          <ReplayBoard frame={frame} move={move} bottom={bottom} seats={seats} viewerSeat={payload.viewerSeat} onSit={setBottom} animate={stepped.forward && stepped.cursor === cursor} />
         </div>
 
         <p role="status" aria-live="polite" className="display mt-3 min-h-[2.6em] text-center" style={{ fontSize: "clamp(18px, 3.4vw, 24px)", lineHeight: 1.3 }}>
