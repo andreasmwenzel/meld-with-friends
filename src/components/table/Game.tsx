@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { api, ApiError, isTransientError, type Profile } from "@/lib/api";
 import { useTableChannel, useDisconnectedPolling } from "@/lib/realtime/useTableChannel";
 import type { Action, CardId, PlayerView, SeatIndex, Suit, Team } from "@/engine/types";
@@ -455,6 +456,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   const isReady = (seat: SeatIndex) => readySeats.includes(seat) || snap.seats.find((x) => x.seat === seat)?.user_id === snap.table.host;
   const readyNames = humanSeats.filter(isReady).map(nameOf);
   const waitingNames = humanSeats.filter((s) => !isReady(s)).map(nameOf);
+  const replayHref = snap.table.current_game_id && (view.history.length > 0 || view.phase === "game_over") ? `/replay/${snap.table.current_game_id}` : null;
   const readyInfo = view.phase === "hand_over" && snap.seats.filter((x) => x.user_id).length > 1
     ? { me: isReady(view.seat), all: waitingNames.length === 0, readyNames, waitingNames, post: postReady } : null;
   // On phones, tighten the fan until it fits the row; scroll only once cards would get too thin to tap.
@@ -555,7 +557,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
             busy={busy} onNext={() => act({ type: "next_hand" })} onRematch={rematch} readyInfo={readyInfo}
             countdown={{ handKey: `${snap.table.id}-${code}-${key}`, blocked: !!paused || !!error || reconnecting || snap.table.status !== "playing",
               onNext: countdownNext }}
-            which={which} setWhich={setWhich} peek={peekKey === key} setPeek={(p) => setPeekKey(p ? key : null)} />;
+            which={which} setWhich={setWhich} peek={peekKey === key} setPeek={(p) => setPeekKey(p ? key : null)} replayHref={replayHref} />;
         })()}
         {recapOpen && <div className="board-recap"><Recap view={view} nameOf={nameOf} lastSeenRev={lastSeenRev} onClose={() => setRecapOpen(false)} /></div>}
         {/* Two deliberate rows on phones, so a wrap never strands a separator: who you are and your settings, then table actions. */}
@@ -575,6 +577,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
               </button>
             ),
             <button key="hand" type="button" onClick={() => setRecapOpen((o) => !o)} aria-expanded={recapOpen} className="tap-link underline hover:text-chalk">This hand</button>,
+            replayHref && <Link key="replay" href={replayHref} className="tap-link underline hover:text-chalk">Review the game</Link>,
             view.phase !== "game_over" && snap.mySeat !== null && !paused && <button key="pause" type="button" onClick={pauseTable} className="tap-link underline hover:text-chalk">Pause the table</button>,
             view.phase === "playing" && snap.mySeat !== null && <button key="leave" type="button" onClick={leave} className="tap-link underline hover:text-chalk">Leave the game</button>,
           ]} />

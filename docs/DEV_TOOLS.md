@@ -65,6 +65,12 @@ dealer's left), `bidder`/`bid`/`shoot`, `trump`, `passToBidder`/`passBack`, `mel
 When you add a preset, `src/engine/__tests__/scenario.test.ts` builds it and checks that it reaches
 its target with no broken invariants. Forced-play and outcome presets also have assertions there.
 
+## Replay viewer: `/dev/replay`
+
+The game replay page on a game the bots play when you open it, with no database. `?seed=` picks the
+deals, `?hands=N` stops after N finished hands so the viewer shows an unfinished game, `?seat=`
+marks the reader's seat, `?target=` shortens the game, and `?m=<frame>` opens at a move.
+
 ## Screenshots: `scripts/shots.mjs`
 
 ```
