@@ -27,7 +27,7 @@ export function coachLines(view: PlayerView, autoMeld = true): string[] {
       if (L.canBid || L.canPassBid) {
         return [
           `A bid is a promise that your side, you and Walt, will score at least that many points this hand. ${standing} The lowest you can say is ${L.minBid ?? "a pass"}.`,
-          "The “Your meld” line under your cards shows what this hand is worth on its own. If you are not sure, pass; nobody at the table will think less of you.",
+          "The “Your meld” line under your cards shows what this hand is worth on its own. Tricks and your partner add the rest.",
         ];
       }
       return [`The bidding is going around the table. ${standing}`, "A bid is a promise to score that many points, meld and tricks together. Watch how high the others go."];
@@ -68,12 +68,12 @@ export function coachLines(view: PlayerView, autoMeld = true): string[] {
 
     case "melding": {
       const total = view.trump ? computeMeld(view.hand, view.trump, view.rules).total : 0;
-      if (view.meldConfirmed[0]) return ["You are laid down. The others are doing the same, then the play begins."];
+      if (view.meldConfirmed[0]) return ["Your meld is down. Once everyone has melded, the table shows each player’s meld before the first lead."];
       return [
         `Meld is a set of card combinations that count points before a single trick is played. Lay everything down and the table counts it for you. This hand is worth ${total} with ${trump} as trump.`,
         autoMeld
           ? "Declaring all of it is always right, so the table lays it down for you. To pick cards yourself, switch Meld to Pick my own under Cards."
-          : "Declaring all of it is always right. The outlined cards are the ones that score; the button below lays them all down and confirms.",
+          : "Declaring all of it is always right. The brass-outlined cards are the ones that score; Do this lays them all down and confirms.",
       ];
     }
 

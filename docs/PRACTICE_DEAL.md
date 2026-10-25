@@ -45,6 +45,17 @@ opening hand still needs help from the partner and points from trick play.
   partner's contribution still matter. Observe follow-suit, heading and trumping
   obligations. A side must take a trick to save its meld.
 
+## Coach suggestions
+
+The coach (`src/engine/coach/advice.ts`, tests in `src/engine/__tests__/advice.test.ts`) follows
+the same teaching path. Its bid limit for South is 31: 11 heart meld, about 15 in tricks, about 2
+from a partner who passed, and the chance that North holds the J♥ for the run, less a small
+margin. It suggests the minimum each turn (27, 29, then 31), which wins the auction at 31.
+It names hearts. On the pass back it suggests 9♣, K♣, 10♣ and A♦ instead of the bot's K♠:
+that keeps the spade marriage for 22 meld, leaves South void in clubs, and the A♦ still wins
+for North. The bot's choice stays as it is, so the two can be compared. Once everyone has
+melded, practice waits for "Start play" before a computer leads, so the meld can be read first.
+
 Card IDs use rank, suit and copy number, with `T` for ten. Tests verify the actual
 bot auction and pass choices, complete all twelve tricks with legal plays, and
 check both original and post-pass reveal snapshots. They also verify an all-pass
