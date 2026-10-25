@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Trigger a production deploy of main on Vercel via the API (GitHub auto-builds are blocked for
-# commits whose author email is not on the Vercel account). Needs VERCEL_TOKEN in ~/.config/meld/env.
+# Trigger a production deploy of main on Vercel by hand, via the API. Merges to main normally deploy
+# through the Git integration; use this if one is missed. Needs VERCEL_TOKEN in ~/.config/meld/env.
 set -euo pipefail
 set -a; . ~/.config/meld/env; set +a
 python3 -I - "$VERCEL_TOKEN" <<'EOF'
