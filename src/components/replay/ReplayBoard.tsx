@@ -6,24 +6,40 @@ import { PlayingCard, SUIT_GLYPH } from "@/components/cards/PlayingCard";
 import { Avatar } from "@/components/site/Avatar";
 import { useCardPrefs } from "@/lib/cardPrefs";
 import { teamOf } from "@/components/table/types";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { useTableTurn } from "@/components/table/turn";
+import { flyFrom, motionTimings } from "@/components/table/motion";
 import type { Move } from "./model";
 
 interface SeatInfo { name: string; bot: boolean }
+type Rel = 0 | 1 | 2 | 3;
+/** Each seat's hand, as an offset (px) from the middle of the table, by position round the viewer. */
+const SEAT_AT: Record<"phone" | "desktop", Record<Rel, [number, number]>> = {
+  phone: { 0: [0, 240], 1: [-165, 0], 2: [0, -210], 3: [165, 0] },
+  desktop: { 0: [0, 300], 1: [-300, 0], 2: [0, -260], 3: [300, 0] },
+};
+/** A flight that lands in a hand: starts `from` (an offset from the table's middle) and ends where the card sits. */
+function flight(from: [number, number], to: [number, number], delayMs = 0, durationMs?: number): CSSProperties {
+  return {
+    "--fx": `${from[0] - to[0]}px`, "--fy": `${from[1] - to[1]}px`, "--fr": "0deg", "--fs": 0.9,
+    animationDelay: delayMs ? `${delayMs}ms` : undefined, animationDuration: durationMs ? `${durationMs}ms` : undefined,
+  } as CSSProperties;
+}
 
 /**
  * The table with every hand face up, as it stood after one move. The reader's seat sits at the
  * bottom; the seat that moved wears the turn ring, and the cards the move touched are lifted.
  */
-export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit }: {
+export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit, animate = false }: {
   frame: GameState; move: Move; bottom: SeatIndex; seats: Record<SeatIndex, SeatInfo>;
   /** the reader's own seat in this game, if they played */
   viewerSeat: SeatIndex | null;
   /** tap a player to bring their chair to the bottom */
   onSit: (seat: SeatIndex) => void;
+  /** the reader stepped forward one move, so the cards it moved travel */
+  animate?: boolean;
 }) {
-  const { prefs, phone } = useCardPrefs();
+  const { prefs, phone, reducedMotion } = useCardPrefs();
   const turn = useTableTurn(bottom);
   // The chips change places when the table turns; keyboard focus follows the chair the reader chose.
   const root = useRef<HTMLDivElement>(null);
@@ -31,6 +47,8 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit }: {
     if (!root.current?.contains(document.activeElement) || !document.activeElement?.closest("[data-chip]")) return;
     root.current.querySelector<HTMLElement>('[data-chip][aria-pressed="true"]')?.focus();
   }, [bottom]);
+  const motion = reducedMotion ? "off" : prefs.motion;
+  const { slideMs } = motionTimings(motion);
   const seatAt = (r: number): SeatIndex => (((bottom + r) % 4) as SeatIndex);
   const rel = (seat: SeatIndex): 0 | 1 | 2 | 3 => (((seat - bottom + 4) % 4) as 0 | 1 | 2 | 3);
   const lit = new Set(move.cards);
@@ -43,6 +61,19 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit }: {
     return cards;
   };
   const trick: Trick | null = frame.currentTrick?.plays.length ? frame.currentTrick : move.trick;
+  const at = SEAT_AT[phone ? "phone" : "desktop"];
+  // Cards in flight this move: a pass travels from the passer's hand, a deal fans out from the middle.
+  const flights = new Map<CardId, CSSProperties>();
+  if (animate && move.kind === "pass" && move.actor !== null) {
+    for (const seat of [0, 1, 2, 3] as SeatIndex[]) for (const c of frame.players[seat].hand) if (lit.has(c)) flights.set(c, flight(at[rel(move.actor)], at[rel(seat)]));
+  }
+  if (animate && move.kind === "deal") {
+    for (const seat of [0, 1, 2, 3] as SeatIndex[]) {
+      const order = (seat - frame.dealer + 3) % 4;
+      hand(seat).forEach((c, i) => flights.set(c, flight([0, 0], at[rel(seat)], (i * 4 + order) * 28, 360)));
+    }
+  }
+  const flying: CardId | null = animate && move.kind === "play" ? move.cards[0] ?? null : null;
   const status = (seat: SeatIndex): string | null => {
     const bid = frame.bids.filter(b => b.seat === seat).at(-1);
     const parts: string[] = [];
@@ -56,13 +87,14 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit }: {
   // A bidder holds 16 cards after the pass; fans tighten to stay inside the row.
   const sizes = phone ? { south: 44, north: 34, side: 30, budget: 340 } : { south: 60, north: 44, side: 38, budget: 680 };
 
-  const chair = (seat: SeatIndex) => ({ seat, info: seats[seat], status: status(seat), active: move.actor === seat, cards: hand(seat), raised: raised(seat), prefs, atBottom: seat === bottom, onSit });
+  const chair = (seat: SeatIndex) => ({ seat, info: seats[seat], status: status(seat), active: move.actor === seat, cards: hand(seat), raised: raised(seat), prefs, atBottom: seat === bottom, onSit, flights });
   return (
-    <div ref={root} className={`mx-auto w-full max-w-[760px] ${turn.className}`} style={turn.style}>
+    <div ref={root} className={`mx-auto w-full max-w-[760px] ${turn.className}`} data-motion={motion}
+      style={{ ...turn.style, "--pm": `${slideMs}ms` } as CSSProperties}>
       <SeatRow {...chair(seatAt(2))} width={sizes.north} budget={sizes.budget * 0.8} align="center" />
       <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
         <SeatRow {...chair(seatAt(1))} width={sizes.side} align="left" />
-        <Centre frame={frame} trick={trick} rel={rel} nameOf={s => seats[s].name} compact={phone} />
+        <Centre frame={frame} trick={trick} rel={rel} nameOf={s => seats[s].name} compact={phone} flying={flying} />
         <SeatRow {...chair(seatAt(3))} width={sizes.side} align="right" />
       </div>
       <SeatRow {...chair(seatAt(0))} width={sizes.south} budget={sizes.budget} align="center" big />
@@ -70,10 +102,10 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit }: {
   );
 }
 
-function SeatRow({ seat, info, status, active, cards, raised, prefs, width, align, big = false, budget = Infinity, atBottom, onSit }: {
+function SeatRow({ seat, info, status, active, cards, raised, prefs, width, align, big = false, budget = Infinity, atBottom, onSit, flights }: {
   seat: SeatIndex; info: SeatInfo; status: string | null; active: boolean; cards: CardId[]; raised: Set<CardId>;
   prefs: ReturnType<typeof useCardPrefs>["prefs"]; width: number; align: "left" | "center" | "right"; big?: boolean;
-  atBottom: boolean; onSit: (seat: SeatIndex) => void;
+  atBottom: boolean; onSit: (seat: SeatIndex) => void; flights: Map<CardId, CSSProperties>;
   /** widest a horizontal fan may grow, in px */
   budget?: number;
 }) {
@@ -100,10 +132,13 @@ function SeatRow({ seat, info, status, active, cards, raised, prefs, width, alig
         <div className="flex flex-col" style={{ padding: "0 6px" }} aria-label={`${info.name}: ${cards.length} cards`}>
           {cards.map((c, i) => {
             const up = raised.has(c);
+            const fly = flights.get(c);
             return (
               <div key={c} className="relative shrink-0" style={{ width: h, height: i === cards.length - 1 ? width : step, zIndex: align === "right" ? cards.length - i : i }}>
-                <PlayingCard card={c} width={width} prefs={prefs} selected={up}
-                  style={{ position: "absolute", left: "50%", top: width / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg) ${up ? `translateY(${align === "left" ? "-8px" : "8px"})` : ""}` }} />
+                <div className={fly ? "trick-card absolute inset-0" : "absolute inset-0"} style={fly}>
+                  <PlayingCard card={c} width={width} prefs={prefs} selected={up}
+                    style={{ position: "absolute", left: "50%", top: width / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg) ${up ? `translateY(${align === "left" ? "-8px" : "8px"})` : ""}` }} />
+                </div>
               </div>
             );
           })}
@@ -112,9 +147,12 @@ function SeatRow({ seat, info, status, active, cards, raised, prefs, width, alig
         <div className="flex items-end" style={{ paddingTop: 10, paddingLeft: width - step }} aria-label={`${info.name}: ${cards.length} cards`}>
           {cards.map((c) => {
             const up = raised.has(c);
+            const fly = flights.get(c);
             return (
-              <span key={c} className="shrink-0" style={{ marginLeft: step - width, transform: up ? "translateY(-10px)" : undefined, transition: "transform .14s ease" }}>
-                <PlayingCard card={c} width={width} prefs={prefs} selected={up} />
+              <span key={c} className={`shrink-0 ${fly ? "trick-card" : ""}`} style={{ marginLeft: step - width, ...fly }}>
+                <span className="block" style={{ transform: up ? "translateY(-10px)" : undefined, transition: "transform .14s ease" }}>
+                  <PlayingCard card={c} width={width} prefs={prefs} selected={up} />
+                </span>
               </span>
             );
           })}
@@ -124,8 +162,10 @@ function SeatRow({ seat, info, status, active, cards, raised, prefs, width, alig
   );
 }
 
-function Centre({ frame, trick, rel, nameOf, compact }: {
+function Centre({ frame, trick, rel, nameOf, compact, flying }: {
   frame: GameState; trick: Trick | null; rel: (s: SeatIndex) => 0 | 1 | 2 | 3; nameOf: (s: SeatIndex) => string; compact: boolean;
+  /** the card played this move, which slides in from its seat */
+  flying: CardId | null;
 }) {
   const w = compact ? 46 : 60;
   const spots: Record<0 | 1 | 2 | 3, string> = {
@@ -151,7 +191,9 @@ function Centre({ frame, trick, rel, nameOf, compact }: {
         )}
         {trick?.plays.map((p) => (
           <div key={p.card} className={`absolute ${spots[rel(p.seat)]}`}>
-            <PlayingCard card={p.card} width={w} selected={done && trick.winner === p.seat} />
+            <div className={p.card === flying ? "trick-card" : undefined} style={p.card === flying ? flyFrom(rel(p.seat), p.card) as CSSProperties : undefined}>
+              <PlayingCard card={p.card} width={w} selected={done && trick.winner === p.seat} />
+            </div>
           </div>
         ))}
         {!trick?.plays.length && frame.phase !== "bidding" && frame.phase !== "declaring_trump" && (
