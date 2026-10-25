@@ -142,29 +142,19 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
         </div>
 
         <div className="mt-2">
-          <ReplayBoard frame={frame} move={move} bottom={bottom} seats={seats} />
+          <ReplayBoard frame={frame} move={move} bottom={bottom} seats={seats} viewerSeat={payload.viewerSeat} onSit={setBottom} />
         </div>
 
         <p role="status" aria-live="polite" className="display mt-3 min-h-[2.6em] text-center" style={{ fontSize: "clamp(18px, 3.4vw, 24px)", lineHeight: 1.3 }}>
           {move.label}.
         </p>
 
-        <div className="mt-2 flex flex-wrap items-center justify-center gap-x-1 gap-y-1 text-xs text-chalk-faint" role="group" aria-label="Which seat sits at the bottom">
-          <span className="mr-1">See it from</span>
-          {([0, 1, 2, 3] as SeatIndex[]).map(seat => (
-            <button key={seat} type="button" aria-pressed={bottom === seat} onClick={() => setBottom(seat)}
-              className={`tap-link rounded-full px-2.5 underline-offset-4 ${bottom === seat ? "text-chalk underline" : "hover:text-chalk"}`}>
-              {seats[seat].name}{payload.viewerSeat === seat ? " (you)" : ""}
-            </button>
-          ))}
-        </div>
-
         <Controls cursor={cursor} count={moves.length} chapterHand={chapter.hand} go={go} prevHand={prevHand} nextHand={nextHand} />
       </section>
 
       <aside aria-label="Moves" className="min-w-0 lg:sticky lg:top-4 lg:self-start">
         <h2 className="display" style={{ fontSize: 26 }}>Every move</h2>
-        <p className="mt-1 text-xs text-chalk-faint">Arrow keys step. Shift and an arrow jumps a hand.</p>
+        <p className="mt-1 text-xs text-chalk-faint">Arrow keys step, Shift and an arrow jumps a hand. Tap a player to see the table from their seat.</p>
         <div ref={listRef} className="mt-3 max-h-[60vh] overflow-y-auto pr-1 lg:max-h-[calc(100vh-9rem)]">
           {chapters.map((c) => (
             <section key={c.hand} className="mb-4">
