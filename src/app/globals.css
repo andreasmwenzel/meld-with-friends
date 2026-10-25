@@ -147,23 +147,19 @@ body {
 .trick-card[data-sweep] {
   animation: card-play var(--pm, 280ms) cubic-bezier(.2,.8,.25,1) both, card-sweep var(--sm) cubic-bezier(.5,0,.8,.4) var(--sd) forwards;
 }
-/* Turning the table: the new seating starts where the old one stood and settles into place. */
-@keyframes table-turn {
-  from { transform: rotate(var(--turn-from, 0deg)) scale(.94); }
-  to { transform: none; }
-}
-.table-turn { animation: table-turn 560ms cubic-bezier(.3,.7,.2,1) both; transform-origin: 50% 50%; will-change: transform; }
+/* Turning the table: the new seating starts where the old one stood and settles into place.
+   Each keyframe set exists twice; switching between the two names restarts the turn without a remount. */
+@keyframes table-turn { from { transform: rotate(var(--turn-from, 0deg)) scale(.94); } to { transform: none; } }
+@keyframes table-turn-b { from { transform: rotate(var(--turn-from, 0deg)) scale(.94); } to { transform: none; } }
+.table-turn { animation: table-turn 560ms cubic-bezier(.3,.7,.2,1) both; transform-origin: 50% 50%; }
 /* Whatever must stay readable through the turn counter-rotates with it. */
-@keyframes table-turn-counter {
-  from { transform: rotate(calc(-1 * var(--turn-from, 0deg))); }
-  to { transform: none; }
-}
-.table-turn .table-turn-still { animation: table-turn-counter 560ms cubic-bezier(.3,.7,.2,1) both; }
-@media (prefers-reduced-motion: reduce) {
-  .table-turn, .table-turn .table-turn-still { animation: card-fade 200ms linear both; }
-}
+@keyframes table-turn-counter { from { transform: rotate(calc(-1 * var(--turn-from, 0deg))); } to { transform: none; } }
+@keyframes table-turn-counter-b { from { transform: rotate(calc(-1 * var(--turn-from, 0deg))); } to { transform: none; } }
+.table-turn-still { animation: table-turn-counter 560ms cubic-bezier(.3,.7,.2,1) both; }
+.table-turn-fade { animation: card-fade 200ms linear both; }
 
 @keyframes card-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes card-fade-b { from { opacity: 0; } to { opacity: 1; } }
 @keyframes card-fade-out { to { opacity: 0; } }
 [data-motion="off"] .trick-card { animation: card-fade var(--pm) linear both; }
 [data-motion="off"] .trick-card[data-sweep] { animation: card-fade var(--pm) linear both, card-fade-out var(--pm) linear var(--pm) forwards; }

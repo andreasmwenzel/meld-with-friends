@@ -2,6 +2,7 @@
 
 import { useState, type CSSProperties } from "react";
 import type { SeatIndex } from "@/engine/types";
+import { useCardPrefs } from "@/lib/cardPrefs";
 
 /**
  * Degrees the table was turned through when the chair at `next` replaces the chair at `prev` at the
@@ -14,11 +15,21 @@ export function turnFrom(prev: SeatIndex, next: SeatIndex): number {
   return rel === 1 ? 90 : rel === 3 ? -90 : rel === 2 ? 180 : 0;
 }
 
+export interface TableTurn {
+  /** for the element that holds the chairs */
+  className: string; style: CSSProperties;
+  /** for anything inside it that must stay upright, such as the table code */
+  still: { className: string; style: CSSProperties };
+}
+
 /**
- * Turns the table when the seat at the bottom changes. Spread the result onto the element that
- * holds the chairs: a new key restarts the animation, the style tells it where to start from.
+ * Turns the table when the seat at the bottom changes. Nothing remounts, so focus and scroll stay
+ * put: each turn switches between two identical animations, which is what restarts one. With the
+ * card motion setting off, or reduced motion, the new seating fades in instead. Pass `enabled`
+ * false where the layout is not a round table (the seating grid on phones) to land at once.
  */
-export function useTableTurn(bottom: SeatIndex): { key: number; className: string; style: CSSProperties } {
+export function useTableTurn(bottom: SeatIndex, enabled = true): TableTurn {
+  const { prefs, reducedMotion } = useCardPrefs();
   const [seen, setSeen] = useState(bottom);
   const [turn, setTurn] = useState({ n: 0, from: 0 });
   if (seen !== bottom) {
@@ -26,5 +37,14 @@ export function useTableTurn(bottom: SeatIndex): { key: number; className: strin
     setSeen(bottom);
     setTurn(t => ({ n: t.n + 1, from: turnFrom(seen, bottom) }));
   }
-  return { key: turn.n, className: turn.n > 0 ? "table-turn" : "", style: { "--turn-from": `${turn.from}deg` } as CSSProperties };
+  const none = { className: "", style: {}, still: { className: "", style: {} } };
+  if (turn.n === 0 || !enabled) return none;
+  const alt = turn.n % 2 ? "" : "-b";
+  if (reducedMotion || prefs.motion === "off") {
+    return { className: "table-turn-fade", style: { animationName: `card-fade${alt}` }, still: { className: "", style: {} } };
+  }
+  return {
+    className: "table-turn", style: { "--turn-from": `${turn.from}deg`, animationName: `table-turn${alt}` } as CSSProperties,
+    still: { className: "table-turn-still", style: { animationName: `table-turn-counter${alt}` } },
+  };
 }
