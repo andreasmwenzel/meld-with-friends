@@ -69,9 +69,11 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit, ani
     for (const seat of [0, 1, 2, 3] as SeatIndex[]) for (const c of frame.players[seat].hand) if (lit.has(c)) flights.set(c, flight(at[rel(move.actor)], at[rel(seat)]));
   }
   if (animate && move.kind === "deal") {
+    // In deal order: one card at a time round the table from the dealer's left, as the engine deals.
+    const stagger = motion === "off" ? 0 : 28;
     for (const seat of [0, 1, 2, 3] as SeatIndex[]) {
       const order = (seat - frame.dealer + 3) % 4;
-      hand(seat).forEach((c, i) => flights.set(c, flight([0, 0], at[rel(seat)], (i * 4 + order) * 28, 360)));
+      frame.players[seat].hand.forEach((c, i) => flights.set(c, flight([0, 0], at[rel(seat)], (i * 4 + order) * stagger, 360)));
     }
   }
   if (animate && move.kind === "meld") {
@@ -149,7 +151,7 @@ function SeatRow({ seat, info, status, active, cards, meld, lit, raised, prefs, 
     </div>
   );
   return (
-    <div className={`flex min-w-0 flex-col ${items} gap-1 ${big ? "mt-3" : "py-1"}`}>
+    <div className={`relative z-[1] flex min-w-0 flex-col ${items} gap-1 ${big ? "mt-3" : "py-1"}`}>
       {big && laid}
       <button type="button" data-chip="" onClick={() => { if (!atBottom) onSit(seat); }} aria-pressed={atBottom}
         aria-label={atBottom ? `${info.name}, at the bottom of the table` : `See the table from ${info.name}'s seat`}
