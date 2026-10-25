@@ -2,6 +2,8 @@
 
 # Meld
 
+Play it at **[meld.insulatorgap.com](https://meld.insulatorgap.com)**.
+
 Pinochle with your friends, in the browser, in real time. Type a name, deal a table, hand out a
 six-letter code, pick your seats (or offer to swap), and play four-hand partnership pinochle to 150.
 No account needed; guests can add an email later to keep history and friends. Short a player? The host
