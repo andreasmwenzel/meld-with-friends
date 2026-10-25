@@ -479,7 +479,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
             </div>
           )}
           {(view.phase === "bidding" || (view.phase === "melding" && view.trump)) && (
-            <MeldLine key={view.phase} hand={view.hand} trump={view.phase === "melding" ? view.trump : null} lit={lit} setLit={setLit} />
+            <MeldLine key={view.phase} rules={view.rules} hand={view.hand} trump={view.phase === "melding" ? view.trump : null} lit={lit} setLit={setLit} />
           )}
           {/* In the flow, not over the hand, so it never lands on the meld chips. */}
           {view.melds[view.seat]?.length > 0 && view.phase === "melding" && (
@@ -704,9 +704,9 @@ function itemLabel(it: MeldItem): string {
 }
 
 /** Meld by suit while bidding, or the trump suit's items once trump is named. Tapping lights the cards in your hand. */
-function MeldLine({ hand, trump, lit, setLit }: { hand: CardId[]; trump: Suit | null; lit: CardId[] | null; setLit: (c: CardId[] | null) => void }) {
+function MeldLine({ rules, hand, trump, lit, setLit }: { rules: PlayerView["rules"]; hand: CardId[]; trump: Suit | null; lit: CardId[] | null; setLit: (c: CardId[] | null) => void }) {
   const [open, setOpen] = useState<string | null>(null);
-  const all = useMemo(() => meldBySuit(hand), [hand]);
+  const all = useMemo(() => meldBySuit(hand, rules), [hand, rules]);
   const same = (a: CardId[]) => lit !== null && lit.length === a.length && a.every((c) => lit.includes(c));
   const pick = (key: string, cards: CardId[]) => {
     if (open === key) { setOpen(null); setLit(null); } else { setOpen(key); setLit(cards); }

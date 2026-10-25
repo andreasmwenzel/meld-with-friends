@@ -17,13 +17,13 @@ The computer player entry point is `chooseAction(view, options)` in `src/engine/
 
 ## Bidding
 
-For each possible trump, `bid.ts` computes own meld and estimates trick points. In default tens counting, the projection is:
+For each possible trump, `bid.ts` computes own meld and estimates trick points. With tens counting, the projection below is expressed in classic units. Modern games divide all point terms by ten:
 
 `own meld + partner signal + 35 + 12 × trump length + 17 × aces + 8 × tens backed by an ace + 0.15 × own counter points`
 
 The trick-strength part scales with the configured deck counter total. The partner signal is 60 before any partner action, 25 after a partner pass, or 100 after a partner bid. A bid is a rough meld signal. It does not reveal any specific card. The ceiling is the projection minus 35, rounded down to `bidStep`. The bot bids only the legal minimum, and passes when that minimum exceeds the ceiling. A forced dealer contract remains the engine's decision.
 
-For example, `AS0 AH0 AD0 AC0 TS0 KS0 QS0 JS0 9S0 KH0 QH0 JD0` has 320 meld with spades: a run, dix, heart marriage, aces around, and pinochle. Six trump, four aces, one protected ten, and 70 counter points give a 573.5 projection before the partner acts. With a 35 safety margin and a step of 10, the ceiling is 530. A partner pass lowers it to 500; a partner bid raises it to 570. The bot still bids only the next legal increment. Shooting requires permission from the rules plus eight trump, both trump aces, and an ace in every side suit.
+For example, in classic scoring, `AS0 AH0 AD0 AC0 TS0 KS0 QS0 JS0 9S0 KH0 QH0 JD0` has 320 meld with spades: a run, dix, heart marriage, aces around, and pinochle. Six trump, four aces, one protected ten, and 70 counter points give a 573.5 projection before the partner acts. With a 35 safety margin and a step of 10, the ceiling is 530. A partner pass lowers it to 500; a partner bid raises it to 570. The bot still bids only the next legal increment. Shooting requires permission from the rules plus eight trump, both trump aces, and an ace in every side suit.
 
 ## Trump, passing and meld
 
@@ -51,7 +51,7 @@ Each bot action uses `commit_bot_action`. That service-role-only transaction ver
 
 ## Measured results
 
-Measured results are recorded below after running `node scripts/bot-arena.mjs 50 3` and `node scripts/bot-arena.mjs 50 60`. The arena alternates the bot team's seats and uses complete games to the default 1500 target. The random team chooses random legal trump, passes, and plays, declares full meld, and randomly bids one legal increment with 25% probability rather than selecting arbitrary unbounded bid amounts. These results measure performance against that baseline, not against skilled humans.
+Measured results are recorded below after running `node scripts/bot-arena.mjs 50 3` and `node scripts/bot-arena.mjs 50 60`. Those arena runs alternated the bot team's seats and used complete games to the former default 1500 target with classic scoring. The random team chooses random legal trump, passes, and plays, declares full meld, and randomly bids one legal increment with 25% probability rather than selecting arbitrary unbounded bid amounts. These results measure performance against that baseline, not against skilled humans.
 
 The reduced-budget run won 50/50 games, 100%, over 20,715 positions. Its 10,300 bot decisions averaged 0.454 ms. At the default 60 ms effort budget, the bots also won 50/50 games over 20,247 positions. Its 10,055 decisions averaged 8.119 ms. Both measurements include bidding, passing, and melding decisions as well as trick decisions, and exclude database and network time.
 
@@ -74,8 +74,8 @@ The implementation touches `src/engine/game.ts`; the seven modules under `src/en
 The admin saves `bots` in `app_settings.global`. Each bot tick reads settings through a 30-second process cache and passes them to `chooseAction`. Partial configs inherit `DEFAULT_SETTINGS.bots` in `src/lib/settings.ts`.
 
 - `samples`, default 40, caps sampled deals. `budgetMs`, default 40, also caps work at `floor(budgetMs * 2 / 3)` samples. Below 2 ms the heuristic runs alone. Unseeded decisions check elapsed time between complete sample rounds. Seeded server decisions use a fixed work count for replay, so this is a soft compute budget rather than a hard deadline.
-- `bidMargin`, default 20, subtracts points from the projection before rounding down to the bid step. `bidAggression`, default 1, multiplies projected trick points, including the counter-point term, while leaving meld and partner signals unchanged.
-- `partnerBidBonus`, default 20, adds to the existing 100-point partner-bid signal. The signals before a partner acts and after a partner passes remain 60 and 25.
+- `bidMargin`, default 20 in classic units, subtracts points from the projection before rounding down to the bid step. `bidAggression`, default 1, multiplies projected trick points, including the counter-point term, while leaving meld and partner signals unchanged.
+- `partnerBidBonus`, default 20 in classic units, adds to the existing 100-point partner-bid signal. The signals before a partner acts and after a partner passes remain 60 and 25.
 - `shootMinTrump`, default 8, replaces the minimum trump count in the shoot test. Both trump aces and an ace in every side suit are still required.
 - `pullTrumpMin`, default 6, replaces the bidding partnership's trump-length threshold for favoring trump leads. Boss cards still take priority.
 - `smearWillingness`, default 0.7, weights counter points against card strength on a safe partner trick. At zero the policy uses its ordinary cheap-discard logic; at one it puts the most counters on the trick. The same settings govern simulated playouts.
@@ -84,3 +84,7 @@ The admin saves `bots` in `app_settings.global`. Each bot tick reads settings th
 The arena referee now lives in `src/engine/ai/arena.ts`; it uses complete engine state to run games but passes only `PlayerView` into decision code. The admin arena runs 1 to 40 complete games with the saved strategy settings and a 1 ms effort override, selecting heuristic-only play. Its `avgBidMade` counts all completed hands where the bidding side succeeded, including shoot outcomes. The CLI imports this same referee and accepts a separate effort budget. Its legacy metrics remain available alongside the admin response fields.
 
 Guest accounts cannot add or fill bot chairs. Both HTTP handlers and the database management function require a saved account. The smoke test now checks these denials after its four-human hand; full bot games remain covered by engine tests.
+
+New tables use modern scoring. Point-valued bot settings and heuristic constants remain in classic
+units and are scaled by 0.1 for modern games. Meld, counters, bid increments and contract amounts
+use the table's chosen scale.

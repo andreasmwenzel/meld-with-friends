@@ -82,8 +82,8 @@ export default function Landing() {
           <div className="mb-10 flex flex-wrap items-end justify-between gap-4">
             <h2 className="display" style={{ fontSize: 40 }}>What your meld is worth</h2>
             <p className="max-w-sm text-chalk-faint">
-              Four-hand partnership pinochle, 48 cards, first to 1,500. Counters are aces, tens and kings
-              at ten apiece, plus ten for the last trick.
+              Four-hand partnership pinochle, 48 cards, first to 150. Counters are aces, tens and kings
+              at one apiece, plus one for the last trick. Classic ×10 scoring is a table option.
             </p>
           </div>
           <MeldTable />

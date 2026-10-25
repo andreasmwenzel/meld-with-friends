@@ -58,7 +58,7 @@ meld.spec({...})                         // encode a spec for ?spec=
 **replays real engine actions** up to the target. Choices you leave open are made by a fast bot, and
 the same spec always gives the same position. Every position it produces is one the engine can
 actually reach. Card names can be `AS0`, `AS` (first free copy), `10S` or `A♠`. Fields: `seed`,
-`rules`, `dealer`, `handNumber`, `score`, `hands`, `to`, `bids` (`[250, null, "shoot"]` from the
+`rules`, `dealer`, `handNumber`, `score`, `hands`, `to`, `bids` (`[25, null, "shoot"]` from the
 dealer's left), `bidder`/`bid`/`shoot`, `trump`, `passToBidder`/`passBack`, `meld` per seat
 (`"full"`, `"none"`, or cards), `confirmed`, `tricks`, `plays`, `turn`, `play` (scripted cards in order).
 

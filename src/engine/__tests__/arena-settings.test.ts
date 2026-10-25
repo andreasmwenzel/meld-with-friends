@@ -12,7 +12,7 @@ it('returns complete admin arena metrics for full games', () => {
   expect(result.avgBidMade).toBeLessThanOrEqual(1);
 });
 it('maps aggression, partner bonus, and shoot threshold into bidding', () => {
-  const view = viewFor(newGame('config'), 1);
+  const view = viewFor(newGame('config', { scoring: 'classic' }), 1);
   const c = DEFAULT_SETTINGS.bots;
   expect(projectedValue(view, 'S', { ...c, bidAggression: 2 })).toBeGreaterThan(projectedValue(view, 'S', c));
   view.bids = [{ seat: 3, amount: 250 }];

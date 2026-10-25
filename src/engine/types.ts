@@ -21,18 +21,19 @@ export type Phase =
   | "game_over";
 
 export interface RulesConfig {
+  scoring: "modern" | "classic";
   pace: "live" | "leisurely";
-  /** points needed to win (default 1500) */
+  /** points needed to win (default 150) */
   target: number;
-  /** minimum opening bid (default 250) */
+  /** minimum opening bid (default 25) */
   minBid: number;
-  /** bid increment (default 10) */
+  /** bid increment (default 1) */
   bidStep: number;
   /** number of cards partner passes to bidder and bidder passes back (default 4; 0 disables passing) */
   passCount: number;
-  /** points for the last trick (default 10) */
+  /** points for the last trick (default 1) */
   lastTrickBonus: number;
-  /** counters: value of A, T, K per trick taken (default 10 each; 9, Q, J count 0). Used when counting is "tens". */
+  /** counters: value of A, T, K per trick taken (default 1 each; 9, Q, J count 0). Used when counting is "tens". */
   counterValue: number;
   /**
    * How tricks are counted. "tens": A, T, K are worth counterValue each (default).
@@ -57,19 +58,20 @@ export interface RulesConfig {
 }
 
 export const DEFAULT_RULES: RulesConfig = {
+  scoring: "modern",
   pace: "live",
-  target: 1500,
-  minBid: 250,
-  bidStep: 10,
+  target: 150,
+  minBid: 25,
+  bidStep: 1,
   passCount: 4,
-  lastTrickBonus: 10,
-  counterValue: 10,
+  lastTrickBonus: 1,
+  counterValue: 1,
   counting: "tens",
   setPenaltyIsBid: true,
   mustTakeTrickToSaveMeld: true,
   dealerStuck: true,
   shoot: "off",
-  shootPoints: 1500,
+  shootPoints: 150,
   revealHands: true,
 };
 

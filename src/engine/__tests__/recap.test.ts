@@ -52,7 +52,7 @@ it.each([
             const plays = [...previous.currentTrick!.plays, { seat: action.seat, card: action.card }];
             const winner = trickWinner({ leader: previous.currentTrick!.leader, plays, winner: null }, state.trump!);
             expect(state.log).toContain(`${SEAT_NAMES[winner]} takes the trick`);
-            const counters = plays.reduce((n, p) => n + (rules.counting === 'classic' ? classic[p.card[0] as keyof typeof classic] : 'ATK'.includes(p.card[0]) ? 10 : 0), 0);
+            const counters = plays.reduce((n, p) => n + (rules.counting === 'classic' ? classic[p.card[0] as keyof typeof classic] : 'ATK'.includes(p.card[0]) ? state.rules.counterValue : 0), 0);
             expected.push({ index: expected.length + 1, leader: previous.currentTrick!.leader, plays, winner, counters });
           }
         }

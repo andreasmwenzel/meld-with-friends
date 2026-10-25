@@ -1,7 +1,7 @@
 # Curated practice deal
 
 Issue #27 uses `newPracticeGame()` in `src/engine/practice.ts`. It calls the normal
-engine with seed `practice-v1-1784606`, dealer South, default rules and end-of-hand
+engine with seed `practice-v1-1784606`, dealer South, modern scoring and end-of-hand
 reveals enabled. Both mounting practice and Start over call this factory. Each
 call returns fresh state, including the original hands, empty bids, zero scores
 and revision zero. Multiplayer continues to call `newGame` with its own seed.
@@ -24,13 +24,13 @@ and needs only a jack to complete a run. Spades have only three cards, A K Q,
 and need both a ten and a jack. South has two aces and no complete run, so the
 opening hand still needs help from the partner and points from trick play.
 
-- **Bidding.** West bids 250, North passes, and East bids 260 under the existing
-  bot policy. A learner raise to 310 makes West and East pass on their second
+- **Bidding.** West bids 25, North passes, and East bids 26 under the existing
+  bot policy. A learner raise to 31 makes West and East pass on their second
   turns. This is the repeatable teaching path. A smaller raise lets West compete
-  again. The initial 110 heart meld does not cover the contract; account for
-  partner support and counters. If everyone passes instead, South is stuck at 250.
-- **Trump.** Hearts give 110 opening meld: royal marriage 40, spade marriage 20,
-  pinochle 40 and dix 10. Spades give 100, clubs 90 and diamonds 80. Heart length
+  again. The initial 11 heart meld does not cover the contract; account for
+  partner support and counters. If everyone passes instead, South is stuck at 25.
+- **Trump.** Hearts give 11 opening meld: royal marriage 4, spade marriage 2,
+  pinochle 4 and dix 1. Spades give 10, clubs 9 and diamonds 8. Heart length
   and the easier run completion make hearts the clear choice beyond the small
   difference in meld. North's missing jack is hidden until the pass, so it is a
   retrospective teaching point rather than information available during bidding.
@@ -39,9 +39,9 @@ opening hand still needs help from the partner and points from trick play.
   TC1 and KS0 is the existing bot's choice for South. It keeps seven hearts,
   all four aces, and Q spades with J diamonds for the pinochle, while breaking
   the spade marriage. The learner can compare keeping that marriage with keeping
-  the extra ace or trump. The resulting 200 meld is run 150, pinochle 40 and
-  dix 10. The royal marriage is part of the run and does not score separately.
-- **Trick play.** With 200 personal meld against a 310 bid, counters and the
+  the extra ace or trump. The resulting 20 meld is run 15, pinochle 4 and
+  dix 1. The royal marriage is part of the run and does not score separately.
+- **Trick play.** With 20 personal meld against a 31 bid, counters and the
   partner's contribution still matter. Observe follow-suit, heading and trumping
   obligations. A side must take a trick to save its meld.
 

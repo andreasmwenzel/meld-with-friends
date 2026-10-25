@@ -4,6 +4,7 @@
 import { chooseAction } from './ai';
 import { buildDeck, seededShuffle } from './deck';
 import { applyAction, newGame, viewFor } from './game';
+import { DEFAULT_RULES } from './types';
 import type {
   Action, CardId, GameState, HandRecord, Phase, Rank, RulesConfig, SeatIndex, Suit, Team, TrickPlay,
 } from './types';
@@ -101,10 +102,11 @@ export function stackDeal(state: GameState, hands: Partial<Record<SeatIndex, str
 }
 
 /** Plausible earlier hands whose deltas add up to `score`, so totals and the scorepad agree. */
-export function synthHistory(score: Record<Team, number>, hands: number, firstDealer: SeatIndex): HandRecord[] {
+export function synthHistory(score: Record<Team, number>, hands: number, firstDealer: SeatIndex, rules: RulesConfig = DEFAULT_RULES): HandRecord[] {
   const records: HandRecord[] = [];
+  const unit = rules.scoring === 'classic' ? 10 : 1;
   const split = (total: number, i: number) => {
-    const base = Math.trunc(total / hands / 10) * 10;
+    const base = Math.trunc(total / hands / unit) * unit;
     return i === hands - 1 ? total - base * (hands - 1) : base;
   };
   for (let i = 0; i < hands; i++) {
@@ -113,13 +115,13 @@ export function synthHistory(score: Record<Team, number>, hands: number, firstDe
     const delta = { red: split(score.red, i), blue: split(score.blue, i) };
     const breakdown = (team: Team) => {
       const d = delta[team];
-      const meld = d > 0 ? Math.round(d * 0.4 / 10) * 10 : 0;
+      const meld = d > 0 ? Math.round(d * 0.4 / unit) * unit : 0;
       return { meldDeclared: meld, meldSaved: meld, counters: d > 0 ? d - meld : 0, lastTrick: 0, setPenalty: d < 0 ? -d : 0, shoot: 0 };
     };
     const b = { red: breakdown('red'), blue: breakdown('blue') };
     const bidTeam = teamOf(bidder);
     records.push({
-      handNumber: i + 1, dealer, bidder, bid: delta[bidTeam] < 0 ? -delta[bidTeam] : 250, trump: (['S', 'H', 'D', 'C'] as const)[i % 4],
+      handNumber: i + 1, dealer, bidder, bid: delta[bidTeam] < 0 ? -delta[bidTeam] : rules.minBid, trump: (['S', 'H', 'D', 'C'] as const)[i % 4],
       meld: { red: b.red.meldDeclared, blue: b.blue.meldDeclared },
       tricks: { red: b.red.counters, blue: b.blue.counters },
       delta, breakdown: b, wentSet: delta[bidTeam] < 0,
@@ -141,7 +143,7 @@ export function scenarioStart(spec: ScenarioSpec): GameState {
     state = stackDeal(state, {}, `${state.seed}:${handNumber}`);
     state.score = score;
     const earlier = handNumber - 1;
-    state.history = earlier ? synthHistory(score, earlier, ((dealer - earlier % 4 + 4) % 4) as SeatIndex) : [];
+    state.history = earlier ? synthHistory(score, earlier, ((dealer - earlier % 4 + 4) % 4) as SeatIndex, state.rules) : [];
     state.log = [`Hand ${handNumber}: ${['South', 'West', 'North', 'East'][dealer]} deals`];
   }
   return spec.hands ? stackDeal(state, spec.hands, spec.seed ?? 'lab') : state;

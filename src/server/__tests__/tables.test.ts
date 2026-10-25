@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resolveRules } from "@/engine/scoring";
 import { updateTableRules } from "@/server/tables";
 
 const mocks = vi.hoisted(() => ({ from: vi.fn(), broadcast: vi.fn() }));
@@ -28,7 +29,7 @@ describe("updating table rules", () => {
       .mockReturnValueOnce(query({ data: [], error: null }));
 
     const snapshot = await updateTableRules(table.code, { counting: "classic" }, "host");
-    expect(update.update).toHaveBeenCalledWith({ rules: { counting: "classic" } });
+    expect(update.update).toHaveBeenCalledWith({ rules: resolveRules({ counting: "classic" }) });
     expect(update.eq.mock.calls).toEqual([["id", table.id], ["host", "host"], ["status", "open"]]);
     expect(mocks.broadcast).toHaveBeenCalledWith(table.code, { type: "seats" });
     expect(snapshot).toEqual({ table: refreshed, seats: [], offers: [], mySeat: null, ready: [], paused: null, lastSeenRev: null });

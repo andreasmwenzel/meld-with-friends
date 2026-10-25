@@ -2,12 +2,17 @@ import { describe, expect, it } from 'vitest';
 import {
   applyAction, buildDeck, DEFAULT_RULES, normaliseHandRecord, IllegalAction, legalActionsFor, newGame, viewFor,
 } from '../index';
+import { resolveRules } from '../scoring';
 import type { Action, CardId, GameState, HandRecord, RulesConfig, SeatIndex, Team } from '../types';
+
+// These fixtures exercise the pre-existing classic scoring contracts.
+const classicGame = (seed: string, rules: Partial<RulesConfig> = {}, dealer: SeatIndex = 0) =>
+  newGame(seed, { scoring: 'classic', ...rules }, dealer);
 
 const seats: readonly SeatIndex[] = [0, 1, 2, 3];
 const teamOf = (seat: SeatIndex): Team => seat % 2 === 0 ? 'red' : 'blue';
 function auction(rules: Partial<RulesConfig> = {}, bid = 250): GameState {
-  let state = newGame('scripted-hand', rules);
+  let state = classicGame('scripted-hand', rules);
   state = applyAction(state, { type: 'bid', seat: 1, amount: bid });
   for (const seat of [2, 3, 0] as const) state = applyAction(state, { type: 'pass_bid', seat });
   return applyAction(state, { type: 'declare_trump', seat: 1, suit: 'S' });
@@ -51,15 +56,15 @@ function frozen<T>(value: T): T {
 
 describe('game flow', () => {
   it('deals deterministic unique hands, with left of dealer opening', () => {
-    const state = newGame('deal', {}, 2);
-    expect(state).toEqual(newGame('deal', {}, 2));
+    const state = classicGame('deal', {}, 2);
+    expect(state).toEqual(classicGame('deal', {}, 2));
     expect(state.turn).toBe(3);
     expect(state.phase).toBe('bidding');
     expect(state.players.map(p => p.hand.length)).toEqual([12, 12, 12, 12]);
     expect(state.players.flatMap(p => p.hand).sort()).toEqual(buildDeck().sort());
   });
   it('keeps passes final, skips passed seats, and awards the remaining bid', () => {
-    let state = newGame('auction');
+    let state = classicGame('auction');
     state = applyAction(state, { type: 'bid', seat: 1, amount: 250 });
     state = applyAction(state, { type: 'pass_bid', seat: 2 });
     state = applyAction(state, { type: 'bid', seat: 3, amount: 260 });
@@ -72,7 +77,7 @@ describe('game flow', () => {
   });
   it('sticks the dealer when all pass, or redeals if configured', () => {
     for (const stuck of [true, false]) {
-      let state = newGame('passed', { dealerStuck: stuck });
+      let state = classicGame('passed', { dealerStuck: stuck });
       const originalHands = state.players.map(player => player.hand);
       for (const seat of [1, 2, 3, 0] as const) state = applyAction(state, { type: 'pass_bid', seat });
       if (stuck) expect(state).toMatchObject({ phase: 'declaring_trump', bidder: 0, highBid: { amount: 250 } });
@@ -214,7 +219,7 @@ describe('game flow', () => {
     expect(viewFor(state, 0).lastTrick).toEqual(last);
   });
   it('never mutates input state, nested cards, or caller-owned actions', () => {
-    const initial = frozen(newGame('immutable'));
+    const initial = frozen(classicGame('immutable'));
     const snapshot = JSON.stringify(initial);
     const state = applyAction(initial, frozen({ type: 'bid', seat: 1, amount: 250 } as const));
     expect(state.rev).toBe(1);
@@ -233,13 +238,25 @@ describe('game flow', () => {
 describe('validation and visibility', () => {
   it('merges partial rules with defaults and rejects invalid counting modes', () => {
     expect(newGame('defaults').rules).toEqual(DEFAULT_RULES);
-    expect(newGame('classic', { counting: 'classic' }).rules).toEqual({ ...DEFAULT_RULES, counting: 'classic' });
+    expect(newGame('classic', { counting: 'classic' }).rules).toEqual(resolveRules({ scoring: 'classic', counting: 'classic' }));
+    expect(() => newGame('invalid-modern', { scoring: 'modern', counting: 'classic' })).toThrow('Old-style counting requires classic scoring');
     for (const counting of ['invalid', '', true, null, undefined]) {
-      expect(() => newGame('bad', { counting } as unknown as Partial<RulesConfig>)).toThrow(IllegalAction);
+      expect(() => classicGame('bad', { counting } as unknown as Partial<RulesConfig>)).toThrow(IllegalAction);
+    }
+  });
+  it('counts modern aces, tens and kings as one each plus one for the last trick', () => {
+    const modern = playHand(startPlaying({ scoring: 'modern' }, 25));
+    const record = modern.history[0];
+    expect(record.tricks.red + record.tricks.blue).toBe(25);
+    expect(record.breakdown.red.lastTrick + record.breakdown.blue.lastTrick).toBe(1);
+    const lastWinner = viewFor(modern, 0).lastTrick!.winner!;
+    for (const team of ['red', 'blue'] as const) {
+      const raw = modern.tricksTaken[team].flat().filter(card => ['A', 'T', 'K'].includes(card[0])).length;
+      expect(record.tricks[team]).toBe(raw + (teamOf(lastWinner) === team ? 1 : 0));
     }
   });
   it('throws IllegalAction on illegal bids, turns, phases, and malformed card selections', () => {
-    const state = newGame('illegal');
+    const state = classicGame('illegal');
     const bad: Action[] = [
       { type: 'bid', seat: 0, amount: 250 }, { type: 'bid', seat: 1, amount: 240 },
       { type: 'bid', seat: 1, amount: 255 }, { type: 'bid', seat: 1, amount: NaN },
@@ -254,7 +271,7 @@ describe('validation and visibility', () => {
     expect(() => applyAction(passing, { type: 'pass_cards', seat: 3, cards: passing.players[0].hand.slice(0, 4) })).toThrow('in your hand');
     const playing = startPlaying();
     expect(() => applyAction(playing, { type: 'play_card', seat: 1, card: playing.players[0].hand[0] })).toThrow(IllegalAction);
-    expect(() => newGame('bad', { passCount: 13 })).toThrow(IllegalAction);
+    expect(() => classicGame('bad', { passCount: 13 })).toThrow(IllegalAction);
   });
   it('rejects a card that fails the obligation to follow or head the trick', () => {
     const state = startPlaying();
@@ -289,10 +306,10 @@ describe('validation and visibility', () => {
 
 describe('completed hand reveals', () => {
   it('hides snapshots until hand over, preserves both hands through JSON, and resets on the next deal', () => {
-    const dealt = newGame('scripted-hand').players.map(player => [...player.hand]);
+    const dealt = classicGame('scripted-hand').players.map(player => [...player.hand]);
     const playing = startPlaying();
     const atPlay = playing.players.map(player => [...player.hand]);
-    for (const state of [newGame('scripted-hand'), auction(), playing]) {
+    for (const state of [classicGame('scripted-hand'), auction(), playing]) {
       for (const seat of seats) {
         expect(viewFor(state, seat).revealed).toBeNull();
         expect(viewFor(state, seat)).not.toHaveProperty('handsDealt');
@@ -346,7 +363,7 @@ describe('completed hand reveals', () => {
 describe('score breakdown and stored history', () => {
   it('balances each team across 100 seeded hands with both counting and meld-saving rules', () => {
     for (let seed = 0; seed < 100; seed++) {
-      let state = newGame(`breakdown:${seed}`, {
+      let state = classicGame(`breakdown:${seed}`, {
         passCount: 0, minBid: 10, target: 100000,
         counting: seed % 2 ? 'classic' : 'tens', mustTakeTrickToSaveMeld: seed % 4 < 2,
         lastTrickBonus: seed % 3 === 0 ? 37 : 10,
@@ -385,7 +402,7 @@ describe('score breakdown and stored history', () => {
   });
 
   it('exposes constraints only to the active player during play', () => {
-    expect(viewFor(newGame('constraints'), 1).legal.playConstraint).toBeNull();
+    expect(viewFor(classicGame('constraints'), 1).legal.playConstraint).toBeNull();
     const state = startPlaying();
     expect(viewFor(state, state.turn!).legal.playConstraint).toEqual({ reason: 'lead_any', ledSuit: null, mustBeat: null });
     for (const seat of seats.filter(seat => seat !== state.turn)) expect(viewFor(state, seat).legal.playConstraint).toBeNull();

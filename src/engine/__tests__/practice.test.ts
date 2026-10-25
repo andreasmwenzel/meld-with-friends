@@ -14,21 +14,21 @@ const dealt: CardId[][] = [
 function winBid(): GameState {
   let state = newPracticeGame();
   for (const expected of [
-    { type: 'bid', seat: 1, amount: 250 },
+    { type: 'bid', seat: 1, amount: 25 },
     { type: 'pass_bid', seat: 2 },
-    { type: 'bid', seat: 3, amount: 260 },
+    { type: 'bid', seat: 3, amount: 26 },
   ]) {
     const action = chooseAction(viewFor(state, state.turn!));
     expect(action).toEqual(expected);
     state = applyAction(state, action);
   }
-  state = applyAction(state, { type: 'bid', seat: 0, amount: 310 });
+  state = applyAction(state, { type: 'bid', seat: 0, amount: 31 });
   for (const seat of [1, 3] as const) {
     const action = chooseAction(viewFor(state, seat));
     expect(action).toEqual({ type: 'pass_bid', seat });
     state = applyAction(state, action);
   }
-  expect(state).toMatchObject({ phase: 'declaring_trump', bidder: 0, highBid: { amount: 310 } });
+  expect(state).toMatchObject({ phase: 'declaring_trump', bidder: 0, highBid: { amount: 31 } });
   return state;
 }
 
@@ -53,14 +53,14 @@ describe('curated practice deal', () => {
     expect(view.hand.filter(card => card[1] === 'S')).toHaveLength(3);
     expect(bestTrump(view)).toBe('H');
     expect(projectedValue(view, 'H')).toBeGreaterThan(projectedValue(view, 'S'));
-    expect(computeMeld(view.hand, 'H').total).toBe(110);
-    expect(computeMeld(view.hand, 'S').total).toBe(100);
-    expect(computeMeld(view.hand, 'D').total).toBe(80);
-    expect(computeMeld(view.hand, 'C').total).toBe(90);
+    expect(computeMeld(view.hand, 'H').total).toBe(11);
+    expect(computeMeld(view.hand, 'S').total).toBe(10);
+    expect(computeMeld(view.hand, 'D').total).toBe(8);
+    expect(computeMeld(view.hand, 'C').total).toBe(9);
     expect(computeMeld(view.hand, 'H').items.some(item => item.kind === 'run')).toBe(false);
   });
 
-  it('has both opponents bid once and pass their second turn after a raise to 310', () => {
+  it('has both opponents bid once and pass their second turn after a raise to 31', () => {
     winBid();
   });
 
@@ -81,7 +81,7 @@ describe('curated practice deal', () => {
       state = applyAction(state, { type: 'declare_meld', seat, cards: state.players[seat].hand });
       state = applyAction(state, { type: 'confirm_meld', seat });
     }
-    expect(state.players[0].meldPoints).toBe(200);
+    expect(state.players[0].meldPoints).toBe(20);
     expect(state.players[0].meld.some(item => item.kind === 'run')).toBe(true);
     for (let i = 0; i < 48; i++) {
       const seat = state.turn!;
@@ -118,7 +118,7 @@ describe('curated practice deal', () => {
     const saved = structuredClone(initial);
     let state = initial;
     for (const seat of [1, 2, 3, 0] as const) state = applyAction(state, { type: 'pass_bid', seat });
-    expect(state).toMatchObject({ phase: 'declaring_trump', bidder: 0, highBid: { amount: 250 } });
+    expect(state).toMatchObject({ phase: 'declaring_trump', bidder: 0, highBid: { amount: 25 } });
     expect(initial).toEqual(saved);
     initial.players[0].hand.pop();
     initial.rules.minBid = 10;

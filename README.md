@@ -3,7 +3,7 @@
 # Meld
 
 Pinochle with your friends, in the browser, in real time. Type a name, deal a table, hand out a
-six-letter code, pick your seats (or offer to swap), and play four-hand partnership pinochle to 1,500.
+six-letter code, pick your seats (or offer to swap), and play four-hand partnership pinochle to 150.
 No account needed; guests can add an email later to keep history and friends. Short a player? The host
 can seat computer players that bid, pass, meld and play from the same information a human sees.
 New to the game? `/practice` walks you through a hand against three computers. Playing a trick a day
@@ -58,11 +58,13 @@ pnpm dev
 
 ## Rules (defaults, adjustable per table)
 
-Four players, two partnerships, 48-card deck. Minimum bid 250 in steps of 10. Bidder names trump;
-partner passes four cards to the bidder, who passes four back. Meld: run 150, royal marriage 40,
-marriage 20, pinochle 40, double pinochle 300, aces around 100, kings 80, queens 60, jacks 40, dix 10.
-Counters are aces, tens and kings at 10 each, plus 10 for the last trick. A side must take a trick to
-keep its meld. Fail your bid and you go set for the bid amount.
+Four players, two partnerships, 48-card deck. Modern scoring is the default: minimum bid 25 in steps of 1, play to 150. Bidder names trump;
+partner passes four cards to the bidder, who passes four back. Meld: run 15, royal marriage 4,
+marriage 2, pinochle 4, double pinochle 30, aces around 10, kings 8, queens 6, jacks 4, dix 1.
+Counters are aces, tens and kings at 1 each, plus 1 for the last trick. A side must take a trick to
+keep its meld. Fail your bid and you go set for the bid amount. Classic ×10 scoring remains a
+table option, with minimum bid 250 and target 1,500. Old-style 11 / 10 / 4 / 3 / 2 counting requires
+classic scoring. Existing games keep their classic scale.
 
 ## License
 

@@ -1,7 +1,8 @@
 import { buildDeck, cardLabel, seededShuffle, SUITS } from './deck';
 import { computeMeld } from './meld';
 import { legalPlays, playConstraint, trickWinner } from './rules';
-import { DEFAULT_RULES, IllegalAction } from './types';
+import { IllegalAction } from './types';
+import { resolveRules } from './scoring';
 import type {
   Action, CardId, GameState, HandRecap, HandRecord, HandScoreBreakdown, LegalActions, PlayerState, PlayerView,
   Rank, RulesConfig, SeatIndex, Team, Trick,
@@ -37,13 +38,15 @@ function requireAction(condition: unknown, message: string): asserts condition {
 function log(state: GameState, message: string): void {
   state.log = [...state.log, message].slice(-50);
 }
-function validateRules(rules: RulesConfig): void {
+export function validateRules(rules: RulesConfig): void {
   for (const key of ['target', 'minBid', 'bidStep'] as const) {
     requireAction(Number.isSafeInteger(rules[key]) && rules[key] > 0, `${key} must be a positive integer`);
   }
   for (const key of ['counterValue', 'lastTrickBonus', 'passCount'] as const) {
     requireAction(Number.isSafeInteger(rules[key]) && rules[key] >= 0, `${key} must be a nonnegative integer`);
   }
+  requireAction(rules.scoring === 'modern' || rules.scoring === 'classic', 'Invalid scoring');
+  requireAction(rules.scoring !== 'modern' || rules.counting !== 'classic', 'Old-style counting requires classic scoring');
   requireAction(rules.pace === 'live' || rules.pace === 'leisurely', 'Invalid pace');
   requireAction(rules.passCount <= 12, 'passCount cannot exceed 12');
   requireAction(rules.setPenaltyIsBid === true, 'Only bid-sized set penalties are supported');
@@ -85,7 +88,7 @@ function deal(state: EngineState): void {
 
 export function newGame(seed: string, rules: Partial<RulesConfig> = {}, dealer: SeatIndex = 0): GameState {
   requireAction(SEATS.includes(dealer), 'Invalid dealer seat');
-  const config = { ...DEFAULT_RULES, ...rules };
+  const config = resolveRules(rules);
   validateRules(config);
   const state: EngineState = {
     version: 1, rules: config, phase: 'dealing', handNumber: 1, dealer, turn: null,
@@ -104,6 +107,7 @@ function openingBid(state: GameState): number {
 
 export function legalActionsFor(state: GameState, seat: SeatIndex): LegalActions {
   requireAction(SEATS.includes(seat), 'Invalid seat');
+  state = { ...state, rules: resolveRules(state.rules, true) };
   const onTurn = state.turn === seat;
   const bidding = state.phase === 'bidding' && onTurn && !state.bids.some(b => b.seat === seat && b.amount === null);
   const melding = state.phase === 'melding' && !state.players[seat].meldConfirmed;
@@ -242,6 +246,7 @@ export function applyAction(previous: GameState, action: Action): GameState {
   requireAction(SEATS.includes(action.seat), 'Invalid seat');
   const legal = legalActionsFor(previous, action.seat);
   const state: EngineState = clone(previous);
+  state.rules = resolveRules(state.rules, true);
   const player = state.players[action.seat];
   const name = SEAT_NAMES[action.seat];
   switch (action.type) {
@@ -298,7 +303,7 @@ export function applyAction(previous: GameState, action: Action): GameState {
       requireAction(legal.canDeclareMeld, 'You cannot declare meld now');
       selectedCards(player, action.cards);
       requireAction(state.trump !== null, 'No trump declared');
-      const meld = computeMeld(action.cards, state.trump);
+      const meld = computeMeld(action.cards, state.trump, state.rules);
       player.meld = meld.items;
       player.meldPoints = meld.total;
       log(state, `${name} melds ${meld.total}`);
@@ -378,6 +383,7 @@ export function normaliseHandRecord(h: Omit<HandRecord, 'breakdown'> & { breakdo
 }
 
 export function viewFor(state: GameState, seat: SeatIndex): PlayerView {
+  state = { ...state, rules: resolveRules(state.rules, true) };
   const legal = legalActionsFor(state, seat);
   const melds = { 0: state.players[0].meld, 1: state.players[1].meld, 2: state.players[2].meld, 3: state.players[3].meld };
   const meldConfirmed = { 0: state.players[0].meldConfirmed, 1: state.players[1].meldConfirmed, 2: state.players[2].meldConfirmed, 3: state.players[3].meldConfirmed };
@@ -394,7 +400,7 @@ export function viewFor(state: GameState, seat: SeatIndex): PlayerView {
       counters: { red: countCounters(state.tricksTaken.red.flat(), state.rules), blue: countCounters(state.tricksTaken.blue.flat(), state.rules) },
     },
     seat, phase: state.phase, handNumber: state.handNumber, dealer: state.dealer,
-    turn: state.turn, rules: { ...DEFAULT_RULES, ...state.rules }, hand: state.players[seat].hand,
+    turn: state.turn, rules: state.rules, hand: state.players[seat].hand,
     handCounts: state.players.map(p => p.hand.length) as PlayerView['handCounts'],
     melds, meldConfirmed, bids: state.bids, highBid: state.highBid,
     bidder: state.bidder, trump: state.trump, currentTrick: state.currentTrick,
