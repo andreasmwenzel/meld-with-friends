@@ -9,9 +9,11 @@ import { SEAT_LABEL, teamOf, type Snapshot } from "./types";
 import { RulesForm } from "@/components/rules/RulesForm";
 import { usePushNotifications } from "@/lib/push";
 import { describeRules, resolveRules, type RulesPatch } from "@/components/rules/rules";
+import { useTableTurn } from "./turn";
 
-// From sm up the chairs sit around the oval. On phones they drop into a 2x2 grid under the code,
-// partners side by side (South/North, then West/East), so nothing overlaps or clips.
+// From sm up the chairs sit around the oval, your own chair at the bottom. On phones they drop into
+// a 2x2 grid under the code, partners side by side (you and your partner, then the other pair), so
+// nothing overlaps or clips. Keyed by position relative to your seat: 0 bottom, 1 left, 2 across, 3 right.
 const POS: Record<SeatIndex, string> = {
   0: "sm:absolute sm:bottom-0 sm:left-1/2 sm:-translate-x-1/2 sm:translate-y-1/2",
   1: "order-3 sm:order-none sm:absolute sm:left-0 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2",
@@ -47,6 +49,10 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
   const humans = snap.seats.filter((s) => s.user_id).length;
   const incoming = snap.offers.find((o) => o.to_user === me.id);
   const outgoing = snap.offers.find((o) => o.from_user === me.id);
+  // Standing, you look at the table from South.
+  const bottom: SeatIndex = snap.mySeat ?? 0;
+  const turn = useTableTurn(bottom);
+  const rel = (seat: SeatIndex): SeatIndex => (((seat - bottom + 4) % 4) as SeatIndex);
 
   async function run(fn: () => Promise<unknown>) {
     setBusy(true); setNote(null);
@@ -78,10 +84,10 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
     <div className="mx-auto grid w-full max-w-6xl flex-1 gap-8 px-6 pb-16 pt-2 sm:gap-12 sm:pt-4 lg:grid-cols-[1fr_minmax(280px,360px)]">
       <section className="flex min-w-0 flex-col items-center justify-center py-4 sm:py-10">
         {/* the table */}
-        <div className="relative flex w-full flex-col items-center sm:block sm:aspect-[1.35] sm:w-[min(560px,86vw)]">
+        <div key={turn.key} className={`relative flex w-full flex-col items-center sm:block sm:aspect-[1.35] sm:w-[min(560px,86vw)] ${turn.className}`} style={turn.style}>
           <div className="absolute inset-0 hidden rounded-[48%] sm:block border-[6px] border-cloth-edge"
             style={{ background: "radial-gradient(ellipse at 50% 40%, #6b2530, var(--cloth-deep))", boxShadow: "inset 0 12px 40px rgba(0,0,0,.35), 0 20px 50px -20px rgba(0,0,0,.7)" }} />
-          <div className="mb-6 flex flex-col items-center justify-center text-center sm:absolute sm:inset-0 sm:mb-0">
+          <div className="table-turn-still mb-6 flex flex-col items-center justify-center text-center sm:absolute sm:inset-0 sm:mb-0">
             <p className="text-chalk-faint text-sm">Table code</p>
             <p className="code mt-1 text-chalk" style={{ fontSize: "clamp(40px, 8vw, 64px)" }}>{code}</p>
             <button className="btn btn-ghost mt-3" style={{ height: "2.25rem" }} onClick={copy}>{copied ? "Link copied" : "Share invite link"}</button>
@@ -94,7 +100,7 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
             const team = teamOf(i);
             const bot = s?.bot ?? null;
             return (
-              <div key={i} className={`${POS[i]} flex min-w-0 flex-col items-center gap-1.5 sm:w-[132px]`}>
+              <div key={i} className={`${POS[rel(i)]} flex min-w-0 flex-col items-center gap-1.5 sm:w-[132px]`}>
                 {bot ? (
                   <div className="panel flex w-full flex-col items-center gap-1 px-3 py-3" style={{ background: "var(--chalk-dim)" }}>
                     <Avatar name={bot} team={team} size={44} bot />

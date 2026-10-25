@@ -6,6 +6,7 @@ import { PlayingCard, SUIT_GLYPH } from "@/components/cards/PlayingCard";
 import { Avatar } from "@/components/site/Avatar";
 import { useCardPrefs } from "@/lib/cardPrefs";
 import { teamOf } from "@/components/table/types";
+import { useTableTurn } from "@/components/table/turn";
 import type { Move } from "./model";
 
 interface SeatInfo { name: string; bot: boolean }
@@ -14,10 +15,15 @@ interface SeatInfo { name: string; bot: boolean }
  * The table with every hand face up, as it stood after one move. The reader's seat sits at the
  * bottom; the seat that moved wears the turn ring, and the cards the move touched are lifted.
  */
-export function ReplayBoard({ frame, move, bottom, seats }: {
+export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit }: {
   frame: GameState; move: Move; bottom: SeatIndex; seats: Record<SeatIndex, SeatInfo>;
+  /** the reader's own seat in this game, if they played */
+  viewerSeat: SeatIndex | null;
+  /** tap a player to bring their chair to the bottom */
+  onSit: (seat: SeatIndex) => void;
 }) {
   const { prefs, phone } = useCardPrefs();
+  const turn = useTableTurn(bottom);
   const seatAt = (r: number): SeatIndex => (((bottom + r) % 4) as SeatIndex);
   const rel = (seat: SeatIndex): 0 | 1 | 2 | 3 => (((seat - bottom + 4) % 4) as 0 | 1 | 2 | 3);
   const lit = new Set(move.cards);
@@ -33,6 +39,7 @@ export function ReplayBoard({ frame, move, bottom, seats }: {
   const status = (seat: SeatIndex): string | null => {
     const bid = frame.bids.filter(b => b.seat === seat).at(-1);
     const parts: string[] = [];
+    if (seat === viewerSeat) parts.push("you");
     if (frame.dealer === seat) parts.push("dealer");
     if (frame.phase === "bidding" && bid) parts.push(bid.amount === null ? "passed" : bid.shoot ? "shoots" : `bid ${bid.amount}`);
     if (frame.phase !== "bidding" && frame.bidder === seat) parts.push(frame.highBid?.shoot ? "shooting" : `took it at ${frame.highBid?.amount}`);
@@ -42,22 +49,24 @@ export function ReplayBoard({ frame, move, bottom, seats }: {
   // A bidder holds 16 cards after the pass; fans tighten to stay inside the row.
   const sizes = phone ? { south: 44, north: 34, side: 30, budget: 340 } : { south: 60, north: 44, side: 38, budget: 680 };
 
+  const chair = (seat: SeatIndex) => ({ seat, info: seats[seat], status: status(seat), active: move.actor === seat, cards: hand(seat), raised: raised(seat), prefs, atBottom: seat === bottom, onSit });
   return (
-    <div className="mx-auto w-full max-w-[760px]">
-      <SeatRow seat={seatAt(2)} info={seats[seatAt(2)]} status={status(seatAt(2))} active={move.actor === seatAt(2)} cards={hand(seatAt(2))} raised={raised(seatAt(2))} prefs={prefs} width={sizes.north} budget={sizes.budget * 0.8} align="center" />
+    <div key={turn.key} className={`mx-auto w-full max-w-[760px] ${turn.className}`} style={turn.style}>
+      <SeatRow {...chair(seatAt(2))} width={sizes.north} budget={sizes.budget * 0.8} align="center" />
       <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
-        <SeatRow seat={seatAt(1)} info={seats[seatAt(1)]} status={status(seatAt(1))} active={move.actor === seatAt(1)} cards={hand(seatAt(1))} raised={raised(seatAt(1))} prefs={prefs} width={sizes.side} align="left" />
+        <SeatRow {...chair(seatAt(1))} width={sizes.side} align="left" />
         <Centre frame={frame} trick={trick} rel={rel} nameOf={s => seats[s].name} compact={phone} />
-        <SeatRow seat={seatAt(3)} info={seats[seatAt(3)]} status={status(seatAt(3))} active={move.actor === seatAt(3)} cards={hand(seatAt(3))} raised={raised(seatAt(3))} prefs={prefs} width={sizes.side} align="right" />
+        <SeatRow {...chair(seatAt(3))} width={sizes.side} align="right" />
       </div>
-      <SeatRow seat={seatAt(0)} info={seats[seatAt(0)]} status={status(seatAt(0))} active={move.actor === seatAt(0)} cards={hand(seatAt(0))} raised={raised(seatAt(0))} prefs={prefs} width={sizes.south} budget={sizes.budget} align="center" big />
+      <SeatRow {...chair(seatAt(0))} width={sizes.south} budget={sizes.budget} align="center" big />
     </div>
   );
 }
 
-function SeatRow({ seat, info, status, active, cards, raised, prefs, width, align, big = false, budget = Infinity }: {
+function SeatRow({ seat, info, status, active, cards, raised, prefs, width, align, big = false, budget = Infinity, atBottom, onSit }: {
   seat: SeatIndex; info: SeatInfo; status: string | null; active: boolean; cards: CardId[]; raised: Set<CardId>;
   prefs: ReturnType<typeof useCardPrefs>["prefs"]; width: number; align: "left" | "center" | "right"; big?: boolean;
+  atBottom: boolean; onSit: (seat: SeatIndex) => void;
   /** widest a horizontal fan may grow, in px */
   budget?: number;
 }) {
@@ -69,12 +78,15 @@ function SeatRow({ seat, info, status, active, cards, raised, prefs, width, alig
   const items = align === "left" ? "items-start" : align === "right" ? "items-end" : "items-center";
   return (
     <div className={`flex min-w-0 flex-col ${items} gap-1 ${big ? "mt-3" : "py-1"}`}>
-      <div className={`flex max-w-full items-center gap-1.5 rounded-2xl px-2 py-1 ${vertical ? "flex-col" : "flex-row"}`}
+      <button type="button" onClick={() => onSit(seat)} aria-pressed={atBottom} disabled={atBottom}
+        aria-label={atBottom ? `${info.name}, at the bottom of the table` : `See the table from ${info.name}'s seat`}
+        title={atBottom ? undefined : `See it from ${info.name}'s seat`}
+        className={`flex max-w-full items-center gap-1.5 rounded-2xl px-2 py-1 text-left transition-colors ${vertical ? "flex-col" : "flex-row"} ${atBottom ? "cursor-default" : "hover:bg-chalk-ghost focus-visible:bg-chalk-ghost"}`}
         style={active ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
         <Avatar name={info.name} team={team} size={26} bot={info.bot} />
         <span className={`truncate text-xs font-semibold ${vertical ? "max-w-[72px]" : "max-w-[140px]"}`}>{info.name}</span>
         {status && <span className={`text-xs text-chalk-faint ${vertical ? "max-w-[72px] text-center" : "whitespace-nowrap"}`}>{status}</span>}
-      </div>
+      </button>
       {cards.length === 0 ? (
         <span className="text-xs text-chalk-faint" style={{ minHeight: vertical ? undefined : h + 8 }}>{big || !vertical ? "No cards left" : ""}</span>
       ) : vertical ? (
