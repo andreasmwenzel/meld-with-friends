@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import type { SeatIndex, Team } from "@/engine/types";
 import type { ReplayPayload } from "@/engine/replay";
@@ -8,6 +8,10 @@ import { api } from "@/lib/api";
 import { teamOf } from "@/components/table/types";
 import { ReplayBoard } from "./ReplayBoard";
 import { moveAtFrame, walk, type Move } from "./model";
+
+const WIDE = "(min-width: 64rem)";
+const subscribeWide = (cb: () => void) => { const mq = window.matchMedia(WIDE); mq.addEventListener("change", cb); return () => mq.removeEventListener("change", cb); };
+const readWide = () => window.matchMedia(WIDE).matches;
 
 const teamClass = (t: Team) => (t === "red" ? "text-deck-red-soft" : "text-deck-blue-soft");
 const dateFmt = new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric" });
@@ -60,7 +64,17 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
   }
   const [copied, setCopied] = useState(false);
   const [menu, setMenu] = useState(false);
+  const wide = useSyncExternalStore(subscribeWide, readWide, () => false);
   const listRef = useRef<HTMLDivElement>(null);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  // Focus goes into the drawer when it opens and back to the Menu button when it closes.
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (menu) closeButton.current?.focus();
+    else if (wasOpen.current) menuButton.current?.focus();
+    wasOpen.current = menu;
+  }, [menu]);
   // The board scales down to the room between the top strip and the controls, so the page never scrolls.
   const stage = useRef<HTMLDivElement>(null);
   const board = useRef<HTMLDivElement>(null);
@@ -70,7 +84,7 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
       const s = stage.current, b = board.current;
       if (!s || !b) return;
       const w = b.offsetWidth, h = b.offsetHeight;
-      const scale = Math.min(1, s.clientHeight / Math.max(1, h), s.clientWidth / Math.max(1, w));
+      const scale = Math.min(1, s.clientHeight / Math.max(1, h), (s.clientWidth - 16) / Math.max(1, w));
       setFit(prev => prev.scale === scale && prev.w === w && prev.h === h ? prev : { scale, w, h });
     };
     measure();
@@ -114,13 +128,14 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
     const top = row.offsetTop - list.offsetTop, bottom = top + row.offsetHeight;
     if (top < list.scrollTop + 32) list.scrollTop = Math.max(0, top - 32);
     else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight + 8;
-  }, [cursor]);
+  }, [cursor, menu]);
 
   if (!game.walk) {
     return (
       <section className="mx-auto max-w-md px-6 py-16">
         <h1 className="display" style={{ fontSize: 40 }}>This game will not replay.</h1>
         <p className="mt-3 text-chalk-faint">The rules have changed since it was played, so its moves no longer line up. {game.error}</p>
+        <Link href="/home" className="btn btn-chalk mt-6">Back to your tables</Link>
       </section>
     );
   }
@@ -145,7 +160,7 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
 
   const animate = stepped.forward && stepped.cursor === cursor && stepped.bottom === bottom;
   const lastHand = chapters[chapters.length - 1].hand;
-  const pick = (i: number) => { go(i); if (window.matchMedia("(max-width: 1023px)").matches) setMenu(false); };
+  const pick = (i: number) => { go(i); if (!wide) setMenu(false); };
 
   return (
     <div className="relative flex h-dvh flex-col overflow-hidden">
@@ -153,10 +168,10 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
       <div className="flex shrink-0 items-center justify-between gap-3 px-3 py-1.5 text-sm tabular-nums sm:px-4">
         <p><span className="font-semibold">Hand {frame.handNumber}</span><span className="text-chalk-faint"> of {lastHand}</span></p>
         <p><span className={teamClass("red")}>Red</span> {frame.score.red}<span className="px-1.5 text-chalk-faint">·</span><span className={teamClass("blue")}>Blue</span> {frame.score.blue}</p>
-        <button type="button" onClick={() => setMenu(o => !o)} aria-expanded={menu} aria-controls="replay-menu" className="tap-link -mr-1 text-sm text-chalk-faint underline underline-offset-4 hover:text-chalk">Menu</button>
+        <button ref={menuButton} type="button" onClick={() => setMenu(o => !o)} aria-expanded={menu} aria-controls="replay-menu" className="tap-link -mr-1 text-sm text-chalk-faint underline underline-offset-4 hover:text-chalk">Menu</button>
       </div>
 
-      <div className={`flex min-h-0 flex-1 flex-col ${menu ? "lg:pr-[380px]" : ""}`}>
+      <div className={`flex min-h-0 flex-1 flex-col ${menu ? "lg:pr-[380px]" : ""}`} inert={menu && !wide ? true : undefined}>
         <div ref={stage} className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2">
           <div style={fit.scale < 1 ? { width: fit.w * fit.scale, height: fit.h * fit.scale } : undefined}>
             <div ref={board} className="w-[min(100vw-1rem,760px)] origin-top-left" style={{ transform: fit.scale < 1 ? `scale(${fit.scale})` : undefined }}>
@@ -179,7 +194,7 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
               . Table {payload.code}.
             </p>
           </div>
-          <button type="button" onClick={() => setMenu(false)} className="tap-link -mr-2 shrink-0 text-sm text-chalk-faint underline underline-offset-4 hover:text-chalk">Close</button>
+          <button ref={closeButton} type="button" onClick={() => setMenu(false)} className="tap-link -mr-2 shrink-0 text-sm text-chalk-faint underline underline-offset-4 hover:text-chalk">Close</button>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-3 text-sm">
           <button type="button" onClick={share} className="btn btn-ghost btn-compact">{copied ? "Link copied" : "Share this replay"}</button>
@@ -228,7 +243,7 @@ function Controls({ cursor, count, chapterHand, label, go, prevHand, nextHand }:
   const btn = "btn btn-ink btn-compact min-w-[3rem] px-0";
   return (
     <div className="panel mx-2 mb-[max(.5rem,env(safe-area-inset-bottom))] shrink-0 px-3 pb-2 pt-1.5 sm:mx-auto sm:w-[min(100%-1rem,760px)]" role="group" aria-label="Step through the game">
-      <p role="status" aria-live="polite" className="display truncate text-center text-ink" style={{ fontSize: 17 }}>{label}.</p>
+      <p role="status" aria-live="polite" className="display line-clamp-2 h-[2.5em] text-center text-ink" style={{ fontSize: 16, lineHeight: 1.25 }}>{label}.</p>
       <div className="mt-1 flex items-center justify-between gap-2">
         <button type="button" className={btn} aria-label="Previous hand" onClick={prevHand} disabled={cursor === 0}>⏮</button>
         <button type="button" className={btn} aria-label="Previous move" onClick={() => go(cursor - 1)} disabled={cursor === 0}>◀</button>

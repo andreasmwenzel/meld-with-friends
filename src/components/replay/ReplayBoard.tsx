@@ -317,13 +317,13 @@ function Centre({ frame, trick, rel, nameOf, compact, flying, sweep }: {
         )}
         {trick?.plays.map((p) => {
           const sweeping = sweep && done;
-          const moving = p.card === flying || sweeping;
-          // Cards already on the table start where they lie; only the card just played flies in.
-          const start = p.card === flying ? flyFrom(rel(p.seat), p.card) : { "--fx": "0px", "--fy": "0px", "--fr": "0deg", "--fs": 1 };
+          const entering = p.card === flying;
+          // The card just played flies in (and sweeps out with the rest); cards already resting only leave.
+          const cls = entering ? "trick-card" : sweeping ? "trick-rest" : undefined;
+          const style = entering || sweeping ? { ...(entering ? flyFrom(rel(p.seat), p.card) : null), ...(sweeping ? sweepTo(rel(trick.winner!)) : null) } as CSSProperties : undefined;
           return (
             <div key={p.card} className={`absolute ${spots[rel(p.seat)]}`}>
-              <div className={moving ? "trick-card" : undefined} data-sweep={sweeping ? "" : undefined}
-                style={moving ? { ...start, ...(sweeping ? sweepTo(rel(trick.winner!)) : null) } as CSSProperties : undefined}>
+              <div className={cls} data-sweep={entering && sweeping ? "" : undefined} style={style}>
                 <PlayingCard card={p.card} width={w} selected={done && trick.winner === p.seat} />
               </div>
             </div>
