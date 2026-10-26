@@ -158,6 +158,11 @@ body {
 .table-turn-still { animation: table-turn-counter 560ms cubic-bezier(.3,.7,.2,1) both; }
 .table-turn-fade { animation: card-fade 200ms linear both; }
 
+/* A card already resting on the table only leaves with the trick; it never re-enters. */
+.trick-rest { animation: card-sweep var(--sm) cubic-bezier(.5,0,.8,.4) var(--sd) forwards; }
+[data-motion="off"] .trick-rest { animation: card-fade-out var(--pm) linear var(--sd) forwards; }
+@media (prefers-reduced-motion: reduce) { .trick-rest { animation: card-fade-out 150ms linear var(--sd) forwards; } }
+
 @keyframes card-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes card-fade-b { from { opacity: 0; } to { opacity: 1; } }
 @keyframes card-fade-out { to { opacity: 0; } }

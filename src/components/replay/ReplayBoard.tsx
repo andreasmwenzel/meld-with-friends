@@ -9,7 +9,7 @@ import { teamOf } from "@/components/table/types";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { viewFor } from "@/engine/game";
 import { useTableTurn } from "@/components/table/turn";
-import { flyFrom, motionTimings } from "@/components/table/motion";
+import { flyFrom, motionTimings, sweepTo } from "@/components/table/motion";
 import type { Move } from "./model";
 
 interface SeatInfo { name: string; bot: boolean }
@@ -61,7 +61,7 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit, ani
     root.current.querySelector<HTMLElement>('[data-chip][aria-pressed="true"]')?.focus();
   }, [bottom]);
   const motion = reducedMotion ? "off" : prefs.motion;
-  const { slideMs } = motionTimings(motion);
+  const { slideMs, holdMs, sweepMs } = motionTimings(motion);
   const seatAt = (r: number): SeatIndex => (((bottom + r) % 4) as SeatIndex);
   const rel = (seat: SeatIndex): 0 | 1 | 2 | 3 => (((seat - bottom + 4) % 4) as 0 | 1 | 2 | 3);
   const lit = new Set(move.cards);
@@ -136,14 +136,14 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit, ani
   // A bidder holds 16 cards after the pass; fans tighten to stay inside the row.
   const sizes = phone ? { south: 44, north: 34, side: 30, budget: 340 } : { south: 60, north: 44, side: 38, budget: 680 };
 
-  const chair = (seat: SeatIndex) => ({ seat, info: seats[seat], score: scoreOf(seat), mine: seat === viewerSeat, active: move.actor === seat, cards: hand(seat), meld: meldOf(seat), lit, raised: raised(seat), prefs, atBottom: seat === bottom, onSit, flights });
+  const chair = (seat: SeatIndex) => ({ seat, info: seats[seat], score: scoreOf(seat), mine: seat === viewerSeat, active: move.trick ? move.trick.winner === seat : move.actor === seat, cards: hand(seat), meld: meldOf(seat), lit, raised: raised(seat), prefs, atBottom: seat === bottom, onSit, flights });
   return (
     <div ref={root} className={`mx-auto w-full max-w-[760px] ${turn.className}`} data-motion={motion}
-      style={{ ...turn.style, "--pm": `${slideMs}ms` } as CSSProperties}>
+      style={{ ...turn.style, "--pm": `${slideMs}ms`, "--sd": `${holdMs}ms`, "--sm": `${sweepMs}ms` } as CSSProperties}>
       <SeatRow key={seatAt(2)} {...chair(seatAt(2))} width={sizes.north} budget={sizes.budget * 0.8} align="center" />
       <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
         <SeatRow key={seatAt(1)} {...chair(seatAt(1))} width={sizes.side} align="left" />
-        <Centre frame={frame} trick={trick} rel={rel} nameOf={s => seats[s].name} compact={phone} flying={flying} />
+        <Centre frame={frame} trick={trick} rel={rel} nameOf={s => seats[s].name} compact={phone} flying={flying} sweep={animate && !!move.trick} />
         <SeatRow key={seatAt(3)} {...chair(seatAt(3))} width={sizes.side} align="right" />
       </div>
       <SeatRow key={seatAt(0)} {...chair(seatAt(0))} width={sizes.south} budget={sizes.budget} align="center" big />
@@ -293,10 +293,12 @@ function ScoreTag({ score, name, align }: { score: SeatScore; name: string; alig
   );
 }
 
-function Centre({ frame, trick, rel, nameOf, compact, flying }: {
+function Centre({ frame, trick, rel, nameOf, compact, flying, sweep }: {
   frame: GameState; trick: Trick | null; rel: (s: SeatIndex) => 0 | 1 | 2 | 3; nameOf: (s: SeatIndex) => string; compact: boolean;
   /** the card played this move, which slides in from its seat */
   flying: CardId | null;
+  /** the move completed the trick: it rests, then sweeps to the winner */
+  sweep: boolean;
 }) {
   const w = compact ? 46 : 60;
   const spots: Record<0 | 1 | 2 | 3, string> = {
@@ -313,13 +315,20 @@ function Centre({ frame, trick, rel, nameOf, compact, flying }: {
           <span aria-hidden className="pointer-events-none absolute inset-0 flex select-none items-center justify-center leading-none"
             style={{ fontSize: compact ? 72 : 110, color: "#fff", opacity: 0.07 }}>{SUIT_GLYPH[frame.trump]}</span>
         )}
-        {trick?.plays.map((p) => (
-          <div key={p.card} className={`absolute ${spots[rel(p.seat)]}`}>
-            <div className={p.card === flying ? "trick-card" : undefined} style={p.card === flying ? flyFrom(rel(p.seat), p.card) as CSSProperties : undefined}>
-              <PlayingCard card={p.card} width={w} selected={done && trick.winner === p.seat} />
+        {trick?.plays.map((p) => {
+          const sweeping = sweep && done;
+          const entering = p.card === flying;
+          // The card just played flies in (and sweeps out with the rest); cards already resting only leave.
+          const cls = entering ? "trick-card" : sweeping ? "trick-rest" : undefined;
+          const style = entering || sweeping ? { ...(entering ? flyFrom(rel(p.seat), p.card) : null), ...(sweeping ? sweepTo(rel(trick.winner!)) : null) } as CSSProperties : undefined;
+          return (
+            <div key={p.card} className={`absolute ${spots[rel(p.seat)]}`}>
+              <div className={cls} data-sweep={entering && sweeping ? "" : undefined} style={style}>
+                <PlayingCard card={p.card} width={w} selected={done && trick.winner === p.seat} />
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {!trick?.plays.length && frame.phase !== "bidding" && frame.phase !== "declaring_trump" && (
           <p className="absolute inset-0 flex items-center justify-center text-center text-xs text-chalk-faint">
             {frame.phase === "melding" ? "Meld" : frame.phase === "hand_over" || frame.phase === "game_over" ? "Hand over" : frame.phase === "playing" ? "" : "Passing"}

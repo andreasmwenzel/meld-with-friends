@@ -42,5 +42,5 @@ export function DevReplay() {
   // eslint-disable-next-line react-hooks/set-state-in-effect -- generated once on the client from the URL
   useEffect(() => { setPayload(generate(new URLSearchParams(window.location.search))); }, []);
   if (!payload) return <p className="px-6 py-10 text-chalk-faint">The computers are playing a game for you.</p>;
-  return <main className="flex flex-1 flex-col pt-4"><ReplayView payload={payload} /></main>;
+  return <main className="flex flex-1 flex-col"><ReplayView payload={payload} /></main>;
 }
