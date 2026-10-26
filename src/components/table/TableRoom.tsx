@@ -59,23 +59,27 @@ export function TableRoom({ code, me, guest = false }: { code: string; me: Profi
   if (!snap) return <main className="flex-1"><Header code={code} /><p className="px-6 text-chalk-faint">Finding the table.</p></main>;
 
   const atBoard = snap.table.status === "playing" || snap.table.status === "finished";
+  // At the board the table is the whole screen: the table code, chat and the way out live in its menu.
+  if (atBoard) {
+    return (
+      <main className="flex h-dvh flex-col overflow-hidden">
+        <Game connection={connection} code={code} me={me} snap={snap} rev={gameRev} onTableChange={refresh}
+          chat={snap.mySeat !== null ? (visible, onUnread) => <Chat code={code} me={me} embedded={{ visible, onUnread }} /> : undefined} />
+      </main>
+    );
+  }
   return (
-    <main className={`flex-1 flex flex-col ${snap.mySeat !== null ? "pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:pb-0 short:[--chat-room:7.5rem]" : ""}`}>
-      <Header code={code} belowBoard={atBoard} />
-      {atBoard ? (
-        <Game connection={connection} code={code} me={me} snap={snap} rev={gameRev} onTableChange={refresh} />
-      ) : (
-        <Seating code={code} me={me} snap={snap} onChange={refresh} guest={guest} />
-      )}
-      {snap.mySeat !== null && <Chat code={code} me={me} atBoard={atBoard} />}
+    <main className={`flex-1 flex flex-col ${snap.mySeat !== null ? "pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:pb-0" : ""}`}>
+      <Header code={code} />
+      <Seating code={code} me={me} snap={snap} onChange={refresh} guest={guest} />
+      {snap.mySeat !== null && <Chat code={code} me={me} />}
     </main>
   );
 }
 
-/** `belowBoard`: sideways on a phone the board takes the whole screen, and the header follows it below the fold. */
-function Header({ code, belowBoard = false }: { code: string; belowBoard?: boolean }) {
+function Header({ code }: { code: string }) {
   return (
-    <header className={`mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-6 py-3 sm:py-4 ${belowBoard ? "short:order-last short:py-2" : ""}`}>
+    <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-6 py-3 sm:py-4">
       <Wordmark size={26} />
       <div className="flex items-center gap-2 text-sm sm:gap-3 text-chalk-faint">
         <span className="hidden min-[400px]:inline">Table</span>

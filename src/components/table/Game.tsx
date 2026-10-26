@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError, isTransientError, type Profile } from "@/lib/api";
@@ -10,12 +10,14 @@ import { PlayingCard, CardBack, SUIT_GLYPH, SUIT_NAME, RANK_LABEL, splitCard, ca
 import { Avatar } from "@/components/site/Avatar";
 import { SEAT_LABEL, teamOf, type Snapshot } from "./types";
 import { Scorepad } from "./Scorepad";
+import { DealerMark, ScoreTag, seatScore, type ScoreFacts, type SeatScore } from "./SeatScore";
 import { BidPicker } from "./BidPicker";
 import { ResultSheet, type Which } from "./Result";
 import { canCountdownAdvance } from "./nextHandCountdown";
 import { Recap, useSeenReporting } from "./Recap";
 import { MeldReview, itemLabel } from "./MeldReview";
-import { CardOptions } from "@/components/cards/CardOptions";
+import { CardOptionsPanel } from "@/components/cards/CardOptions";
+import { useOpponentPointsPref } from "@/lib/prefs";
 import { useCardPrefs } from "@/lib/cardPrefs";
 import { usePushNotifications } from "@/lib/push";
 import { autoMeldSelection, meldBySuit, sortHand } from "@/engine/hand";
@@ -26,6 +28,10 @@ import { newLogLines, speakLine } from "./announce";
 type ClientAction = Action extends infer A ? (A extends Action ? Omit<A, "seat"> : never) : never;
 
 const CHIME_KEY = "meld.chime";
+const WIDE = "(min-width: 64rem)";
+const subscribeWide = (cb: () => void) => { const mq = window.matchMedia(WIDE); mq.addEventListener("change", cb); return () => mq.removeEventListener("change", cb); };
+const readWide = () => window.matchMedia(WIDE).matches;
+type MenuTab = "score" | "hand" | "talk" | "options";
 const TURN_PREFIX = "Your turn · ";
 
 function countersIn(trick: NonNullable<PlayerView["currentTrick"]>, rules: PlayerView["rules"]): number {
@@ -36,10 +42,12 @@ function countersIn(trick: NonNullable<PlayerView["currentTrick"]>, rules: Playe
   }, 0);
 }
 
-export function Game({ code, me, snap, rev, onTableChange, connection = "ok", local = false, suggested }: {
+export function Game({ code, me, snap, rev, onTableChange, connection = "ok", local = false, suggested, chat }: {
   code: string; me: Profile; snap: Snapshot; rev: number; onTableChange: () => void; connection?: "ok" | "reconnecting"; local?: boolean;
   /** cards a coach suggests, outlined in the hand (practice) */
   suggested?: CardId[];
+  /** table talk for the menu's Talk tab; it stays mounted so messages arriving while the tab is shut still count */
+  chat?: (visible: boolean, onUnread: (n: number) => void) => React.ReactNode;
 }) {
   const [view, setView] = useState<PlayerView | null>(null);
   const push = usePushNotifications();
@@ -322,14 +330,34 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   }
 
   const lastSeenRev = (snap as Snapshot & { lastSeenRev?: number | null }).lastSeenRev ?? null;
-  const [recapOpen, setRecapOpen] = useState(false);
+  // Everything that is not the table (scorepad, this hand, table talk, options) lives behind Menu.
+  const [menu, setMenu] = useState(false);
+  const [tab, setTab] = useState<MenuTab>("score");
+  const [unread, setUnread] = useState(0);
+  const wide = useSyncExternalStore(subscribeWide, readWide, () => false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  // Focus goes into the drawer when it opens and back to the Menu button when it closes.
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (menu) closeButton.current?.focus();
+    else if (wasOpen.current) menuButton.current?.focus();
+    wasOpen.current = menu;
+  }, [menu]);
+  useEffect(() => {
+    if (!menu) return;
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape" && !e.defaultPrevented) setMenu(false); };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, [menu]);
+  const recapOpen = menu && tab === "hand";
   const autoRecap = useRef(false);
   useSeenReporting(code, snap.mySeat !== null && view ? view.rev : null);
   useEffect(() => {
     if (!view || autoRecap.current) return;
     autoRecap.current = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- opens once, after the first view arrives
-    if (view.rules.pace === "leisurely" && lastSeenRev !== null && view.rev > lastSeenRev) setRecapOpen(true);
+    if (view.rules.pace === "leisurely" && lastSeenRev !== null && view.rev > lastSeenRev) { setTab("hand"); setMenu(true); }
   }, [view, lastSeenRev]);
 
   const [which, setWhich] = useState<Which>("atPlay");
@@ -403,7 +431,35 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
     ro.observe(el);
     return () => ro.disconnect();
   }, [hasView]);
-  const hand = useMemo(() => (view ? sortHand(view.revealed ? view.revealed[which][view.seat] ?? [] : view.hand, view.trump, cardPrefs.sort) : []), [view, cardPrefs.sort, which]);
+  const { hideOpponentPoints } = useOpponentPointsPref();
+  // The board scales down to the room between the score strip and your actions, so the page never scrolls.
+  const stage = useRef<HTMLDivElement>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState({ scale: 1, w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const measure = () => {
+      const s = stage.current, b = boardRef.current;
+      if (!s || !b) return;
+      // Sideways on a phone the board's pieces sit straight in the page grid, and nothing scales.
+      const flat = getComputedStyle(s).display === "contents";
+      const w = b.offsetWidth, h = b.offsetHeight, room = s.clientHeight - parseFloat(getComputedStyle(s).paddingTop || "0");
+      const scale = flat ? 1 : Math.min(1, room / Math.max(1, h), s.clientWidth / Math.max(1, w));
+      setFit((prev) => (prev.scale === scale && prev.w === w && prev.h === h ? prev : { scale, w, h }));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (stage.current) ro.observe(stage.current);
+    if (boardRef.current) ro.observe(boardRef.current);
+    return () => ro.disconnect();
+  }, [hasView]);
+  // Meld lies on the table in front of each player from the lay-down until the first lead.
+  const laidOf = useCallback((seat: SeatIndex): CardId[] => view && view.phase === "melding" && !view.revealed
+    ? sortHand([...new Set((view.melds[seat] ?? []).flatMap((m) => m.cards))], view.trump, cardPrefs.sort) : [], [view, cardPrefs.sort]);
+  const hand = useMemo(() => {
+    if (!view) return [];
+    const laid = new Set(laidOf(view.seat));
+    return sortHand((view.revealed ? view.revealed[which][view.seat] ?? [] : view.hand).filter((c) => !laid.has(c)), view.trump, cardPrefs.sort);
+  }, [view, cardPrefs.sort, which, laidOf]);
   const revealedFor = (seat: SeatIndex): CardId[] | undefined => view?.revealed ? sortHand(view.revealed[which][seat] ?? [], view.trump, cardPrefs.sort) : undefined;
 
   if (!view) return <div className="flex-1 px-6 text-chalk-faint">{error ?? "Dealing."}</div>;
@@ -468,12 +524,52 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   const overlap = cardW - step;
   const scrollHand = phone && handW > 0 && cardW + (hand.length - 1) * step > handW + 0.5;
 
+  // Numbers only beside each name; the breakdown is a tap away. The other side's meld and totals hide with the preference, bids never do.
+  const sum = (seat: SeatIndex) => (view.melds[seat] ?? []).reduce((n, m) => n + m.points, 0);
+  const facts: ScoreFacts = {
+    phase: view.phase, handNumber: view.handNumber, dealer: view.dealer, bidder: view.bidder, highBid: view.highBid, trump: view.trump, bids: view.bids,
+    meldPoints: { 0: sum(0), 1: sum(1), 2: sum(2), 3: sum(3) }, counters: view.recap.counters, history: view.history,
+  };
+  const over = view.phase === "hand_over" || view.phase === "game_over";
+  const hidePoints = hideOpponentPoints && !over;
+  const scoreOf = (seat: SeatIndex): SeatScore => {
+    const score = seatScore(facts, seat, nameOf, view.phase === "melding");
+    // Nothing to count until a seat has laid down or said it has no meld.
+    if (view.phase === "melding" && !view.meldConfirmed[seat] && !view.melds[seat]?.length) score.small = null;
+    return hidePoints && teamOf(seat) !== myTeam && view.phase !== "bidding" ? { ...score, total: null, small: null, rows: [] } : score;
+  };
+  const seatProps = (r: 1 | 2 | 3) => {
+    const seat = seatAt(r);
+    return { seat, view, name: nameOf(seat), bot: isBot(seat), score: scoreOf(seat), faceUp: revealedFor(seat), laid: laidOf(seat).length, standIn: standInFor(seat), makeHost: makeHostFor(seat), compact: short };
+  };
+  const them: Team = myTeam === "red" ? "blue" : "red";
+  const peeking = over && !recapOpen && peekKey === `${view.handNumber}-${view.phase}`;
+  const linkCls = "tap-link text-left text-sm text-chalk-faint underline underline-offset-4 hover:text-chalk disabled:opacity-60";
+
   return (
-    <div className="board mx-auto grid w-full max-w-7xl flex-1 gap-6 px-4 pb-3 sm:pb-6 lg:grid-cols-[1fr_280px] lg:px-6"
-      data-motion={motion} style={{ "--pm": `${slideMs}ms`, "--sd": `${holdMs}ms`, "--sm": `${sweepMs}ms` } as React.CSSProperties}>
-      <section className="board-flat flex min-h-[70vh] min-w-0 flex-col">
+    <div className="board relative flex min-h-0 w-full flex-1 flex-col overflow-hidden"
+      data-motion={motion} style={{ "--pm": `${slideMs}ms`, "--sd": `${holdMs}ms`, "--sm": `${sweepMs}ms`, paddingBottom: peeking ? "4.5rem" : undefined } as React.CSSProperties}>
+      <div className={`board-flat flex min-h-0 flex-1 flex-col ${menu ? "lg:pr-[380px]" : ""}`} inert={menu && !wide ? true : undefined}>
+        {/* One slim strip: the hand, the score, and the way to everything else. */}
+        <div className="board-score flex shrink-0 flex-wrap items-center justify-between gap-x-3 px-3 py-1.5 text-sm tabular-nums sm:px-4">
+          <p className="min-w-0 truncate">
+            <span className="font-semibold">Hand {view.handNumber}</span>
+            {view.dealer === view.seat && view.phase === "bidding" && <span className="text-chalk-faint"> · you deal</span>}
+            {view.highBid && <span className="text-chalk-faint"> · <span className="text-chalk">{view.highBid.shoot ? "moon" : view.highBid.amount}</span>{view.trump && <span style={{ color: view.trump === "H" || view.trump === "D" ? "var(--deck-red-soft)" : "var(--chalk)" }}>{SUIT_GLYPH[view.trump]}</span>} {nameOf(view.highBid.seat)}</span>}
+          </p>
+          <p className="whitespace-nowrap short:order-last short:basis-full">
+            <span className={myTeam === "red" ? "text-deck-red-soft" : "text-deck-blue-soft"}>Us</span> {view.score[myTeam].toLocaleString()}
+            <span className="px-1.5 text-chalk-faint">·</span>
+            <span className={them === "red" ? "text-deck-red-soft" : "text-deck-blue-soft"}>Them</span> {hidePoints ? "Hidden" : view.score[them].toLocaleString()}
+          </p>
+          <button ref={menuButton} type="button" onClick={() => setMenu((o) => !o)} aria-expanded={menu} aria-controls="table-menu"
+            aria-label={unread > 0 ? `Menu, ${unread} unread ${unread === 1 ? "message" : "messages"}` : undefined}
+            className="tap-link -mr-1 text-sm text-chalk-faint underline underline-offset-4 hover:text-chalk">
+            Menu{unread > 0 && <span aria-hidden className="ml-1 rounded-full bg-brass px-1.5 text-xs font-semibold text-ink no-underline">{unread}</span>}
+          </button>
+        </div>
         {paused && (
-          <div role="status" className="board-banner panel mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3">
+          <div role="status" className="board-banner panel mx-2 mb-1 flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5 sm:mx-auto sm:w-[min(100%-1rem,760px)]">
             <p className="text-sm">
               {canResume
                 ? <>Paused by {paused.by === me.id ? "you" : paused.name}{paused.reason ? `: ${paused.reason}` : ""}.</>
@@ -482,18 +578,26 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
             {canResume && <button type="button" className="btn btn-ink" style={{ height: "2.25rem" }} onClick={resumeTable}>Resume</button>}
           </div>
         )}
-        <div aria-disabled={paused ? true : undefined} inert={paused ? true : undefined} className={`board-flat flex min-w-0 flex-1 flex-col ${paused ? "pointer-events-none opacity-70" : ""}`}>
-        {reconnecting && <p role="status" className="board-note mb-1 text-center text-xs text-chalk-faint">Reconnecting to the table.</p>}
-        {/* partner across */}
-        <OpponentRow className="board-north" compact={short} seat={seatAt(2)} faceUp={revealedFor(seatAt(2))} view={view} name={nameOf(seatAt(2))} align="center" bot={isBot(seatAt(2))} standIn={standInFor(seatAt(2))} makeHost={makeHostFor(seatAt(2))} />
-        <div className="board-flat grid flex-1 grid-cols-[minmax(64px,auto)_minmax(0,1fr)_minmax(64px,auto)] items-center gap-2">
-          <OpponentRow className="board-west" compact={short} seat={seatAt(1)} faceUp={revealedFor(seatAt(1))} view={view} name={nameOf(seatAt(1))} align="left" bot={isBot(seatAt(1))} standIn={standInFor(seatAt(1))} makeHost={makeHostFor(seatAt(1))} />
-          <Centre compact={short} view={view} trick={trickCards} rel={rel} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge} />
-          <OpponentRow className="board-east" compact={short} seat={seatAt(3)} faceUp={revealedFor(seatAt(3))} view={view} name={nameOf(seatAt(3))} align="right" bot={isBot(seatAt(3))} standIn={standInFor(seatAt(3))} makeHost={makeHostFor(seatAt(3))} />
+        <div aria-disabled={paused ? true : undefined} inert={paused ? true : undefined} className={`board-flat flex min-h-0 min-w-0 flex-1 flex-col px-3 pb-[max(.5rem,env(safe-area-inset-bottom))] sm:px-4 ${paused ? "pointer-events-none opacity-70" : ""}`}>
+        {reconnecting && <p role="status" className="board-note mb-1 shrink-0 text-center text-xs text-chalk-faint">Reconnecting to the table.</p>}
+        {/* Anchored at the top: when the action bar grows or shrinks, the room below the board changes, not the board. */}
+        <div ref={stage} className="board-flat flex min-h-0 flex-1 items-start justify-center overflow-hidden pt-[clamp(0px,calc((100dvh-44rem)/2),3rem)]">
+          <div className="board-flat" style={fit.scale < 1 ? { width: fit.w * fit.scale, height: fit.h * fit.scale } : undefined}>
+            <div ref={boardRef} className="board-flat w-[min(100vw-1.5rem,760px)] origin-top-left" style={{ transform: fit.scale < 1 ? `scale(${fit.scale})` : undefined }}>
+              {/* partner across */}
+              <OpponentRow className="board-north" align="center" {...seatProps(2)} />
+              <div className="board-flat grid grid-cols-[minmax(64px,auto)_minmax(0,1fr)_minmax(64px,auto)] items-center gap-2">
+                <OpponentRow className="board-west" align="left" {...seatProps(1)} />
+                <Centre compact={short} view={view} trick={trickCards} rel={rel} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge}
+                  laid={{ 0: laidOf(seatAt(0)), 1: laidOf(seatAt(1)), 2: laidOf(seatAt(2)), 3: laidOf(seatAt(3)) }} lit={lit} />
+                <OpponentRow className="board-east" align="right" {...seatProps(3)} />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* action bar */}
-        <div ref={actionRef} {...keepFocus} className="board-action mt-2 min-h-[64px] sm:mt-4 sm:min-h-[88px]">
+        <div ref={actionRef} {...keepFocus} className="board-action mt-1 min-h-[64px] shrink-0 sm:mt-2 sm:min-h-[88px]">
           <ActionBar key={view.rev} view={view} isMyTurn={isMyTurn} selected={selected} busy={busy} act={act} nameOf={nameOf} autoMeld={cardPrefs.autoMeld} />
           {/* One slot of the same height whether the meld row or the "Review meld" link is in it, so the hand never moves. */}
           {view.phase === "playing" && (
@@ -528,7 +632,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
             </button>
           </div>
         )}
-        <div ref={handRef} tabIndex={-1} {...keepFocus} aria-label="Your hand" className={`board-hand relative mt-2 flex outline-none sm:mt-3 ${scrollHand ? "hand-scroll overflow-x-auto" : "justify-center"}`} style={{ minHeight: (cardW * 7) / 5 + (short ? 8 : 24), paddingTop: scrollHand ? 16 : undefined }}>
+        <div ref={handRef} tabIndex={-1} {...keepFocus} aria-label="Your hand" className={`board-hand relative mt-1 flex shrink-0 outline-none sm:mt-2 ${scrollHand ? "hand-scroll overflow-x-auto" : "justify-center"}`} style={{ minHeight: (cardW * 7) / 5 + (short ? 8 : 20), paddingTop: scrollHand ? 16 : undefined }}>
           <div className={`flex items-end ${scrollHand ? "mx-auto w-max" : ""}`} style={{ paddingLeft: overlap }}>
             {hand.map((c) => {
               const playable = view.phase === "playing" ? view.legal.playableCards.includes(c) : picking;
@@ -552,42 +656,75 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
           )}
         </div>
         </div>
-        {(view.phase === "hand_over" || view.phase === "game_over") && !recapOpen && (() => {
-          const key = `${view.handNumber}-${view.phase}`;
-          return <ResultSheet local={local} view={view} nameOf={nameOf} host={isHostNow ? null : snap.seats.find((x) => x.user_id === snap.table.host)?.profile?.display_name ?? "the host"}
-            busy={busy} onNext={() => act({ type: "next_hand" })} onRematch={rematch} readyInfo={readyInfo}
-            countdown={{ handKey: `${snap.table.id}-${code}-${key}`, blocked: !!paused || !!error || reconnecting || snap.table.status !== "playing",
-              onNext: countdownNext }}
-            which={which} setWhich={setWhich} peek={peekKey === key} setPeek={(p) => setPeekKey(p ? key : null)} replayHref={replayHref} />;
-        })()}
-        {recapOpen && <div className="board-recap"><Recap view={view} nameOf={nameOf} lastSeenRev={lastSeenRev} onClose={() => setRecapOpen(false)} /></div>}
-        {/* Two deliberate rows on phones, so a wrap never strands a separator: who you are and your settings, then table actions. */}
-        <div className="board-foot mt-1 flex flex-col items-center text-xs text-chalk-faint sm:mt-2 sm:flex-row sm:flex-wrap sm:justify-center">
-          <Dotted items={[
-            <span key="seat">{SEAT_LABEL[view.seat]}</span>,
-            <span key="team" className={myTeam === "red" ? "text-deck-red-soft" : "text-deck-blue-soft"}>{myTeam === "red" ? "red" : "blue"} team</span>,
-            view.trump && <span key="trump">trump {SUIT_NAME[view.trump]}</span>,
-            <button key="sound" type="button" onClick={toggleChime} aria-pressed={chime} className="tap-link underline hover:text-chalk">Sound {chime ? "on" : "off"}</button>,
-            <CardOptions key="cards" />,
-          ]} />
-          <span aria-hidden className="mx-1.5 hidden sm:inline">·</span>
-          <Dotted items={[
-            push.supported && view.rules.pace === "leisurely" && (
-              <button key="push" type="button" onClick={() => void (push.enabled ? push.disable() : push.enable())} disabled={push.busy} aria-pressed={push.enabled} className="tap-link underline hover:text-chalk disabled:opacity-60">
-                {push.busy ? "Turning on…" : push.enabled ? "Notifications on" : "Notify me"}
-              </button>
-            ),
-            <button key="hand" type="button" onClick={() => setRecapOpen((o) => !o)} aria-expanded={recapOpen} className="tap-link underline hover:text-chalk">This hand</button>,
-            replayHref && <Link key="replay" href={replayHref} className="tap-link underline hover:text-chalk">Review the game</Link>,
-            view.phase !== "game_over" && snap.mySeat !== null && !paused && <button key="pause" type="button" onClick={pauseTable} className="tap-link underline hover:text-chalk">Pause the table</button>,
-            view.phase === "playing" && snap.mySeat !== null && <button key="leave" type="button" onClick={leave} className="tap-link underline hover:text-chalk">Leave the game</button>,
-          ]} />
-        </div>
-        {push.error && push.supported && view.rules.pace === "leisurely" && <p role="status" className="col-span-full mt-1 text-center text-xs text-chalk-faint">{push.error}</p>}
-      </section>
-
+      </div>
+      {over && !menu && (() => {
+        const key = `${view.handNumber}-${view.phase}`;
+        return <ResultSheet local={local} view={view} nameOf={nameOf} host={isHostNow ? null : snap.seats.find((x) => x.user_id === snap.table.host)?.profile?.display_name ?? "the host"}
+          busy={busy} onNext={() => act({ type: "next_hand" })} onRematch={rematch} readyInfo={readyInfo}
+          countdown={{ handKey: `${snap.table.id}-${code}-${key}`, blocked: !!paused || !!error || reconnecting || snap.table.status !== "playing",
+            onNext: countdownNext }}
+          which={which} setWhich={setWhich} peek={peekKey === key} setPeek={(p) => setPeekKey(p ? key : null)} replayHref={replayHref} />;
+      })()}
       <Announcer view={view} nameOf={nameOf} />
-      <Scorepad view={view} myTeam={myTeam} nameOf={nameOf} />
+
+      {menu && <button type="button" aria-label="Close the menu" tabIndex={-1} onClick={() => setMenu(false)} className="fixed inset-0 z-30 bg-black/50 lg:hidden" />}
+      <aside id="table-menu" aria-label="Table menu" hidden={!menu}
+        className="fixed inset-y-0 right-0 z-40 flex w-full flex-col bg-cloth-deep pt-[env(safe-area-inset-top)] shadow-2xl sm:w-[380px] lg:border-l lg:border-chalk-ghost">
+        <div className="flex items-center justify-between gap-3 px-4 pt-3">
+          <p className="flex items-baseline gap-2 text-sm text-chalk-faint">
+            Table <span className="code text-chalk" style={{ fontSize: 22, letterSpacing: ".14em" }}>{code}</span>
+          </p>
+          <button ref={closeButton} type="button" onClick={() => setMenu(false)} className="tap-link -mr-2 shrink-0 text-sm text-chalk-faint underline underline-offset-4 hover:text-chalk">Close</button>
+        </div>
+        <div role="tablist" aria-label="Menu" className="mx-4 mt-2 flex gap-1 rounded-full bg-black/25 p-1 text-sm">
+          {([["score", "Score"], ["hand", "This hand"], ...(chat ? [["talk", unread > 0 ? `Talk (${unread})` : "Talk"]] : []), ["options", "Options"]] as [MenuTab, string][]).map(([t, label]) => (
+            <button key={t} type="button" role="tab" id={`menu-tab-${t}`} aria-selected={tab === t} aria-controls={`menu-panel-${t}`} onClick={() => setTab(t)}
+              className={`min-h-9 flex-1 whitespace-nowrap rounded-full px-2 ${tab === t ? "bg-chalk text-ink" : "text-chalk-faint hover:text-chalk"}`}>{label}</button>
+          ))}
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+          {tab === "score" && (
+            <div role="tabpanel" id="menu-panel-score" aria-labelledby="menu-tab-score">
+              <Scorepad view={view} myTeam={myTeam} nameOf={nameOf} hideOpponentPoints={hidePoints} />
+            </div>
+          )}
+          {recapOpen && (
+            <div role="tabpanel" id="menu-panel-hand" aria-labelledby="menu-tab-hand">
+              <Recap view={view} nameOf={nameOf} lastSeenRev={lastSeenRev} />
+            </div>
+          )}
+          {chat && (
+            <div role="tabpanel" id="menu-panel-talk" aria-labelledby="menu-tab-talk" hidden={tab !== "talk"} className="panel h-full min-h-[18rem] overflow-hidden">
+              {chat(menu && tab === "talk", setUnread)}
+            </div>
+          )}
+          {tab === "options" && (
+            <div role="tabpanel" id="menu-panel-options" aria-labelledby="menu-tab-options" className="flex flex-col gap-4">
+              <p className="text-sm text-chalk-faint">
+                {SEAT_LABEL[view.seat]} · <span className={myTeam === "red" ? "text-deck-red-soft" : "text-deck-blue-soft"}>{myTeam} team</span>
+                {view.trump && <> · trump {SUIT_NAME[view.trump]}</>}
+              </p>
+              <div className="flex flex-col items-start">
+                <button type="button" onClick={toggleChime} aria-pressed={chime} className={linkCls}>Sound {chime ? "on" : "off"}</button>
+                {push.supported && view.rules.pace === "leisurely" && (
+                  <button type="button" onClick={() => void (push.enabled ? push.disable() : push.enable())} disabled={push.busy} aria-pressed={push.enabled} className={linkCls}>
+                    {push.busy ? "Turning on…" : push.enabled ? "Notifications on" : "Notify me"}
+                  </button>
+                )}
+                {push.error && push.supported && view.rules.pace === "leisurely" && <p role="status" className="text-xs text-chalk-faint">{push.error}</p>}
+                {replayHref && <Link href={replayHref} className={linkCls}>Review the game</Link>}
+                {view.phase !== "game_over" && snap.mySeat !== null && !paused && <button type="button" onClick={() => { setMenu(false); void pauseTable(); }} className={linkCls}>Pause the table</button>}
+                {view.phase === "playing" && snap.mySeat !== null && <button type="button" onClick={leave} className={linkCls}>Leave the game</button>}
+                {!local && <Link href="/home" className={linkCls}>Your tables</Link>}
+              </div>
+              <div className="panel flex flex-col gap-2.5 p-3 text-left">
+                <p className="text-sm font-semibold text-ink">Cards</p>
+                <CardOptionsPanel />
+              </div>
+            </div>
+          )}
+        </div>
+      </aside>
     </div>
   );
 }
@@ -613,66 +750,56 @@ function shootLine(who: string, over: boolean): string {
   return over ? `${who} shot the moon` : `${who} ${who === "You" ? "are" : "is"} shooting the moon`;
 }
 
-/** Items on one row with a dot between each, never at either end. */
-function Dotted({ items }: { items: React.ReactNode[] }) {
-  const shown = items.filter(Boolean);
-  return (
-    <span className="flex flex-wrap items-center justify-center">
-      {shown.map((item, i) => <span key={i} className="inline-flex items-center">{i > 0 && <span aria-hidden className="mx-[0.25em]">·</span>}{item}</span>)}
-    </span>
-  );
-}
-
 const REV_W = 36;
-const REV_H = (REV_W * 7) / 5;
 const MELD_W = 28;
-const MELD_H = (MELD_W * 7) / 5;
 
-function OpponentRow({ seat, view, name, align, bot = false, standIn, makeHost, faceUp, compact = false, className = "" }: { faceUp?: CardId[]; seat: SeatIndex; view: PlayerView; name: string; align: "left" | "center" | "right"; bot?: boolean; standIn?: { away: boolean; run: () => void }; makeHost?: () => void; compact?: boolean; className?: string }) {
-  const n = view.handCounts[seat];
+/** A player round the table: the name chip with its score tag, then their cards (backs while playing, face up at the end). */
+function OpponentRow({ seat, view, name, align, score, laid, bot = false, standIn, makeHost, faceUp, compact = false, className = "" }: {
+  faceUp?: CardId[]; seat: SeatIndex; view: PlayerView; name: string; align: "left" | "center" | "right"; score: SeatScore;
+  /** how many of their cards lie on the table as meld */
+  laid: number;
+  bot?: boolean; standIn?: { away: boolean; run: () => void }; makeHost?: () => void; compact?: boolean; className?: string;
+}) {
+  // The engine keeps meld in the hand; while it lies on the table it is not among the backs.
+  const n = view.handCounts[seat] - laid;
   const team = teamOf(seat);
   const active = view.turn === seat;
-  const meldCards = faceUp || view.phase === "playing" ? [] : [...new Set((view.melds[seat] ?? []).flatMap((m) => m.cards))];
-  const bid = view.bids.filter((b) => b.seat === seat).at(-1);
   const vertical = align !== "center";
-  const status = view.dealer === seat && view.phase === "bidding" && !bid ? "dealer"
-    : view.phase === "bidding" && bid ? (bid.amount === null ? "passed" : bid.shoot ? "shot the moon" : `bid ${bid.amount}`)
-    : view.dealer === seat ? "dealer" : null;
   const items = align === "left" ? "items-start" : align === "right" ? "items-end" : "items-center";
+  const chip = (
+    <>
+      <span className="relative shrink-0">
+        <Avatar name={name} team={team} size={28} bot={bot} />
+        {score.dealer && <DealerMark />}
+      </span>
+      <span className={`truncate text-xs font-semibold ${compact ? "max-w-[88px]" : "max-w-[96px] sm:text-sm"}`}>{name}{score.dealer && <span className="sr-only">, dealer</span>}</span>
+    </>
+  );
   if (compact) {
-    return <CompactSeat {...{ className, team, active, name, bot, status, n, faceUp, meldCards, standIn }} across={!vertical} />;
+    return <CompactSeat {...{ className, team, active, name, chip, score, n, faceUp, standIn, align }} />;
   }
   return (
     <div className={`group flex flex-col ${items} gap-1 py-1 sm:gap-1.5 sm:py-2 min-w-0 ${className}`}>
-      <div className={`flex ${vertical ? "flex-col" : "flex-row"} items-center gap-1 sm:gap-2 rounded-2xl px-2 py-1 max-w-full`}
-        style={active ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
-        <Avatar name={name} team={team} size={28} bot={bot} />
-        <span className="text-xs sm:text-sm font-semibold truncate max-w-[96px]">{name}</span>
-        {status && <span className="text-xs text-chalk-faint whitespace-nowrap">{status}</span>}
-      </div>
-      <div className={`flex items-center gap-1 ${align === "right" ? "flex-row-reverse" : "flex-row"}`}>
-        <div className={`flex ${vertical ? "flex-col" : "flex-row"}`} style={vertical ? { padding: "0 7px" } : undefined} aria-label={`${n} cards`}>
-          {faceUp ? faceUp.map((c, i) => vertical ? (
-            <div key={c} className="relative shrink-0" style={{ width: REV_H, height: i === faceUp.length - 1 ? REV_W : 17, zIndex: align === "right" ? faceUp.length - i : i }}>
-              <PlayingCard card={c} width={REV_W} style={{ position: "absolute", left: "50%", top: REV_W / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg)` }} />
-            </div>
-          ) : <PlayingCard key={c} card={c} width={REV_W} style={{ marginLeft: i ? -REV_W * 0.45 : 0 }} />)
-          : Array.from({ length: n }).map((_, i) => (
-            <CardBack key={i} width={34} team={team}
-              style={vertical ? { marginTop: i ? -40 : 0, transform: align === "left" ? "rotate(90deg)" : "rotate(-90deg)" } : { marginLeft: i ? -24 : 0 }} />
-          ))}
+      <div className={`relative flex max-w-full items-center ${vertical ? "flex-col" : "flex-row"}`}>
+        <div className={`flex ${vertical ? "flex-col" : "flex-row"} items-center gap-1 sm:gap-2 rounded-2xl px-2 py-1 max-w-full`}
+          style={active ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
+          {chip}
         </div>
-        {vertical && meldCards.length > 0 && (
-          <div className="flex flex-col" title="Meld laid down" aria-label="Meld laid down">
-            {meldCards.map((c, i) => (
-              <div key={c} className="relative shrink-0"
-                style={{ width: MELD_H, height: MELD_W, marginTop: i ? -(MELD_W - 12) : 0, zIndex: align === "right" ? meldCards.length - i : i }}>
-                <PlayingCard card={c} width={MELD_W}
-                  style={{ position: "absolute", left: "50%", top: "50%", transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg)` }} />
-              </div>
-            ))}
+        {/* Out of the layout flow, so nothing moves when a number appears. */}
+        <div className={vertical ? "flex h-7 items-center" : "absolute left-full top-1/2 ml-1 -translate-y-1/2 whitespace-nowrap"}>
+          <ScoreTag score={score} name={name} align={align} />
+        </div>
+      </div>
+      <div className={`flex ${vertical ? "flex-col" : "flex-row"}`} style={vertical ? { padding: "0 7px" } : undefined} aria-label={`${n} cards`}>
+        {faceUp ? faceUp.map((c, i) => vertical ? (
+          <div key={c} className="relative shrink-0" style={{ width: (REV_W * 7) / 5, height: i === faceUp.length - 1 ? REV_W : 17, zIndex: align === "right" ? faceUp.length - i : i }}>
+            <PlayingCard card={c} width={REV_W} style={{ position: "absolute", left: "50%", top: REV_W / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg)` }} />
           </div>
-        )}
+        ) : <PlayingCard key={c} card={c} width={REV_W} style={{ marginLeft: i ? -REV_W * 0.45 : 0 }} />)
+        : Array.from({ length: n }).map((_, i) => (
+          <CardBack key={i} width={34} team={team}
+            style={vertical ? { marginTop: i ? -40 : 0, transform: align === "left" ? "rotate(90deg)" : "rotate(-90deg)" } : { marginLeft: i ? -24 : 0 }} />
+        ))}
       </div>
       {standIn && (
         <button type="button" onClick={standIn.run}
@@ -686,38 +813,36 @@ function OpponentRow({ seat, view, name, align, bot = false, standIn, makeHost, 
           Make host
         </button>
       )}
-      {!vertical && meldCards.length > 0 && (
-        <div className="flex flex-wrap justify-center gap-1 max-w-[200px]" title="Meld laid down">
-          {meldCards.map((c) => <PlayingCard key={c} card={c} width={MELD_W} />)}
-        </div>
-      )}
     </div>
   );
 }
 
 /**
  * An opponent on a phone held sideways: name, turn ring and a card count in place of the fanned backs.
- * Meld laid down, and hands shown at the end, stay face up in a tight overlapping fan.
+ * Hands shown at the end stay face up in a tight overlapping fan.
  */
-function CompactSeat({ className, team, active, name, bot, status, n, faceUp, meldCards, standIn, across }: {
-  className: string; team: Team; active: boolean; name: string; bot: boolean; status: string | null; n: number;
-  faceUp?: CardId[]; meldCards: CardId[]; standIn?: { away: boolean; run: () => void }; across: boolean;
+function CompactSeat({ className, team, active, name, chip, score, n, faceUp, standIn, align }: {
+  className: string; team: Team; active: boolean; name: string; chip: React.ReactNode; score: SeatScore; n: number;
+  faceUp?: CardId[]; standIn?: { away: boolean; run: () => void }; align: "left" | "center" | "right";
 }) {
-  const shown = faceUp ?? meldCards;
+  const across = align === "center";
   return (
     <div className={`flex min-w-0 items-center gap-2 ${across ? "flex-row justify-center" : "flex-col"} ${className}`}>
-      <div className={`flex max-w-full items-center gap-x-2 gap-y-0.5 rounded-2xl px-2 py-1 ${across ? "flex-row" : "flex-col"}`}
-        style={active ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
-        <Avatar name={name} team={team} size={28} bot={bot} />
-        <span className="max-w-[88px] truncate text-xs font-semibold">{name}</span>
-        {status && <span className="whitespace-nowrap text-xs text-chalk-faint">{status}</span>}
-        {!faceUp && (
-          <span className="flex items-center gap-1 text-xs tabular-nums text-chalk-faint" aria-label={`${n} cards`}>
-            <CardBack width={12} team={team} />{n}
-          </span>
-        )}
+      <div className={`relative flex max-w-full items-center ${across ? "flex-row" : "flex-col"}`}>
+        <div className={`flex max-w-full items-center gap-x-2 gap-y-0.5 rounded-2xl px-2 py-1 ${across ? "flex-row" : "flex-col"}`}
+          style={active ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
+          {chip}
+          {!faceUp && (
+            <span className="flex items-center gap-1 text-xs tabular-nums text-chalk-faint" aria-label={`${n} cards`}>
+              <CardBack width={12} team={team} />{n}
+            </span>
+          )}
+        </div>
+        <div className={across ? "absolute left-full top-1/2 ml-1 -translate-y-1/2 whitespace-nowrap" : "flex h-7 items-center"}>
+          <ScoreTag score={score} name={name} align={align} />
+        </div>
       </div>
-      {shown.length > 0 && <SmallFan cards={shown} perRow={across ? shown.length : 5} label={faceUp ? `${n} cards` : "Meld laid down"} />}
+      {faceUp && faceUp.length > 0 && <SmallFan cards={faceUp} perRow={across ? faceUp.length : 5} label={`${n} cards`} />}
       {/* As on an upright phone: no hover here, so the hand-off shows once a seat seems away, and making a host waits for a bigger screen. */}
       {standIn?.away && (
         <button type="button" onClick={standIn.run} className="tap max-w-[120px] text-center text-xs text-chalk-faint underline hover:text-chalk">
@@ -729,13 +854,13 @@ function CompactSeat({ className, team, active, name, bot, status, n, faceUp, me
 }
 
 /** Small face-up cards overlapping so each shows only its corner index, wrapping after `perRow`. */
-function SmallFan({ cards, perRow, label }: { cards: CardId[]; perRow: number; label: string }) {
-  const w = MELD_W, peekX = 14, peekY = 20;
+function SmallFan({ cards, perRow, label, width = MELD_W, lit }: { cards: CardId[]; perRow: number; label: string; width?: number; lit?: CardId[] | null }) {
+  const w = width, h = (w * 7) / 5, peekX = Math.round(w / 2), peekY = Math.round(w * 0.72);
   const cols = Math.min(perRow, cards.length);
   return (
     <div className="flex flex-wrap" aria-label={label} title={label}
-      style={{ width: w + (cols - 1) * peekX + 0.5, paddingLeft: w - peekX, paddingTop: MELD_H - peekY }}>
-      {cards.map((c) => <PlayingCard key={c} card={c} width={w} style={{ marginLeft: peekX - w, marginTop: peekY - MELD_H, flexShrink: 0 }} />)}
+      style={{ width: w + (cols - 1) * peekX + 0.5, paddingLeft: w - peekX, paddingTop: h - peekY }}>
+      {cards.map((c) => <PlayingCard key={c} card={c} width={w} selected={lit?.includes(c) ?? false} style={{ marginLeft: peekX - w, marginTop: peekY - h, flexShrink: 0 }} />)}
     </div>
   );
 }
@@ -795,9 +920,13 @@ function MeldLine({ rules, hand, trump, lit, setLit }: { rules: PlayerView["rule
   );
 }
 
-function Centre({ view, trick, rel, nameOf, stalled, nudge, compact = false }: {
+function Centre({ view, trick, rel, nameOf, stalled, nudge, compact = false, laid, lit }: {
   view: PlayerView; trick: PlayerView["currentTrick"]; rel: (s: SeatIndex) => 0 | 1 | 2 | 3; nameOf: (s: SeatIndex) => string;
   stalled: boolean; nudge: () => void; compact?: boolean;
+  /** each seat's meld lying on the cloth in front of them, by position round the table from you */
+  laid: Record<0 | 1 | 2 | 3, CardId[]>;
+  /** your meld cards lit from the meld readout */
+  lit: CardId[] | null;
 }) {
   // Sideways on a phone the trick shrinks to fit between your hand and the seat across.
   const trickW = compact ? 42 : 56;
@@ -807,6 +936,10 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, compact = false }: {
   const spots: Record<0 | 1 | 2 | 3, string> = {
     0: "bottom-0 left-1/2 -translate-x-1/2", 1: "left-0 top-1/2 -translate-y-1/2", 2: "top-0 left-1/2 -translate-x-1/2", 3: "right-0 top-1/2 -translate-y-1/2",
   };
+  const meldSpots: Record<0 | 1 | 2 | 3, string> = {
+    0: "bottom-[4%] left-1/2 -translate-x-1/2", 1: "left-[5%] top-1/2 -translate-y-1/2", 2: "top-[4%] left-1/2 -translate-x-1/2", 3: "right-[5%] top-1/2 -translate-y-1/2",
+  };
+  const seatFrom = (r: number) => (((view.seat + r) % 4) as SeatIndex);
   const prompt = (() => {
     const who = view.turn !== null ? nameOf(view.turn) : null;
     switch (view.phase) {
@@ -841,6 +974,13 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, compact = false }: {
         <span aria-hidden className="pointer-events-none absolute inset-0 flex select-none items-center justify-center leading-none"
           style={{ fontSize: compact ? 84 : 128, color: "#fff", opacity: 0.07 }}>{SUIT_GLYPH[view.trump]}</span>
       )}
+      {/* Meld lies on the cloth in front of whoever laid it, until the first lead. */}
+      {([0, 1, 2, 3] as const).map((r) => laid[r].length > 0 && (
+        <div key={`meld${r}`} className={`absolute ${meldSpots[r]}`}>
+          <SmallFan cards={laid[r]} width={compact ? 24 : 30} perRow={r % 2 ? (compact ? 4 : 3) : 9} lit={r === 0 ? lit : null}
+            label={`${r === 0 ? "Your" : `${nameOf(seatFrom(r))}'s`} meld: ${laid[r].length} cards`} />
+        </div>
+      ))}
       {shown?.plays.map((p) => {
         const r = rel(p.seat);
         const sweeping = done && !dim && !peeking;
@@ -854,7 +994,8 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, compact = false }: {
         );
       })}
     </div>
-    <div className={`flex flex-col items-center gap-0.5 text-center ${compact ? "mt-0.5" : "mt-1"}`}>
+    {/* Room for three lines kept, so the board does not grow and shrink (and rescale) as lines come and go. */}
+    <div className={`flex flex-col items-center gap-0.5 text-center ${compact ? "mt-0.5" : "mt-1 min-h-[4.75rem]"}`}>
       {peeking && last ? (
         <p className="display text-chalk" style={{ fontSize: 18 }}>Last trick: {nameOf(last.winner!)} took it.</p>
       ) : (

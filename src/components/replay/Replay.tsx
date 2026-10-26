@@ -78,21 +78,27 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
   // The board scales down to the room between the top strip and the controls, so the page never scrolls.
   const stage = useRef<HTMLDivElement>(null);
   const board = useRef<HTMLDivElement>(null);
-  const [fit, setFit] = useState({ scale: 1, w: 0, h: 0 });
+  // Within a hand the scale only shrinks, so the board does not breathe as meld comes and goes;
+  // a new hand, or a change in the room available, measures afresh.
+  const [fit, setFit] = useState({ scale: 1, w: 0, h: 0, room: "", hand: 0 });
+  const handNow = game.walk && moves.length ? game.walk.frames[moves[cursor].frame].handNumber : 0;
   useLayoutEffect(() => {
     const measure = () => {
       const s = stage.current, b = board.current;
       if (!s || !b) return;
-      const w = b.offsetWidth, h = b.offsetHeight;
-      const scale = Math.min(1, s.clientHeight / Math.max(1, h), (s.clientWidth - 16) / Math.max(1, w));
-      setFit(prev => prev.scale === scale && prev.w === w && prev.h === h ? prev : { scale, w, h });
+      const w = b.offsetWidth, h = b.offsetHeight, room = `${s.clientWidth}x${s.clientHeight}`, hand = handNow;
+      const fresh = Math.min(1, s.clientHeight / Math.max(1, h), (s.clientWidth - 16) / Math.max(1, w));
+      setFit(prev => {
+        const scale = prev.room === room && prev.hand === hand ? Math.min(prev.scale, fresh) : fresh;
+        return prev.scale === scale && prev.w === w && prev.h === h && prev.room === room && prev.hand === hand ? prev : { scale, w, h, room, hand };
+      });
     };
     measure();
     const ro = new ResizeObserver(measure);
     if (stage.current) ro.observe(stage.current);
     if (board.current) ro.observe(board.current);
     return () => ro.disconnect();
-  }, [game.walk]);
+  }, [game.walk, handNow]);
 
   const go = useCallback((to: number) => setCursor(Math.max(0, Math.min(to, moves.length - 1))), [moves.length]);
   const chapterOf = (i: number) => chapters.findIndex(c => i >= c.first && i <= c.last);
@@ -209,16 +215,16 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
           {chapters.map((c) => {
             const here = cursor >= c.first && cursor <= c.last;
             return (
-              <Fold key={`${c.hand}:${here}`} open={here} level={0} title={<><span className="font-semibold">Hand {c.hand}</span> <span className="text-chalk-faint">{c.title}</span></>}>
+              <Fold key={c.hand} open={here} level={0} title={<><span className="font-semibold">Hand {c.hand}</span> <span className="text-chalk-faint">{c.title}</span></>}>
                 {phasesOf(moves, c).map((ph) => {
                   const inside = cursor >= ph.first && cursor <= ph.last;
                   if (ph.rows) return <ol key={ph.key} className="mb-1">{ph.rows.map(i => <MoveRow key={moves[i].frame} move={moves[i]} current={i === cursor} onClick={() => pick(i)} />)}</ol>;
                   return (
-                    <Fold key={`${ph.key}:${inside}`} open={inside} level={1} title={<><span>{ph.title}</span>{ph.note && <span className="text-chalk-faint"> {ph.note}</span>}</>}>
+                    <Fold key={ph.key} open={inside} level={1} title={<><span>{ph.title}</span>{ph.note && <span className="text-chalk-faint"> {ph.note}</span>}</>}>
                       {ph.tricks ? ph.tricks.map((t) => {
                         const on = cursor >= t.first && cursor <= t.last;
                         return (
-                          <Fold key={`${t.key}:${on}`} open={on} level={2} title={<><span>{t.title}</span>{t.note && <span className="text-chalk-faint"> {t.note}</span>}</>}>
+                          <Fold key={t.key} open={on} level={2} title={<><span>{t.title}</span>{t.note && <span className="text-chalk-faint"> {t.note}</span>}</>}>
                             <ol>{range(t.first, t.last).map(i => <MoveRow key={moves[i].frame} move={moves[i]} current={i === cursor} onClick={() => pick(i)} />)}</ol>
                           </Fold>
                         );
@@ -278,12 +284,17 @@ function phasesOf(moves: Move[], c: { hand: number; first: number; last: number 
   return phases;
 }
 
-/** A disclosure that opens itself around the current move; the reader can still fold or unfold it by hand. */
+/**
+ * A disclosure that opens itself around the current move and folds again once the move leaves it.
+ * Folding or unfolding it by hand overrides that, and the choice stays as the cursor moves on.
+ */
 function Fold({ open, level, title, children }: { open: boolean; level: 0 | 1 | 2; title: React.ReactNode; children: React.ReactNode }) {
+  const [manual, setManual] = useState<boolean | null>(null);
+  const shown = manual ?? open;
   const pad = ["", "pl-3", "pl-6"][level];
   const size = ["text-sm", "text-sm", "text-xs"][level];
   return (
-    <details open={open} className={`group ${level === 0 ? "mb-2" : "mb-0.5"}`}>
+    <details open={shown} onToggle={(e) => { const now = e.currentTarget.open; if (now !== shown) setManual(now); }} className={`group ${level === 0 ? "mb-2" : "mb-0.5"}`}>
       <summary className={`flex cursor-pointer list-none items-baseline gap-1.5 rounded-md py-1 ${pad} ${size} hover:bg-chalk-ghost [&::-webkit-details-marker]:hidden`}>
         <span aria-hidden className="inline-block w-3 text-chalk-faint transition-transform group-open:rotate-90">▸</span>
         <span className="min-w-0">{title}</span>

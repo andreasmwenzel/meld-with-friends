@@ -54,15 +54,13 @@ function Cards({ cards, width = 26 }: { cards: CardId[]; width?: number }) {
 }
 
 /** Everything that has happened this hand, for tables that are played over days. */
-export function Recap({ view, nameOf, lastSeenRev, onClose }: {
-  view: PlayerView; nameOf: (s: SeatIndex) => string; lastSeenRev: number | null; onClose: () => void;
+export function Recap({ view, nameOf, lastSeenRev }: {
+  view: PlayerView; nameOf: (s: SeatIndex) => string; lastSeenRev: number | null;
 }) {
   const { prefs } = useCardPrefs();
   const r = view.recap;
   const myTeam = teamOf(view.seat);
   const them: Team = myTeam === "red" ? "blue" : "red";
-  const ref = useRef<HTMLElement>(null);
-  useEffect(() => { ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, []);
 
   // The recap has no revisions of its own, so "new" is a hint: roughly one trick per few revisions.
   const missed = lastSeenRev === null ? 0 : Math.max(0, view.rev - lastSeenRev);
@@ -87,11 +85,8 @@ export function Recap({ view, nameOf, lastSeenRev, onClose }: {
   const seatsFromMe = [0, 1, 2, 3].map((n) => ((view.seat + n) % 4) as SeatIndex);
 
   return (
-    <section ref={ref} className="panel mt-3 max-h-[70vh] overflow-y-auto p-4" aria-label="This hand so far">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="display" style={{ fontSize: 24 }}>Hand {r.handNumber} so far</h2>
-        <button type="button" onClick={onClose} className="tap-link -mr-2 text-sm text-ink-soft underline hover:text-ink">Close</button>
-      </div>
+    <section className="panel p-4" aria-label="This hand so far">
+      <h2 className="display" style={{ fontSize: 24 }}>Hand {r.handNumber} so far</h2>
 
       <div className="mt-3 space-y-4 text-[15px] leading-relaxed">
         <p>

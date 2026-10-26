@@ -52,7 +52,7 @@ if (typeof window !== "undefined" && !(window as unknown as { __meldDev?: boolea
 /** Drives the real engine locally; other seats auto-play a simple legal move. */
 export function DevGame() {
   const state = useSyncExternalStore(store.subscribe, () => store.state, () => store.state);
-  return <Game code="KQJ9TA" me={snap.seats[0].profile!} snap={snap} rev={state.rev} onTableChange={() => {}} />;
+  return <div className="flex h-dvh flex-col overflow-hidden"><Game code="KQJ9TA" me={snap.seats[0].profile!} snap={snap} rev={state.rev} onTableChange={() => {}} /></div>;
 }
 
 function jump(s: GameState, phase: "playing" | "melding" | "passing_back"): GameState {

@@ -1,6 +1,6 @@
 "use client";
 
-import type { CardId, GameState, SeatIndex, Suit, Team, Trick } from "@/engine/types";
+import type { CardId, GameState, SeatIndex, Team, Trick } from "@/engine/types";
 import { sortHand } from "@/engine/hand";
 import { PlayingCard, SUIT_GLYPH } from "@/components/cards/PlayingCard";
 import { Avatar } from "@/components/site/Avatar";

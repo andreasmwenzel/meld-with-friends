@@ -175,39 +175,37 @@ body {
 
 /* The table on a phone held sideways: one screen, no scrolling.
    The board's wrappers flatten (display: contents) so every piece lands in one grid:
-   opponents around the trick on the left, the scoreboard and your actions in a column on the right,
-   your hand along the bottom. Table chrome (settings, the table code) sits just below the fold.
+   opponents around the trick on the left, the score strip and your actions in a column on the right,
+   your hand along the bottom. Everything else is behind the strip's Menu.
    Upright phones and desktops never see any of this; the board's Tailwind classes still apply there. */
 @media (orientation: landscape) and (max-height: 500px) {
   .board {
     display: grid;
     max-width: none;
     grid-template-columns: auto minmax(0, 1fr) auto clamp(15.5rem, 33vw, 18rem);
-    grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto;
     grid-template-areas:
       "banner banner banner banner"
       "note   note   note   note"
       "west   north  east   score"
       "west   centre east   action"
-      "hand   hand   hand   action"
-      "foot   foot   foot   foot";
+      "hand   hand   hand   action";
     column-gap: .75rem;
     row-gap: 0;
     padding: .375rem max(.75rem, env(safe-area-inset-right)) 0 max(.75rem, env(safe-area-inset-left));
     --board-bottom: max(.375rem, env(safe-area-inset-bottom));
   }
-  /* The first five rows fill exactly one screen; the flexible row takes what the others leave. */
+  /* The rows fill exactly one screen; the flexible row takes what the others leave. */
   .board::before { content: ""; grid-column: 1; grid-row: 1 / 6; height: calc(100dvh - .375rem - var(--board-bottom)); width: 0; }
   .board-flat { display: contents; }
   .board-flat[inert] > * { opacity: .7; }
-  /* At a real table the table talk button holds the top left corner. */
-  .board-banner { grid-area: banner; margin-bottom: .375rem; margin-left: var(--chat-room, 0px); }
+  .board-banner { grid-area: banner; width: auto; margin: 0 0 .375rem; }
   .board-note { grid-area: note; }
   .board-north { grid-area: north; }
   .board-west { grid-area: west; align-self: center; }
   .board-east { grid-area: east; align-self: center; }
   .board-centre { grid-area: centre; align-self: center; }
-  .board-score { grid-area: score; align-self: start; }
+  .board-score { grid-area: score; align-self: start; padding: 0; }
   /* Sized by the screen, not its contents: a long action list scrolls in place. */
   .board-action {
     grid-area: action; align-self: stretch; contain: size; margin-top: .5rem;
@@ -217,13 +215,4 @@ body {
   .board-action::-webkit-scrollbar { display: none; }
   .board-armed { grid-area: hand; align-self: start; z-index: 30; }
   .board-hand { grid-area: hand; margin-top: 0; }
-  /* Below the fold: the first five rows end a little above the screen edge. */
-  .board-foot { grid-area: foot; margin-top: var(--board-bottom); padding-block: .5rem .75rem; }
-  /* Opened on request, the full scorepad and the hand recap float over the board. */
-  .board-pad {
-    position: fixed; z-index: 35; top: .5rem; right: .5rem; bottom: .5rem;
-    width: min(20rem, calc(100vw - 1rem)); overflow-y: auto;
-  }
-  .board-recap { position: fixed; z-index: 35; inset: .5rem; }
-  .board-recap > section { margin: 0; max-height: 100%; height: 100%; }
 }

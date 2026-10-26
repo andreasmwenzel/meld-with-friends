@@ -121,7 +121,7 @@ export function Lab() {
   const table = snapshotFor(snap, state.rules);
   const me = table.seats[snap.view].profile!;
   return (
-    <div className={chrome ? "lg:pr-[360px]" : undefined}>
+    <div className={`flex h-dvh flex-col overflow-hidden ${chrome ? "lg:pr-[360px]" : ""}`}>
       <Game key={`${snap.epoch}:${snap.view}:${snap.bots.join("")}`} local={snap.flags.local} code={CODE} me={me} snap={table} rev={state.rev}
         connection={snap.flags.reconnecting ? "reconnecting" : "ok"} onTableChange={() => {}} />
       {chrome ? <LabPanel snap={snap} state={state} /> : <style>{"nextjs-portal{display:none}"}</style>}

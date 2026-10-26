@@ -122,9 +122,9 @@ export function PracticeBoard() {
     : null;
 
   return (
-    <div className="mx-auto w-full max-w-[1500px] lg:grid lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-2 lg:px-6">
+    <div className="mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 flex-col lg:grid lg:grid-cols-[300px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-2 lg:px-6">
       <Coach key={`${game}`} view={view} autoMeld={prefs.autoMeld} step={step} onStartOver={startOver} />
-      <div className="min-w-0">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <Game local key={game} code={CODE} me={me} snap={{ ...snap, table: { ...snap.table, rules: { ...state.rules } } }} rev={state.rev} onTableChange={() => {}}
           suggested={advice && !awaitingStart(state, seenHand) ? advice.cards : undefined} />
       </div>
