@@ -7,7 +7,7 @@ import type { ReplayPayload } from "@/engine/replay";
 import { api } from "@/lib/api";
 import { teamOf } from "@/components/table/types";
 import { ReplayBoard } from "./ReplayBoard";
-import { moveAtFrame, walk, type Move } from "./model";
+import { moveAtFrame, walk, type Move, type MoveKind } from "./model";
 
 const WIDE = "(min-width: 64rem)";
 const subscribeWide = (cb: () => void) => { const mq = window.matchMedia(WIDE); mq.addEventListener("change", cb); return () => mq.removeEventListener("change", cb); };
@@ -204,22 +204,84 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
         <p className="px-4 pt-3 text-xs text-chalk-faint">Arrow keys step, Shift and an arrow jumps a hand. Tap a player to see the table from their seat. Tap a score for its breakdown.</p>
         <h2 className="display px-4 pt-4" style={{ fontSize: 22 }}>Every move</h2>
         <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
-          {chapters.map((c) => (
-            <section key={c.hand} className="mb-4">
-              <h3 className="sticky top-0 z-[1] bg-cloth-deep/95 py-1 text-sm backdrop-blur-sm">
-                <span className="font-semibold">Hand {c.hand}</span> <span className="text-chalk-faint">{c.title}</span>
-              </h3>
-              <ol className="mt-1">
-                {moves.slice(c.first, c.last + 1).map((m, j) => {
-                  const i = c.first + j;
-                  return <MoveRow key={m.frame} move={m} current={i === cursor} onClick={() => pick(i)} />;
+          {chapters.map((c) => {
+            const here = cursor >= c.first && cursor <= c.last;
+            return (
+              <Fold key={`${c.hand}:${here}`} open={here} level={0} title={<><span className="font-semibold">Hand {c.hand}</span> <span className="text-chalk-faint">{c.title}</span></>}>
+                {phasesOf(moves, c).map((ph) => {
+                  const inside = cursor >= ph.first && cursor <= ph.last;
+                  if (ph.rows) return <ol key={ph.key} className="mb-1">{ph.rows.map(i => <MoveRow key={moves[i].frame} move={moves[i]} current={i === cursor} onClick={() => pick(i)} />)}</ol>;
+                  return (
+                    <Fold key={`${ph.key}:${inside}`} open={inside} level={1} title={<><span>{ph.title}</span>{ph.note && <span className="text-chalk-faint"> {ph.note}</span>}</>}>
+                      {ph.tricks ? ph.tricks.map((t) => {
+                        const on = cursor >= t.first && cursor <= t.last;
+                        return (
+                          <Fold key={`${t.key}:${on}`} open={on} level={2} title={<><span>{t.title}</span>{t.note && <span className="text-chalk-faint"> {t.note}</span>}</>}>
+                            <ol>{range(t.first, t.last).map(i => <MoveRow key={moves[i].frame} move={moves[i]} current={i === cursor} onClick={() => pick(i)} />)}</ol>
+                          </Fold>
+                        );
+                      }) : <ol>{range(ph.first, ph.last).map(i => <MoveRow key={moves[i].frame} move={moves[i]} current={i === cursor} onClick={() => pick(i)} />)}</ol>}
+                    </Fold>
+                  );
                 })}
-              </ol>
-            </section>
-          ))}
+              </Fold>
+            );
+          })}
         </div>
       </aside>
     </div>
+  );
+}
+
+const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, k) => a + k);
+
+interface Phase { key: string; title: string; note?: string; first: number; last: number; rows?: number[]; tricks?: { key: string; title: string; note?: string; first: number; last: number }[] }
+
+/** A hand's moves as its phases: the deal, the bidding, the pass, the meld, then one fold per trick. */
+function phasesOf(moves: Move[], c: { hand: number; first: number; last: number }): Phase[] {
+  const phases: Phase[] = [];
+  let i = c.first;
+  if (moves[i]?.kind === "deal") { phases.push({ key: `${c.hand}:deal`, title: "", first: i, last: i, rows: [i] }); i++; }
+  const take = (kinds: MoveKind[], key: string, title: string) => {
+    const first = i;
+    while (i <= c.last && kinds.includes(moves[i].kind)) i++;
+    if (i > first) {
+      const last = moves[i - 1];
+      const note = key === "bidding" ? last.label.replace(/^.*?\. /, "") : key === "meld" ? last.label.replace(/^Meld: /, "").replace(/\. .*$/, "") : undefined;
+      phases.push({ key: `${c.hand}:${key}`, title, note: note === last.label ? undefined : note, first, last: i - 1 });
+    }
+  };
+  take(["bid", "trump"], "bidding", "Bidding");
+  take(["pass"], "passing", "Passing");
+  take(["meld"], "meld", "Meld");
+  if (i <= c.last) {
+    const first = i;
+    const tricks: NonNullable<Phase["tricks"]> = [];
+    let start = i, n = 1;
+    for (; i <= c.last; i++) {
+      if (moves[i].trick || i === c.last) {
+        const winner = moves[i].trick ? moves[i].label.replace(/^.*?\. /, "").replace(/ takes the trick.*$/, "") : undefined;
+        tricks.push({ key: `${c.hand}:trick:${n}`, title: `Trick ${n}`, note: winner, first: start, last: i });
+        start = i + 1; n++;
+      }
+    }
+    phases.push({ key: `${c.hand}:play`, title: "Play", note: `${tricks.length} ${tricks.length === 1 ? "trick" : "tricks"}`, first, last: c.last, tricks });
+  }
+  return phases;
+}
+
+/** A disclosure that opens itself around the current move; the reader can still fold or unfold it by hand. */
+function Fold({ open, level, title, children }: { open: boolean; level: 0 | 1 | 2; title: React.ReactNode; children: React.ReactNode }) {
+  const pad = ["", "pl-3", "pl-6"][level];
+  const size = ["text-sm", "text-sm", "text-xs"][level];
+  return (
+    <details open={open} className={`group ${level === 0 ? "mb-2" : "mb-0.5"}`}>
+      <summary className={`flex cursor-pointer list-none items-baseline gap-1.5 rounded-md py-1 ${pad} ${size} hover:bg-chalk-ghost [&::-webkit-details-marker]:hidden`}>
+        <span aria-hidden className="inline-block w-3 text-chalk-faint transition-transform group-open:rotate-90">▸</span>
+        <span className="min-w-0">{title}</span>
+      </summary>
+      <div className={level === 2 ? "pl-3" : "pl-1"}>{children}</div>
+    </details>
   );
 }
 
