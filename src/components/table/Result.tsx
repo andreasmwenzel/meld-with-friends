@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import type { PlayerView, SeatIndex, Team } from "@/engine/types";
 import { SUIT_GLYPH } from "@/components/cards/PlayingCard";
@@ -35,13 +35,6 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
   countdown: { handKey: string; blocked: boolean; onNext: (signal: AbortSignal) => void };
 }) {
   const [showBreakdown, setShowBreakdown] = useState(true);
-  // The peek bar floats over the page; pad the page by its height so nothing (like the scorepad) is stuck under it.
-  useEffect(() => {
-    if (!peek) return;
-    const before = document.body.style.paddingBottom;
-    document.body.style.paddingBottom = "4.5rem";
-    return () => { document.body.style.paddingBottom = before; };
-  }, [peek]);
   const over = view.phase === "game_over";
   const myTeam = teamOf(view.seat);
   const them: Team = myTeam === "red" ? "blue" : "red";

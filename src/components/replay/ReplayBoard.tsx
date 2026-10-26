@@ -1,30 +1,19 @@
 "use client";
 
-import type { CardId, GameState, SeatIndex, Suit, Team, Trick } from "@/engine/types";
+import type { CardId, GameState, SeatIndex, Team, Trick } from "@/engine/types";
 import { sortHand } from "@/engine/hand";
 import { PlayingCard, SUIT_GLYPH } from "@/components/cards/PlayingCard";
 import { Avatar } from "@/components/site/Avatar";
 import { useCardPrefs } from "@/lib/cardPrefs";
 import { teamOf } from "@/components/table/types";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { viewFor } from "@/engine/game";
 import { useTableTurn } from "@/components/table/turn";
+import { DealerMark, ScoreTag, seatScore, type SeatScore } from "@/components/table/SeatScore";
 import { flyFrom, motionTimings, sweepTo } from "@/components/table/motion";
 import type { Move } from "./model";
 
 interface SeatInfo { name: string; bot: boolean }
-/** What a chip shows beside the name: the taker's contract and total, or a defender's own meld. */
-interface SeatScore {
-  dealer: boolean;
-  /** the bid, "moon", or "–" for a pass */
-  main: string | null; suit: Suit | null;
-  /** the taking side's points this hand so far, or its change once the hand is scored */
-  total: number | null;
-  /** a defender's own meld */
-  small: number | null;
-  /** the breakdown behind the numbers */
-  rows: [string, string][];
-}
 type Rel = 0 | 1 | 2 | 3;
 /** Each seat's hand, as an offset (px) from the middle of the table, by position round the viewer. */
 const SEAT_AT: Record<"phone" | "desktop", Record<Rel, [number, number]>> = {
@@ -97,42 +86,13 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit, ani
     }
   }
   const flying: CardId | null = animate && move.kind === "play" ? move.cards[0] ?? null : null;
-  // Numbers only, no sentences: the taker carries the contract and the side's running total, each
-  // defender a small number for their own meld. The breakdown is a tap away.
   const view = viewFor(frame, 0);
-  const recap = view.recap;
-  const sideTotal = (team: Team) => {
-    const meld = frame.players.filter(p => teamOf(p.seat) === team).reduce((n, p) => n + p.meldPoints, 0);
-    return meld + recap.counters[team];
+  const facts = {
+    phase: frame.phase, handNumber: frame.handNumber, dealer: frame.dealer, bidder: frame.bidder, highBid: frame.highBid, trump: frame.trump, bids: frame.bids,
+    meldPoints: { 0: frame.players[0].meldPoints, 1: frame.players[1].meldPoints, 2: frame.players[2].meldPoints, 3: frame.players[3].meldPoints },
+    counters: view.recap.counters, history: view.history,
   };
-  const scoreOf = (seat: SeatIndex): SeatScore => {
-    const bid = frame.bids.filter(b => b.seat === seat).at(-1);
-    const dealer = frame.dealer === seat;
-    const record = view.history.find(h => h.handNumber === frame.handNumber) ?? null;
-    const playing = frame.phase === "playing" || frame.phase === "hand_over" || frame.phase === "game_over";
-    if (frame.phase === "bidding") {
-      return { dealer, main: bid ? (bid.amount === null ? "–" : bid.shoot ? "moon" : String(bid.amount)) : null, suit: null, total: null, small: null, rows: [] };
-    }
-    const team = teamOf(seat);
-    const mates = frame.players.filter(p => teamOf(p.seat) === team);
-    const rows: [string, string][] = mates.filter(p => p.meldPoints > 0 || meldOut).map(p => [`${seats[p.seat].name} meld`, String(p.meldPoints)]);
-    if (playing) rows.push(["Counters", String(recap.counters[team])]);
-    if (record) {
-      const b = record.breakdown[team];
-      if (b.meldDeclared > 0 && b.meldSaved === 0) rows.push(["Meld lost, no trick", `-${b.meldDeclared}`]);
-      if (b.lastTrick) rows.push(["Last trick", String(b.lastTrick)]);
-      if (b.setPenalty) rows.push(["Set", `-${b.setPenalty}`]);
-      if (b.shoot) rows.push(["Shoot", String(b.shoot)]);
-      rows.push(["This hand", `${record.delta[team] > 0 ? "+" : ""}${record.delta[team]}`]);
-    } else rows.push(["So far", String(sideTotal(team))]);
-    if (frame.bidder === seat && frame.highBid) {
-      const total = record ? record.delta[team] : frame.phase === "melding" || playing ? sideTotal(team) : null;
-      return { dealer, main: frame.highBid.shoot ? "moon" : String(frame.highBid.amount), suit: frame.trump, total, small: null, rows: [["Bid", frame.highBid.shoot ? "the moon" : String(frame.highBid.amount)], ...rows] };
-    }
-    if (frame.bidder !== null && teamOf(frame.bidder) === team) return { dealer, main: null, suit: null, total: null, small: null, rows: [] };
-    const own = frame.players[seat].meldPoints;
-    return { dealer, main: null, suit: null, total: null, small: frame.phase === "melding" || frame.phase === "playing" || record ? own : null, rows };
-  };
+  const scoreOf = (seat: SeatIndex): SeatScore => seatScore(facts, seat, s => seats[s].name, meldOut);
   // A bidder holds 16 cards after the pass; fans tighten to stay inside the row.
   const sizes = phone ? { south: 44, north: 34, side: 30, budget: 340 } : { south: 60, north: 44, side: 38, budget: 680 };
 
@@ -200,7 +160,7 @@ function SeatRow({ seat, info, score, mine, active, cards, meld, lit, raised, pr
           style={active ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
           <span className="relative">
             <Avatar name={info.name} team={team} size={26} bot={info.bot} />
-            {score.dealer && <span aria-hidden title="Dealer" className="absolute -bottom-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-chalk text-[9px] font-bold leading-none text-ink">D</span>}
+            {score.dealer && <DealerMark />}
           </span>
           <span className={`truncate text-xs font-semibold ${vertical ? "max-w-[72px]" : "max-w-[140px]"} ${mine ? "text-brass" : ""}`} title={mine ? "You" : undefined}>{info.name}</span>
         </button>
@@ -244,53 +204,6 @@ function SeatRow({ seat, info, score, mine, active, cards, meld, lit, raised, pr
         </div>
       )}
       {!big && !vertical && laid}
-    </div>
-  );
-}
-
-const SUIT_INK: Record<Suit, string> = { S: "var(--chalk)", C: "var(--chalk)", H: "var(--deck-red-soft)", D: "var(--deck-red-soft)" };
-
-/** The numbers beside a name. Tapping them opens the breakdown; Escape or a tap elsewhere closes it. */
-function ScoreTag({ score, name, align }: { score: SeatScore; name: string; align: "left" | "center" | "right" }) {
-  const [open, setOpen] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const away = (e: PointerEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(false); };
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("pointerdown", away); document.addEventListener("keydown", key);
-    return () => { document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", key); };
-  }, [open]);
-  if (score.main === null && score.small === null) return null;
-  const detail = score.rows.length > 0;
-  const body = score.main !== null ? (
-    <>
-      <span className="font-semibold">{score.main}</span>
-      {score.suit && <span style={{ color: SUIT_INK[score.suit] }}>{SUIT_GLYPH[score.suit]}</span>}
-      {score.total !== null && <span className="ml-1 rounded-full bg-chalk/15 px-1.5 font-semibold tabular-nums">{score.total}</span>}
-    </>
-  ) : <span className="tabular-nums text-chalk-faint">{score.small}</span>;
-  const label = score.main !== null
-    ? `${name}: bid ${score.main}${score.suit ? ` in ${{ S: "spades", H: "hearts", D: "diamonds", C: "clubs" }[score.suit]}` : ""}${score.total !== null ? `, ${score.total} this hand` : ""}`
-    : `${name}: meld ${score.small}`;
-  const side = align === "left" ? "left-0" : align === "right" ? "right-0" : "left-1/2 -translate-x-1/2";
-  const cls = "flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs leading-5";
-  if (!detail) return <span aria-label={label} className={cls}>{body}</span>;
-  return (
-    <div ref={root} className="relative">
-      <button type="button" aria-label={label} aria-expanded={open} onClick={() => setOpen(o => !o)}
-        className={`${cls} hover:bg-chalk-ghost focus-visible:bg-chalk-ghost`}>
-        {body}
-      </button>
-      {open && (
-        <div role="dialog" aria-label={`${name}'s side this hand`} className={`panel absolute top-full z-30 mt-1 min-w-[150px] px-3 py-2 text-xs ${side}`}>
-          <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 tabular-nums">
-            {score.rows.map(([k, v], i) => (
-              <div key={i} className={`contents ${i === score.rows.length - 1 ? "font-semibold" : ""}`}><dt className="text-left text-ink-soft">{k}</dt><dd className="text-right">{v}</dd></div>
-            ))}
-          </dl>
-        </div>
-      )}
     </div>
   );
 }
