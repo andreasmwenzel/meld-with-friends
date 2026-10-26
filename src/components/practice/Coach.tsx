@@ -48,7 +48,7 @@ export function Coach({ view, autoMeld, step, onStartOver }: {
 
   if (short) {
     return (
-      <aside aria-label="Coaching" className="fixed left-2 top-1.5 z-30 max-w-[min(46vw,26rem)]">
+      <aside aria-label="Coaching" className="fixed left-2 top-1.5 z-30 max-w-[min(38vw,22rem)]">
         <div aria-live="polite" className="flex items-center gap-2">
           <button type="button" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen((o) => !o)}
             className="flex min-h-9 min-w-0 flex-1 items-center gap-1.5 rounded-full bg-black/35 px-3 text-left backdrop-blur-sm">
