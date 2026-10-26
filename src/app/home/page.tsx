@@ -13,6 +13,8 @@ import { ProfileEditor } from "@/components/lobby/ProfileEditor";
 import { SignOut } from "@/components/site/SignOut";
 import { getSessionUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { listMyTables } from "@/server/myTables";
+import { TableList } from "@/components/lobby/TableList";
 
 export default function HomePage({ searchParams }: PageProps<"/home">) {
   return (
@@ -37,15 +39,10 @@ async function Lobby({ searchParams }: { searchParams: PageProps<"/home">["searc
   if (!user) redirect("/?next=/home");
   const sp = await searchParams;
   const supabase = await createClient();
-  const [{ data: profile }, { data: seats }] = await Promise.all([
+  const [{ data: profile }, tables] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", user.id).single(),
-    supabase.from("seats").select("seat, table:tables(id, code, status, game_kind, created_at)").eq("user_id", user.id),
+    listMyTables(user.id),
   ]);
-  type SeatRow = { seat: number; table: { id: string; code: string; status: string; game_kind: string; created_at: string } | null };
-  const tables = ((seats ?? []) as unknown as SeatRow[])
-    .map((s) => s.table)
-    .filter((t): t is NonNullable<SeatRow["table"]> => !!t && t.status !== "finished")
-    .sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   return (
     <div className="mx-auto grid max-w-6xl gap-14 px-6 pb-16 pt-4 sm:pb-20 sm:pt-6 lg:grid-cols-[1.2fr_1fr]">
@@ -65,19 +62,7 @@ async function Lobby({ searchParams }: { searchParams: PageProps<"/home">["searc
             You are not sitting anywhere yet. Deal a table above, or join one with the code a friend sent you.
           </p>
         ) : (
-          <ul className="mt-4 flex flex-col divide-y divide-chalk-ghost">
-            {tables.map((t) => (
-              <li key={t.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-4">
-                <div>
-                  <p className="code" style={{ fontSize: 28, letterSpacing: ".14em" }}>{t.code}</p>
-                  <p className="text-sm text-chalk-faint">{t.status === "playing" ? "Hand in progress" : "Waiting for players"}</p>
-                </div>
-                <Link href={`/t/${t.code}`} className={`btn ${t.status === "playing" ? "btn-brass" : "btn-chalk"}`}>
-                  {t.status === "playing" ? "Back to the game" : "Go to the table"}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <div className="mt-2"><TableList tables={tables} /></div>
         )}
         <History />
       </section>
