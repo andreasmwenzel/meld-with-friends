@@ -941,9 +941,9 @@ function ActionBar({ view, isMyTurn, selected, busy, act, nameOf, autoMeld }: {
           {stuck ? `Take it at ${view.rules.minBid}` : "Pass"}
         </button>
         {L.canShoot && (
-          <button className="btn btn-ghost btn-compact" style={{ color: "var(--brass)", boxShadow: "inset 0 0 0 1.5px var(--brass)" }} disabled={busy}
+          <button className="btn btn-ghost btn-compact" style={{ color: "var(--brass)", boxShadow: "inset 0 0 0 1.5px var(--brass)" }} disabled={busy} aria-label="Shoot the moon"
             onClick={() => { if (window.confirm("Shoot the moon? Your side must take every trick.")) void act({ type: "shoot" }); }}>
-            Shoot the moon
+            <span className="sm:hidden">Shoot</span><span className="hidden sm:inline">Shoot the moon</span>
           </button>
         )}
       </Bar>
