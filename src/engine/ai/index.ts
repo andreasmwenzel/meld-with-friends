@@ -9,6 +9,7 @@ export function chooseAction(view: PlayerView, options: { budgetMs?: number; see
   const config = { ...DEFAULT_SETTINGS.bots, ...options.config };
   const { legal: l, seat }=view;
   if (l.canAdvanceHand) return {type:'next_hand',seat};
+  if (l.canMisdeal) return {type:'misdeal',seat};
   if (l.canShoot && overwhelming(view, config)) return {type:'shoot',seat};
   if (l.canPassBid) {
     const value = projectedValue(view, bestTrump(view, config), config) - config.bidMargin * scoringFactor(view.rules);

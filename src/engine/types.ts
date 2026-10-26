@@ -55,6 +55,11 @@ export interface RulesConfig {
   shootPoints: number;
   /** show everyone all four hands once the hand is over (default true) */
   revealHands: boolean;
+  /**
+   * Nines misdeal: a player holding five or more nines and no meld besides them, in any trump,
+   * may throw the hand in before their first bid or pass. The same dealer redeals (default true).
+   */
+  ninesMisdeal: boolean;
 }
 
 export const DEFAULT_RULES: RulesConfig = {
@@ -73,6 +78,7 @@ export const DEFAULT_RULES: RulesConfig = {
   shoot: "off",
   shootPoints: 150,
   revealHands: true,
+  ninesMisdeal: true,
 };
 
 export type MeldKind =
@@ -208,6 +214,7 @@ export type Action =
   | { type: "bid"; seat: SeatIndex; amount: number }
   | { type: "pass_bid"; seat: SeatIndex }
   | { type: "shoot"; seat: SeatIndex }
+  | { type: "misdeal"; seat: SeatIndex } // throw in five or more nines and no other meld; the same dealer redeals
   | { type: "declare_trump"; seat: SeatIndex; suit: Suit }
   | { type: "pass_cards"; seat: SeatIndex; cards: CardId[] }
   | { type: "declare_meld"; seat: SeatIndex; cards: CardId[] } // cards laid down; engine computes best meld from them
@@ -248,6 +255,8 @@ export interface PlayerView {
    * `atPlay` is each hand as trick play began (after passing); `dealt` is before passing.
    */
   revealed: { dealt: Record<SeatIndex, CardId[]>; atPlay: Record<SeatIndex, CardId[]> } | null;
+  /** while the redealt hand is bid: who threw the last deal in for nines, and the hand they showed */
+  misdeal: { seat: SeatIndex; hand: CardId[] } | null;
   /** actions legal for this seat right now, precomputed so the UI never guesses */
   legal: LegalActions;
 }
@@ -258,6 +267,8 @@ export interface LegalActions {
   canPassBid: boolean;
   /** may declare a shoot right now (rules.shoot !== "off", bidding, on turn, nobody has shot yet) */
   canShoot: boolean;
+  /** may throw the hand in for nines (rules.ninesMisdeal, bidding, on turn, before this seat's first call) */
+  canMisdeal: boolean;
   canDeclareTrump: boolean;
   /** number of cards that must be chosen when passing, or null */
   mustPassCount: number | null;

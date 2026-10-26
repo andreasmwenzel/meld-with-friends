@@ -49,6 +49,7 @@ export function describeAction(a: Action): string {
     case "bid": return `${who} bids ${a.amount}`;
     case "pass_bid": return `${who} passes`;
     case "shoot": return `${who} shoots the moon`;
+    case "misdeal": return `${who} throws in for nines`;
     case "declare_trump": return `${who} names ${{ S: "spades", H: "hearts", D: "diamonds", C: "clubs" }[a.suit]}`;
     case "pass_cards": return `${who} passes ${a.cards.map(cardLabel).join(" ") || "nothing"}`;
     case "declare_meld": return `${who} lays down ${a.cards.length} cards`;

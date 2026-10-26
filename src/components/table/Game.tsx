@@ -11,7 +11,7 @@ import { Avatar } from "@/components/site/Avatar";
 import { SEAT_LABEL, teamOf, type Snapshot } from "./types";
 import { Scorepad } from "./Scorepad";
 import { DealerMark, ScoreTag, seatScore, type ScoreFacts, type SeatScore } from "./SeatScore";
-import { BidPicker } from "./BidPicker";
+import { BidPicker, MisdealButton } from "./BidPicker";
 import { ResultSheet, type Which } from "./Result";
 import { canCountdownAdvance } from "./nextHandCountdown";
 import { Recap, useSeenReporting } from "./Recap";
@@ -22,6 +22,7 @@ import { useCardPrefs } from "@/lib/cardPrefs";
 import { usePushNotifications } from "@/lib/push";
 import { autoMeldSelection, meldBySuit, sortHand } from "@/engine/hand";
 import { describeConstraint } from "@/engine/rules";
+import { cardLabel } from "@/engine/deck";
 import { motionTimings, flyFrom, sweepTo } from "./motion";
 import { newLogLines, speakLine } from "./announce";
 
@@ -1094,6 +1095,7 @@ function ActionBar({ view, isMyTurn, selected, busy, act, nameOf, autoMeld }: {
   act: (a: ClientAction) => Promise<void>; nameOf: (s: SeatIndex) => string; autoMeld: boolean;
 }) {
   const L = view.legal;
+  const misdeal = L.canMisdeal ? () => void act({ type: "misdeal" }) : null;
 
   if (view.phase === "bidding" && !L.canBid && L.canPassBid) {
     const shooter = view.highBid?.shoot ? nameOf(view.highBid.seat) : null;
@@ -1110,6 +1112,7 @@ function ActionBar({ view, isMyTurn, selected, busy, act, nameOf, autoMeld }: {
             <span className="sm:hidden">Shoot</span><span className="hidden sm:inline">Shoot the moon</span>
           </button>
         )}
+        {misdeal && <MisdealButton busy={busy} run={misdeal} />}
       </Bar>
     );
   }
@@ -1121,7 +1124,20 @@ function ActionBar({ view, isMyTurn, selected, busy, act, nameOf, autoMeld }: {
         onBid={(amount) => act({ type: "bid", amount })}
         pass={L.canPassBid ? { label: "Pass", run: () => act({ type: "pass_bid" }) } : null}
         shoot={L.canShoot ? () => { if (window.confirm("Shoot the moon? Your side must take every trick.")) void act({ type: "shoot" }); } : null}
+        misdeal={misdeal}
       />
+    );
+  }
+  if (view.phase === "bidding" && view.misdeal) {
+    // Waiting on someone else's call right after a throw-in: show the hand that scrapped the deal.
+    const who = nameOf(view.misdeal.seat);
+    return (
+      <Bar>
+        <span className="text-center text-chalk-faint">
+          {who} threw in {view.misdeal.hand.filter((c) => c[0] === "9").length} nines and no meld:{" "}
+          <span className="text-chalk">{sortHand(view.misdeal.hand, null).map(cardLabel).join(" ")}</span>
+        </span>
+      </Bar>
     );
   }
   if (view.phase === "declaring_trump" && L.canDeclareTrump) {

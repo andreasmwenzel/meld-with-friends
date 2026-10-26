@@ -32,6 +32,8 @@ export const PRESETS: Preset[] = [
     spec: { dealer: 0, rules: { scoring: 'modern', dealerStuck: false }, bids: [null, null, null] } },
   { id: 'bid-shoot', group: 'Bidding', title: 'Shoot available', note: 'Shooting the moon wins the game; a monster hand to try it with.',
     spec: { dealer: 3, rules: { scoring: 'modern', shoot: 'game' }, hands: { 0: ALL_SPADES } } },
+  { id: 'bid-misdeal', group: 'Bidding', title: 'Nines misdeal', note: 'Five nines and no other meld; you may throw the hand in.',
+    spec: { dealer: 3, hands: { 0: ['9S', '9S', '9H', '9H', '9D', 'AS', 'AS', 'TS', 'TH', 'TD', 'AC', 'TC'] } } },
   { id: 'bid-after-shoot', group: 'Bidding', title: 'After a shoot', note: 'West shot the moon; you can only pass.',
     spec: { dealer: 0, rules: { scoring: 'modern', shoot: 'points', shootPoints: 100 }, bids: ['shoot', null, null] } },
 

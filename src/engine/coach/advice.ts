@@ -159,6 +159,11 @@ export function bidEstimate(view: PlayerView, config: BotConfig = DEFAULT_SETTIN
 export function adviseBid(view: PlayerView, options: AdviceOptions = {}): Advice | null {
   const L = view.legal;
   if (view.phase !== 'bidding' || (!L.canBid && !L.canPassBid)) return null;
+  if (L.canMisdeal) {
+    const nines = view.hand.filter(card => card[0] === '9');
+    return { action: { type: 'misdeal', seat: view.seat }, cards: nines, headline: 'Throw it in',
+      reason: `You hold ${nines.length} nines and nothing else to meld in any suit. Throw the hand in and the same dealer deals again.` };
+  }
   const est = bidEstimate(view, options.config);
   const name = nameFor(view, options);
   const partner = name(partnerOf(view.seat));

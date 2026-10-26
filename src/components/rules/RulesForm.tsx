@@ -22,6 +22,7 @@ const FIELDS: { k: Key; label: string; options: Opt[] | ((r: RulesConfig) => Opt
   { k: "lastTrickBonus", label: "Last trick", options: pointOptions("lastTrickBonus") },
   { k: "mustTakeTrickToSaveMeld", label: "Keeping meld", options: opts([[true, "Must take a trick"], [false, "Always counts"]]) },
   { k: "dealerStuck", label: "Everyone passes", options: opts([[true, "Dealer is stuck"], [false, "Redeal"]]) },
+  { k: "ninesMisdeal", label: "Five nines, no meld", options: opts([[true, "May throw the hand in"], [false, "Must play it"]]) },
   { k: "revealHands", label: "After each hand", options: opts([[true, "Show everyone's cards"], [false, "Keep hands hidden"]]) },
   { k: "shoot", label: "Shooting the moon", options: opts([["off", "Not allowed"], ["game", "Wins or loses the game"], ["points", "Fixed points"]]) },
   { k: "pace", label: "Pace", options: opts([["live", "Live"], ["leisurely", "Leisurely (a trick a day is fine)"]]) },

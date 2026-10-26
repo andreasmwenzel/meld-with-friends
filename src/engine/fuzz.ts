@@ -26,7 +26,8 @@ export function leakedCards(state: GameState, seat: SeatIndex): string[] {
     ...state.players.flatMap(p => p.meld.flatMap(m => m.cards)),
     ...(s.passedOut?.[seat] ?? []), ...(s.passedIn?.[seat] ?? []),
   ]);
-  const { revealed, ...rest } = view;
+  // A thrown-in hand is shown to the whole table on purpose; the old deal's cards are not this deal's.
+  const { revealed, ...rest } = { ...view, misdeal: null };
   if (revealed && !(state.rules.revealHands && (state.phase === 'hand_over' || state.phase === 'game_over'))) return ['revealed hands outside the reveal'];
   return [...cardsIn(rest)].filter(card => !allowed.has(card));
 }
@@ -43,6 +44,7 @@ export function fuzzRules(n: number): Partial<RulesConfig> {
     passCount: pick(n >> 4, [0, 3, 4, 5]), counting: scoring === 'classic' ? pick(n >> 5, ['tens', 'classic'] as const) : 'tens',
     shoot: pick(n >> 6, ['off', 'game', 'points'] as const), shootPoints: 50 * unit,
     dealerStuck: pick(n >> 7, [true, false]), mustTakeTrickToSaveMeld: pick(n >> 8, [true, false]),
+    ninesMisdeal: pick(n >> 14, [true, false]),
     ...(n >> 9) % 3 === 0 ? {
       // Rarer settings, about a third of games: long passes, no last-trick bonus, odd counter values, hidden hands.
       passCount: pick(n >> 10, [6, 8, 12]), lastTrickBonus: pick(n >> 11, [0, 1, 2]) * unit,

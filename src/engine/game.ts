@@ -1,5 +1,5 @@
 import { buildDeck, cardLabel, seededShuffle, SUITS } from './deck';
-import { computeMeld } from './meld';
+import { computeMeld, qualifiesForMisdeal } from './meld';
 import { legalPlays, playConstraint, trickWinner } from './rules';
 import { IllegalAction } from './types';
 import { resolveRules } from './scoring';
@@ -21,6 +21,8 @@ interface EngineState extends GameState {
   playedCards?: import("./types").TrickPlay[];
   handsDealt?: Hands;
   handsAtPlay?: Hands;
+  /** the last deal thrown in for nines; cleared by the next ordinary deal */
+  misdeal?: { seat: SeatIndex; hand: CardId[] } | null;
 }
 const emptyHands = (): Hands => ({ 0: [], 1: [], 2: [], 3: [] });
 const snapshotHands = (state: GameState): Hands => ({
@@ -53,7 +55,8 @@ export function validateRules(rules: RulesConfig): void {
   requireAction(rules.counting === 'tens' || rules.counting === 'classic', 'counting must be tens or classic');
   requireAction(['off', 'game', 'points'].includes(rules.shoot), 'Invalid shoot mode');
   requireAction(Number.isSafeInteger(rules.shootPoints) && rules.shootPoints > 0, 'shootPoints must be a positive integer');
-  requireAction(typeof rules.dealerStuck === 'boolean' && typeof rules.mustTakeTrickToSaveMeld === 'boolean' && typeof rules.revealHands === 'boolean', 'Rule flags must be booleans');
+  requireAction(typeof rules.dealerStuck === 'boolean' && typeof rules.mustTakeTrickToSaveMeld === 'boolean' && typeof rules.revealHands === 'boolean'
+    && typeof rules.ninesMisdeal === 'boolean', 'Rule flags must be booleans');
 }
 function emptyPlayers(): GameState['players'] {
   const player = (seat: SeatIndex): PlayerState => ({
@@ -83,6 +86,7 @@ function deal(state: EngineState): void {
   state.passedOut = emptyHands();
   state.passedIn = emptyHands();
   state.tricksTaken = { red: [], blue: [] };
+  state.misdeal = null;
   log(state, `Hand ${state.handNumber}: ${SEAT_NAMES[state.dealer]} deals`);
 }
 
@@ -119,6 +123,8 @@ export function legalActionsFor(state: GameState, seat: SeatIndex): LegalActions
   return {
     canBid, minBid: canBid ? openingBid(state) : null,
     canShoot: bidding && state.rules.shoot !== 'off' && !shotBid,
+    canMisdeal: bidding && state.rules.ninesMisdeal && !state.bids.some(b => b.seat === seat)
+      && qualifiesForMisdeal(state.players[seat].hand),
     canPassBid: bidding, canDeclareTrump: state.phase === 'declaring_trump' && onTurn,
     mustPassCount: onTurn && (state.phase === 'passing_to_bidder' || state.phase === 'passing_back') ? state.rules.passCount : null,
     canDeclareMeld: melding, canConfirmMeld: melding,
@@ -257,6 +263,16 @@ export function applyAction(previous: GameState, action: Action): GameState {
       state.bids.push({ ...state.highBid });
       log(state, `${name} shoots the moon`);
       finishBiddingAction(state);
+      break;
+    }
+    case 'misdeal': {
+      requireAction(legal.canMisdeal, 'You cannot throw this hand in');
+      const hand = [...player.hand];
+      const nines = hand.filter(card => card[0] === '9').length;
+      log(state, `${name} throws in ${nines} nines and no meld; ${SEAT_NAMES[state.dealer]} redeals`);
+      state.handNumber++;
+      deal(state);
+      state.misdeal = { seat: action.seat, hand };
       break;
     }
     case 'bid':
@@ -409,6 +425,7 @@ export function viewFor(state: GameState, seat: SeatIndex): PlayerView {
     revealed: state.rules.revealHands && (state.phase === 'hand_over' || state.phase === 'game_over')
       ? { dealt: (state as EngineState).handsDealt ?? emptyHands(), atPlay: (state as EngineState).handsAtPlay ?? emptyHands() }
       : null,
+    misdeal: state.phase === 'bidding' ? (state as EngineState).misdeal ?? null : null,
     trickCounts: { red: state.tricksTaken.red.length, blue: state.tricksTaken.blue.length },
     score: state.score, history: state.history.map(normaliseHandRecord), winner: state.winner, rev: state.rev, log: state.log, legal,
   });

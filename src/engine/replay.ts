@@ -97,6 +97,7 @@ export function describeStep(action: Action, before: GameState, after: GameState
   switch (action.type) {
     case 'bid': return `${who} bids ${action.amount}`;
     case 'shoot': return `${who} shoots the moon`;
+    case 'misdeal': return `${who} throws in ${before.players[action.seat].hand.filter(card => card[0] === '9').length} nines and no meld, so ${nameOf(after.dealer)} redeals`;
     case 'pass_bid': {
       if (after.handNumber !== before.handNumber) return `${who} passes. Everyone passed, so ${nameOf(after.dealer)} redeals`;
       if (after.bidder !== null && before.bidder === null && after.highBid) {

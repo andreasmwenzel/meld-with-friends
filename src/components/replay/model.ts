@@ -34,7 +34,7 @@ export interface Chapter {
 export interface Walk { frames: GameState[]; moves: Move[]; chapters: Chapter[] }
 
 const KIND: Record<Action["type"], MoveKind> = {
-  bid: "bid", pass_bid: "bid", shoot: "bid", declare_trump: "trump", pass_cards: "pass",
+  bid: "bid", pass_bid: "bid", shoot: "bid", misdeal: "bid", declare_trump: "trump", pass_cards: "pass",
   declare_meld: "meld", confirm_meld: "meld", play_card: "play", next_hand: "deal",
 };
 const lastTrickOf = (state: GameState) => (state as GameState & { lastTrick?: Trick | null }).lastTrick ?? null;
@@ -52,8 +52,9 @@ export function walk(replay: Replay, nameOf: (seat: SeatIndex) => string): Walk 
     const before = frames[i], after = frames[i + 1];
     const completedTrick = step.action.type === "play_card" && before.currentTrick?.plays.length === 3;
     const record = after.history.length > before.history.length ? after.history[after.history.length - 1] : null;
-    // The pass that throws a hand in belongs to the hand it ended, though the board already shows the redeal.
-    const hand = step.action.type === "pass_bid" && after.handNumber !== before.handNumber ? before.handNumber : after.handNumber;
+    // The pass or misdeal that throws a hand in belongs to the hand it ended, though the board already shows the redeal.
+    const thrownIn = step.action.type === "misdeal" || (step.action.type === "pass_bid" && after.handNumber !== before.handNumber);
+    const hand = thrownIn ? before.handNumber : after.handNumber;
     moves.push({
       frame: i + 1, hand, kind: KIND[step.action.type], actor: step.action.seat,
       label: describeStep(step.action, before, after, nameOf), cards: cardsOfStep(step.action, after),
@@ -83,7 +84,9 @@ export function walk(replay: Replay, nameOf: (seat: SeatIndex) => string): Walk 
   for (const chapter of chapters) {
     const end = frames[moves[chapter.last].frame];
     chapter.record = end.history.find(h => h.handNumber === chapter.hand) ?? null;
-    chapter.title = chapter.record ? handOutcome(chapter.record, nameOf) : "Everyone passed and the cards were redealt";
+    const ending = replay.steps[moves[chapter.last].frame - 1]?.action;
+    chapter.title = chapter.record ? handOutcome(chapter.record, nameOf)
+      : ending?.type === "misdeal" ? `${nameOf(ending.seat)} threw the hand in for nines` : "Everyone passed and the cards were redealt";
   }
   return { frames, moves, chapters };
 }
