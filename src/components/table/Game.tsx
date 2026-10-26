@@ -37,6 +37,8 @@ type MenuTab = "score" | "hand" | "talk" | "options";
 const TURN_PREFIX = "Your turn · ";
 /** With tap twice to play, a second tap on a lifted card within this long plays it; a later one puts it down. */
 const DOUBLE_TAP_MS = 500;
+/** How far a lifted card rises out of the hand. */
+const LIFT_PX = 14;
 
 function countersIn(trick: NonNullable<PlayerView["currentTrick"]>, rules: PlayerView["rules"]): number {
   const classic: Record<string, number> = { A: 11, T: 10, K: 4, Q: 3, J: 2 };
@@ -60,8 +62,13 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   const [lit, setLit] = useState<CardId[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  /** Card lifted awaiting a second tap; only valid for the view revision it was lifted in. */
-  const [armed, setArmed] = useState<{ card: CardId; rev: number; at: number } | null>(null);
+  /** Card lifted awaiting a second tap; only valid for the view revision it was lifted in.
+   *  While `open`, a second tap plays it (the card wears its ring); once the window closes a tap puts it down. */
+  const [armed, setArmed] = useState<{ card: CardId; rev: number; open: boolean; timed: boolean } | null>(null);
+  /** The card you just played, held up in your hand while the play is sent. */
+  const [sending, setSending] = useState<CardId | null>(null);
+  /** Where that card sat in your hand, so it flies to the table from there. */
+  const launch = useRef<{ card: CardId; rect: DOMRect } | null>(null);
   const [cardHint, setCardHint] = useState<string | null>(null);
   const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (hintTimer.current) clearTimeout(hintTimer.current); }, []);
@@ -80,6 +87,11 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
     const away = (e: PointerEvent) => { if (!(e.target as Element).closest("[data-keep-armed]")) setArmed(null); };
     document.addEventListener("pointerdown", away);
     return () => document.removeEventListener("pointerdown", away);
+  }, [armed]);
+  useEffect(() => {
+    if (!armed?.open || !armed.timed) return;
+    const timer = setTimeout(() => setArmed((a) => (a === armed ? { ...a, open: false } : a)), DOUBLE_TAP_MS);
+    return () => clearTimeout(timer);
   }, [armed]);
   const motion = reducedMotion ? "off" : cardPrefs.motion;
   const { slideMs, holdMs, sweepMs } = motionTimings(motion);
@@ -102,8 +114,9 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   const { status } = useTableChannel(code, event => { if (event.type === "resync" || event.type === "game") void load(); });
   useDisconnectedPolling(status, load);
 
-  async function act(action: ClientAction) {
-    if (!view || busy) return;
+  /** Sends an action; resolves to the view it brought back, or null if nothing came back. */
+  async function act(action: ClientAction): Promise<PlayerView | null> {
+    if (!view || busy) return null;
     const request = ++requests.current.issued;
     const body = { action: { ...action, seat: view.seat }, expectedRev: view.rev, requestId: crypto.randomUUID() };
     setBusy(true); setError(null);
@@ -116,12 +129,15 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
       }
       applyView(next, request); setSelected([]);
       if (next.phase === "game_over") onTableChange();
+      return next;
     } catch (e) {
-      if (request < requests.current.applied) return;
+      if (request < requests.current.applied) return null;
       if (e instanceof ApiError && e.status === 409 && e.data && typeof (e.data as PlayerView).rev === "number") {
         applyView(e.data as PlayerView, request); setSelected([]);
+        return e.data as PlayerView;
       } else if (isTransientError(e)) setDegraded(true);
       else setError((e as Error).message);
+      return null;
     } finally { setBusy(false); }
   }
 
@@ -199,7 +215,8 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
 
   const [displayedTrick, setDisplayedTrick] = useState<PlayerView["currentTrick"]>(null);
   const trickHold = useRef<{ key: string; until: number }>({ key: "", until: 0 });
-  useEffect(() => {
+  // Before paint, so a card you play never shows gone from your hand and not yet on the table.
+  useLayoutEffect(() => {
     if (!view) return;
     const last = view.lastTrick;
     const key = `${view.handNumber}:${last?.plays.map(p => p.card).join(",") ?? ""}`;
@@ -456,6 +473,28 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
     if (boardRef.current) ro.observe(boardRef.current);
     return () => ro.disconnect();
   }, [hasView]);
+  // Your card flies to the table from where it sat in your hand: start it at that spot and size, then let card-play run.
+  useLayoutEffect(() => {
+    const from = launch.current;
+    if (!from || !displayedTrick?.plays.some((p) => p.card === from.card)) return;
+    launch.current = null;
+    const el = boardRef.current?.querySelector<HTMLElement>(`[data-trick-card="${from.card}"]`);
+    const slot = el?.parentElement;
+    if (!el || !slot || motion === "off") return;
+    const to = slot.getBoundingClientRect();
+    const scale = to.width / Math.max(1, el.offsetWidth) || 1;
+    const dx = (from.rect.left + from.rect.width / 2 - (to.left + to.width / 2)) / scale;
+    const dy = (from.rect.top + from.rect.height / 2 - (to.top + to.height / 2)) / scale;
+    el.style.setProperty("--fx", `${dx}px`);
+    el.style.setProperty("--fy", `${dy}px`);
+    el.style.setProperty("--fr", "0deg");
+    el.style.setProperty("--fs", `${from.rect.width / Math.max(1, to.width)}`);
+    el.style.setProperty("--fo", "1");
+    // Measuring started the animation from the old spot; restart it from the new one.
+    el.style.animation = "none";
+    void el.offsetWidth;
+    el.style.animation = "";
+  }, [displayedTrick, motion]);
   // Meld lies on the table in front of each player from the lay-down until the first card is led.
   // Yours joins it once you confirm: until then a new lay-down replaces the old one, so every card stays pickable.
   const laidOf = useCallback((seat: SeatIndex): CardId[] => {
@@ -463,12 +502,16 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
     const out = view.phase === "melding" ? seat !== view.seat || view.meldConfirmed[seat] : view.phase === "playing" && view.playedCards.length === 0;
     return out ? sortHand([...new Set((view.melds[seat] ?? []).flatMap((m) => m.cards))], view.trump, cardPrefs.sort) : [];
   }, [view, cardPrefs.sort]);
+  // Lead while the last trick still rests on the table and your card waits, lifted in your hand, until the table shows it.
+  const unshown = view?.currentTrick?.plays.find((p) => p.seat === view.seat && !displayedTrick?.plays.some((d) => d.card === p.card))?.card ?? null;
   const hand = useMemo(() => {
     if (!view) return [];
     // Once play starts your meld is back in your hand to be played, even while it still shows on the table.
     const laid = new Set(view.phase === "melding" ? laidOf(view.seat) : []);
-    return sortHand((view.revealed ? view.revealed[which][view.seat] ?? [] : view.hand).filter((c) => !laid.has(c)), view.trump, cardPrefs.sort);
-  }, [view, cardPrefs.sort, which, laidOf]);
+    const cards = (view.revealed ? view.revealed[which][view.seat] ?? [] : view.hand).filter((c) => !laid.has(c));
+    if (unshown) cards.push(unshown);
+    return sortHand(cards, view.trump, cardPrefs.sort);
+  }, [view, cardPrefs.sort, which, laidOf, unshown]);
   const revealedFor = (seat: SeatIndex): CardId[] | undefined => view?.revealed ? sortHand(view.revealed[which][seat] ?? [], view.trump, cardPrefs.sort) : undefined;
 
   // The table has no header, so until the board loads (or if it cannot, say for someone without a seat) keep a way out.
@@ -489,18 +532,29 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   // Picking your own meld: outline every card that scores, so nothing is missed.
   const meldable = new Set(view.phase === "melding" && !cardPrefs.autoMeld && view.trump && view.legal.canDeclareMeld ? autoMeldSelection(view.hand, view.trump) : []);
 
-  function toggle(card: CardId, at: number | null) {
+  function play(card: CardId) {
+    setArmed(null);
+    // Measure the card's slot, not the card, so a lift still under way doesn't matter; it flies from the lifted spot.
+    const slot = handRef.current?.querySelector(`[data-hand-card="${card}"]`)?.parentElement?.getBoundingClientRect();
+    launch.current = slot ? { card, rect: new DOMRect(slot.x, slot.y - LIFT_PX, slot.width, slot.height) } : null;
+    setSending(card);
+    void act({ type: "play_card", card }).then((next) => {
+      if (!next || next.hand.includes(card)) launch.current = null;
+      setSending(null);
+    });
+  }
+
+  function toggle(card: CardId, timed: boolean) {
     if (view!.phase === "playing") {
       if (!view!.legal.playableCards.includes(card)) return;
       if (cardPrefs.confirmPlay) {
         const again = armed && armed.card === card && armed.rev === view!.rev;
         // A quick second tap plays the card; coming back to it later puts it down. Keyboard and screen-reader
-        // presses (null) can't be quick, so for them any second press plays. The Play button always plays.
-        if (!again) { setArmed({ card, rev: view!.rev, at: at ?? 0 }); return; }
-        if (at !== null && at - armed.at > DOUBLE_TAP_MS) { setArmed(null); return; }
+        // presses (untimed) can't be quick, so for them any second press plays. The Play button always plays.
+        if (!again) { setArmed({ card, rev: view!.rev, open: true, timed }); return; }
+        if (!armed.open && timed) { setArmed(null); return; }
       }
-      setArmed(null);
-      void act({ type: "play_card", card });
+      play(card);
       return;
     }
     if (!picking) return;
@@ -659,7 +713,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
         {/* my hand */}
         {armedCard && (
           <div className="board-armed relative h-0">
-            <button data-keep-armed="" onClick={() => { setArmed(null); void act({ type: "play_card", card: armedCard }); }} aria-label={`Play ${cardName(armedCard)}`}
+            <button data-keep-armed="" onClick={() => play(armedCard)} aria-label={`Play ${cardName(armedCard)}`}
               className="btn btn-brass absolute bottom-6 right-1 z-30 whitespace-nowrap shadow-lg" style={{ minHeight: 36, padding: "0 16px" }}>
               Play {SUIT_GLYPH[splitCard(armedCard).suit]}{RANK_LABEL[splitCard(armedCard).rank]}
             </button>
@@ -668,16 +722,18 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
         <div ref={handRef} tabIndex={-1} {...keepFocus} aria-label="Your hand" className={`board-hand relative mt-1 flex shrink-0 outline-none sm:mt-2 ${scrollHand ? "hand-scroll overflow-x-auto" : "justify-center"}`} style={{ minHeight: (cardW * 7) / 5 + (short ? 8 : 20), paddingTop: scrollHand ? 16 : undefined }}>
           <div className={`flex items-end ${scrollHand ? "mx-auto w-max" : ""}`} style={{ paddingLeft: overlap }}>
             {hand.map((c) => {
-              const playable = view.phase === "playing" ? view.legal.playableCards.includes(c) : picking;
+              const playable = view.phase === "playing" ? view.legal.playableCards.includes(c) || c === unshown : picking;
               const isArmed = armedCard === c;
-              const sel = selected.includes(c) || isArmed;
+              const sel = selected.includes(c) || isArmed || c === sending || c === unshown;
+              // The ring says a tap plays it; a lifted card without one goes back down when tapped.
+              const ringed = (sel && !isArmed) || (isArmed && armed!.open);
               return (
                 <span key={c} data-keep-armed={isArmed || armedCard ? "" : undefined} className="shrink-0" style={{ marginLeft: -overlap }} onClick={() => { if (view.phase === "playing" && isMyTurn && !playable) showHint(); }}>
-                  <button onClick={(e) => toggle(c, e.detail === 0 ? null : e.timeStamp)} disabled={busy || !playable} aria-pressed={sel}
+                  <button data-hand-card={c} onClick={(e) => toggle(c, e.detail !== 0)} disabled={busy || !playable} aria-pressed={sel}
                     className="group relative block touch-manipulation rounded-[10px] focus-visible:z-20 disabled:pointer-events-none"
-                    style={{ transform: sel || lit?.includes(c) ? "translateY(-14px)" : undefined, transition: "transform .14s ease" }}>
+                    style={{ transform: sel || lit?.includes(c) ? `translateY(-${LIFT_PX}px)` : undefined, transition: "transform .14s ease" }}>
                     {suggested?.includes(c) && <SuggestedMark />}
-                    <PlayingCard card={c} width={cardW} prefs={cardPrefs} selected={sel || (lit?.includes(c) ?? false)} dimmed={(view.phase === "playing" && isMyTurn && !playable) || (lit !== null && !lit.includes(c))}
+                    <PlayingCard card={c} width={cardW} prefs={cardPrefs} selected={ringed || (lit?.includes(c) ?? false)} dimmed={(view.phase === "playing" && isMyTurn && !playable) || (lit !== null && !lit.includes(c))}
                       {...(meldable.has(c) && !sel ? { style: { boxShadow: "0 0 0 2px var(--brass), var(--shadow-card)" }, title: `${cardName(c)}, scores in your meld` } : {})} />
                   </button>
                 </span>
@@ -685,7 +741,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
             })}
           </div>
           {(armedCard || cardHint) && view.phase === "playing" && isMyTurn && (
-            <p role="status" className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-chalk-faint whitespace-nowrap">{armedCard ? cardName(armedCard) : cardHint}</p>
+            <p role="status" className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-chalk-faint whitespace-nowrap">{armedCard ? `${cardName(armedCard)}, ${!armed!.open ? "tap to put it back" : armed!.timed ? "tap again to play" : "press again to play"}` : cardHint}</p>
           )}
         </div>
         </div>
@@ -1029,7 +1085,7 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, compact = false, lai
         const sweeping = done && !dim && !peeking;
         return (
           <div key={(peeking ? "p" : "") + p.card} className={`absolute ${spots[r]}`} style={{ opacity: dim ? 0.55 : 1 }}>
-            <div className={peeking ? undefined : "trick-card"} data-sweep={sweeping ? "" : undefined}
+            <div className={peeking ? undefined : "trick-card"} data-trick-card={peeking ? undefined : p.card} data-sweep={sweeping ? "" : undefined}
               style={peeking ? undefined : { ...flyFrom(r, p.card), ...(sweeping ? sweepTo(rel(shown.winner!)) : null) } as React.CSSProperties}>
               <PlayingCard card={p.card} width={trickW} selected={shown.winner === p.seat} />
             </div>
@@ -1111,7 +1167,7 @@ function constraintSentence(view: PlayerView): string | null {
 
 function ActionBar({ view, isMyTurn, selected, busy, act, nameOf, autoMeld }: {
   view: PlayerView; isMyTurn: boolean; selected: CardId[]; busy: boolean;
-  act: (a: ClientAction) => Promise<void>; nameOf: (s: SeatIndex) => string; autoMeld: boolean;
+  act: (a: ClientAction) => Promise<unknown>; nameOf: (s: SeatIndex) => string; autoMeld: boolean;
 }) {
   const L = view.legal;
   const misdeal = L.canMisdeal ? () => void act({ type: "misdeal" }) : null;
