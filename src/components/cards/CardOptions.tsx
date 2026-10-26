@@ -47,7 +47,7 @@ export function CardOptionsPanel() {
       <Row label="Size">
         {SIZES.map(([s, l]) => <Pill key={s} on={size === s} onClick={() => update({ size: s })}>{l}</Pill>)}
       </Row>
-      <Row label="Tap twice to play">
+      <Row label="Tap twice to play" stacked description={prefs.confirmPlay ? "The first tap lifts a card. Tap it again quickly to play it, or later to put it back." : "A tap plays the card."}>
         <Pill on={prefs.confirmPlay} onClick={() => update({ confirmPlay: true })}>On</Pill>
         <Pill on={!prefs.confirmPlay} onClick={() => update({ confirmPlay: false })}>Off</Pill>
       </Row>
