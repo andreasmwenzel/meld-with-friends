@@ -107,6 +107,12 @@ stuck, meld saving) and the real bots. After every move it runs `checkState` and
 to `.dev/states/fuzz-*.json`; open it with `/dev/lab?state=<name>` and walk back to the move that
 broke it. A small fuzz run is also part of `pnpm vitest run`.
 
+## Front door: `/dev/welcome`
+
+The landing page with sample tables, so the returning-player view can be checked without signing in.
+`?tables=N` shows the first N sample tables (`?tables=0` is the empty lobby), `?as=guest` shows a guest's
+footer, and `?as=new` shows the signed-out welcome.
+
 ## Older boards
 
 `/dev/game` (`?play`, `?meld`, `?end=1`, `?return`, `?shoot=`, `?redeal`, `?ready`) and `/dev/seating`

@@ -7,8 +7,8 @@ export function SignInToggle({ guest, signIn }: { guest: ReactNode; signIn: Reac
   return (
     <div>
       {showSignIn ? signIn : guest}
-      <button className="tap mt-1 text-left text-sm text-chalk-faint hover:text-chalk" onClick={() => setShowSignIn((v) => !v)}>
-        {showSignIn ? "Just want to play? Start as a guest" : "Already have an account? Sign in"}
+      <button className="tap mt-1 text-left text-sm text-chalk underline decoration-chalk-ghost underline-offset-4 hover:decoration-chalk" onClick={() => setShowSignIn((v) => !v)}>
+        {showSignIn ? "Just want to play? Start as a guest" : "Played here before? Sign in to see your tables"}
       </button>
     </div>
   );

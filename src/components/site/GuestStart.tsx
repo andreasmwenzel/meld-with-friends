@@ -80,7 +80,12 @@ export function GuestStart({ mode = "both", code: initialCode = "", signedIn = f
             <button className="btn btn-ink w-full" disabled={busy !== null || (needsName && !name.trim())}>
               {busy === "deal" ? "Dealing" : "Deal a new table"}
             </button>
-            <p className="mt-1.5 text-xs text-ink-soft">You get a code to share.</p>
+            <p className="mt-1.5 flex items-center justify-between gap-3 text-xs text-ink-soft">
+              You get a code to share.
+              <button type="button" className="text-sm text-deck-blue underline" aria-expanded={showRules} onClick={() => setShowRules((v) => !v)}>
+                {showRules ? "Hide house rules" : "House rules"}
+              </button>
+            </p>
           </form>
         )}
         <form onSubmit={join} className="flex gap-2">
@@ -96,14 +101,7 @@ export function GuestStart({ mode = "both", code: initialCode = "", signedIn = f
           </button>
         </form>
       </div>
-      {mode === "both" && (
-        <div className="mt-3">
-          <button type="button" className="tap text-sm text-deck-blue underline" onClick={() => setShowRules((v) => !v)}>
-            {showRules ? "Hide house rules" : "House rules"}
-          </button>
-          {showRules && <div className="mt-3"><RulesForm value={rules} onChange={setRules} compact /></div>}
-        </div>
-      )}
+      {mode === "both" && showRules && <div className="mt-3"><RulesForm value={rules} onChange={setRules} compact /></div>}
       {needsName && captchaSlot}
       {error && <p className="mt-3 text-sm text-pip-red">{error}</p>}
       {needsName && (
