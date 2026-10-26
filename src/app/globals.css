@@ -134,9 +134,9 @@ body {
 /* Wide tables scroll inside their own box rather than the page. */
 .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
-/* Card play: slide in from the owning seat, then sweep to the trick winner. */
+/* Card play: slide in from the owning seat (your own card from its spot in your hand, already showing), then sweep to the trick winner. */
 @keyframes card-play {
-  from { transform: translate(var(--fx), var(--fy)) rotate(var(--fr)) scale(var(--fs)); opacity: 0; }
+  from { transform: translate(var(--fx), var(--fy)) rotate(var(--fr)) scale(var(--fs)); opacity: var(--fo, 0); }
   25% { opacity: 1; }
   to { transform: none; opacity: 1; }
 }
