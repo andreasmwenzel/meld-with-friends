@@ -9,6 +9,7 @@ import { GuestStart } from "@/components/site/GuestStart";
 import { SignInToggle } from "@/components/site/SignInToggle";
 import { HowToPlay } from "@/components/site/HowToPlay";
 import { TableList } from "@/components/lobby/TableList";
+import { NameChange } from "@/components/site/NameChange";
 import { LiveRefresh } from "@/components/lobby/LiveRefresh";
 import type { TableSummary } from "@/lib/tableStatus";
 import type { RulesPatch } from "@/components/rules/rules";
@@ -59,8 +60,8 @@ export function Welcome() {
   );
 }
 
-export function Returning({ name, guest, tables, defaults, live = true }: {
-  name: string | null; guest: boolean; tables: TableSummary[]; defaults: RulesPatch | null; live?: boolean;
+export function Returning({ name, fullName, guest, tables, defaults, live = true }: {
+  name: string | null; fullName?: string | null; guest: boolean; tables: TableSummary[]; defaults: RulesPatch | null; live?: boolean;
 }) {
   const waiting = tables.filter((t) => t.yours).length;
   const lede = !tables.length
@@ -72,6 +73,7 @@ export function Returning({ name, guest, tables, defaults, live = true }: {
       <section className="shrink-0">
         <h1 className="display" style={{ fontSize: "clamp(38px, 10.5vw, 60px)" }}>Evening, {name ?? "friend"}.</h1>
         <p className="mt-1.5 text-chalk-faint">{lede}</p>
+        {fullName && <div className="mt-1"><NameChange name={fullName} /></div>}
       </section>
       {tables.length ? (
         <section aria-label="Your tables" className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-chalk-ghost">

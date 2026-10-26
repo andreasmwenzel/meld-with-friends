@@ -34,5 +34,5 @@ async function Preview({ searchParams }: { searchParams: PageProps<"/dev/welcome
   if (sp.as === "new") return <FrontDoor><Welcome /></FrontDoor>;
   const count = sp.tables === undefined ? FIXTURES.length : Number(sp.tables);
   const tables = sortTables(FIXTURES.slice(0, count).flatMap((t) => summarizeTable(t, ME) ?? []));
-  return <FrontDoor><Returning name="Andreas" guest={sp.as === "guest"} tables={tables} defaults={null} live={false} /></FrontDoor>;
+  return <FrontDoor><Returning name="Andreas" fullName="Andreas" guest={sp.as === "guest"} tables={tables} defaults={null} live={false} /></FrontDoor>;
 }
