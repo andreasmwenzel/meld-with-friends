@@ -14,53 +14,69 @@ const reactions = [
 ];
 
 /**
- * Table talk. Messages travel over Realtime only and are not stored.
- * Floating, it is a button in the corner that opens a panel (the seating screen). `embedded`, it fills
- * the table menu's Talk tab: `visible` says whether that tab is on screen, and unread counts go to `onUnread`.
+ * Table talk's connection and messages. Messages travel over Realtime only and are not stored, so the
+ * room holds this for the whole visit: the talk from the seating screen is still there at the board.
+ * `setVisible` says whether the talk is on screen; messages from others count as unread while it is not.
  */
-export function Chat({ code, me, embedded }: { code: string; me: Profile; embedded?: { visible: boolean; onUnread: (n: number) => void } }) {
+export function useTableChat(code: string, me: Profile, enabled: boolean) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [text, setText] = useState("");
-  const [floatOpen, setOpen] = useState(false);
-  const open = embedded ? embedded.visible : floatOpen;
   const [unread, setUnread] = useState(0);
-  const openRef = useRef(open);
-  useEffect(() => {
-    openRef.current = open;
-    if (open) setUnread(0); // eslint-disable-line react-hooks/set-state-in-effect -- reading the messages clears the count
-  }, [open]);
-  const onUnread = embedded?.onUnread;
-  useEffect(() => { onUnread?.(unread); }, [unread, onUnread]);
+  const visibleRef = useRef(false);
+  const setVisible = useCallback((visible: boolean) => {
+    visibleRef.current = visible;
+    if (visible) setUnread(0);
+  }, []);
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
-  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!enabled) return;
     const db = createClient();
     const channel = db.channel(`chat:${code}`);
     channel
       .on("broadcast", { event: "message" }, ({ payload }) => {
         const m = payload as Message;
         setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev.slice(-99), m]));
-        if (m.from !== me.id && !openRef.current) setUnread((n) => n + 1);
+        if (m.from !== me.id && !visibleRef.current) setUnread((n) => n + 1);
       })
       .subscribe();
     channelRef.current = channel;
     return () => { void db.removeChannel(channel); channelRef.current = null; };
-  }, [code, me.id]);
+  }, [code, me.id, enabled]);
+
+  const send = useCallback(async (text: string) => {
+    const t = text.trim();
+    if (!t || !channelRef.current) return;
+    const m: Message = { id: crypto.randomUUID(), from: me.id, name: me.display_name, text: t.slice(0, 300), at: Date.now() };
+    setMessages((prev) => [...prev.slice(-99), m]);
+    await channelRef.current.send({ type: "broadcast", event: "message", payload: m });
+  }, [me.id, me.display_name]);
+
+  return { messages, unread, setVisible, send, me: me.id };
+}
+export type TableChat = ReturnType<typeof useTableChat>;
+
+/**
+ * Table talk on screen. Floating, it is a button in the corner that opens a panel (the seating screen).
+ * `embedded`, it fills the table menu's Talk tab: `visible` says whether that tab is on screen.
+ */
+export function Chat({ chat, embedded }: { chat: TableChat; embedded?: { visible: boolean } }) {
+  const { messages, unread, setVisible } = chat;
+  const [text, setText] = useState("");
+  const [floatOpen, setOpen] = useState(false);
+  const open = embedded ? embedded.visible : floatOpen;
+  useEffect(() => { setVisible(open); }, [open, setVisible]);
+  useEffect(() => () => setVisible(false), [setVisible]);
+  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (open) listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [open, messages.length]);
 
-  const send = useCallback(async (e: FormEvent, reaction?: string) => {
+  const send = (e: FormEvent, reaction?: string) => {
     e.preventDefault();
-    const t = (reaction ?? text).trim();
-    if (!t || !channelRef.current) return;
-    const m: Message = { id: crypto.randomUUID(), from: me.id, name: me.display_name, text: t.slice(0, 300), at: Date.now() };
     if (!reaction) setText("");
-    setMessages((prev) => [...prev.slice(-99), m]);
-    await channelRef.current.send({ type: "broadcast", event: "message", payload: m });
-  }, [text, me.id, me.display_name]);
+    void chat.send(reaction ?? text);
+  };
 
   const talk = (
     <>
@@ -68,7 +84,7 @@ export function Chat({ code, me, embedded }: { code: string; me: Profile; embedd
         {messages.length === 0 && <p className="text-ink-soft">Say hello. Messages stay at the table and are not saved.</p>}
         {messages.map((m) => (
           <p key={m.id} className="mb-1.5 leading-snug">
-            <span className="font-semibold" style={{ color: m.from === me.id ? "var(--deck-blue)" : "var(--ink)" }}>{m.from === me.id ? "You" : m.name}</span>{" "}
+            <span className="font-semibold" style={{ color: m.from === chat.me ? "var(--deck-blue)" : "var(--ink)" }}>{m.from === chat.me ? "You" : m.name}</span>{" "}
             <span className="text-ink">{m.text}</span>
           </p>
         ))}
@@ -76,7 +92,7 @@ export function Chat({ code, me, embedded }: { code: string; me: Profile; embedd
       <div role="group" aria-label="Send a reaction" className="flex gap-1 border-t border-chalk-dim px-2 py-1">
         {reactions.map(({ emoji, label }) => (
           <button key={emoji} type="button" className="btn btn-chalk" style={{ width: "2.75rem", padding: 0 }}
-            aria-label={`Send ${label.toLowerCase()}`} title={label} onClick={(e) => void send(e, emoji)}>
+            aria-label={`Send ${label.toLowerCase()}`} title={label} onClick={(e) => send(e, emoji)}>
             <span aria-hidden="true">{emoji}</span>
           </button>
         ))}

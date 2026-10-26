@@ -46,8 +46,8 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   code: string; me: Profile; snap: Snapshot; rev: number; onTableChange: () => void; connection?: "ok" | "reconnecting"; local?: boolean;
   /** cards a coach suggests, outlined in the hand (practice) */
   suggested?: CardId[];
-  /** table talk for the menu's Talk tab; it stays mounted so messages arriving while the tab is shut still count */
-  chat?: (visible: boolean, onUnread: (n: number) => void) => React.ReactNode;
+  /** table talk for the menu's Talk tab, and how many messages are unread */
+  chat?: { unread: number; render: (visible: boolean) => React.ReactNode };
 }) {
   const [view, setView] = useState<PlayerView | null>(null);
   const push = usePushNotifications();
@@ -70,7 +70,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
     setView(next); setDegraded(false);
   }, []);
   const reconnecting = connection === "reconnecting" || degraded;
-  const { prefs: cardPrefs, width: cardW, phone, short, reducedMotion } = useCardPrefs();
+  const { prefs: cardPrefs, width: cardW, short, reducedMotion } = useCardPrefs();
   useEffect(() => {
     if (!armed) return;
     const away = (e: PointerEvent) => { if (!(e.target as Element).closest("[data-keep-armed]")) setArmed(null); };
@@ -333,7 +333,6 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   // Everything that is not the table (scorepad, this hand, table talk, options) lives behind Menu.
   const [menu, setMenu] = useState(false);
   const [tab, setTab] = useState<MenuTab>("score");
-  const [unread, setUnread] = useState(0);
   const wide = useSyncExternalStore(subscribeWide, readWide, () => false);
   const menuButton = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -351,6 +350,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
     return () => document.removeEventListener("keydown", key);
   }, [menu]);
   const recapOpen = menu && tab === "hand";
+  const unread = chat?.unread ?? 0;
   const autoRecap = useRef(false);
   useSeenReporting(code, snap.mySeat !== null && view ? view.rev : null);
   useEffect(() => {
@@ -452,12 +452,17 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
     if (boardRef.current) ro.observe(boardRef.current);
     return () => ro.disconnect();
   }, [hasView]);
-  // Meld lies on the table in front of each player from the lay-down until the first lead.
-  const laidOf = useCallback((seat: SeatIndex): CardId[] => view && view.phase === "melding" && !view.revealed
-    ? sortHand([...new Set((view.melds[seat] ?? []).flatMap((m) => m.cards))], view.trump, cardPrefs.sort) : [], [view, cardPrefs.sort]);
+  // Meld lies on the table in front of each player from the lay-down until the first card is led.
+  // Yours joins it once you confirm: until then a new lay-down replaces the old one, so every card stays pickable.
+  const laidOf = useCallback((seat: SeatIndex): CardId[] => {
+    if (!view || view.revealed) return [];
+    const out = view.phase === "melding" ? seat !== view.seat || view.meldConfirmed[seat] : view.phase === "playing" && view.playedCards.length === 0;
+    return out ? sortHand([...new Set((view.melds[seat] ?? []).flatMap((m) => m.cards))], view.trump, cardPrefs.sort) : [];
+  }, [view, cardPrefs.sort]);
   const hand = useMemo(() => {
     if (!view) return [];
-    const laid = new Set(laidOf(view.seat));
+    // Once play starts your meld is back in your hand to be played, even while it still shows on the table.
+    const laid = new Set(view.phase === "melding" ? laidOf(view.seat) : []);
     return sortHand((view.revealed ? view.revealed[which][view.seat] ?? [] : view.hand).filter((c) => !laid.has(c)), view.trump, cardPrefs.sort);
   }, [view, cardPrefs.sort, which, laidOf]);
   const revealedFor = (seat: SeatIndex): CardId[] | undefined => view?.revealed ? sortHand(view.revealed[which][seat] ?? [], view.trump, cardPrefs.sort) : undefined;
@@ -517,12 +522,12 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   const replayHref = snap.table.current_game_id && replayable ? `/replay/${snap.table.current_game_id}` : null;
   const readyInfo = view.phase === "hand_over" && snap.seats.filter((x) => x.user_id).length > 1
     ? { me: isReady(view.seat), all: waitingNames.length === 0, readyNames, waitingNames, post: postReady } : null;
-  // On phones, tighten the fan until it fits the row; scroll only once cards would get too thin to tap.
+  // Tighten the fan until it fits the row; scroll only once cards would get too thin to tap.
   const baseStep = cardW * (cardW < 60 ? 0.42 : 0.5);
   const fitStep = handW > 0 && hand.length > 1 ? (handW - cardW) / (hand.length - 1) : baseStep;
-  const step = phone ? Math.max(Math.max(20, cardW * 0.34), Math.min(baseStep, fitStep)) : baseStep;
+  const step = Math.max(Math.max(20, cardW * 0.34), Math.min(baseStep, fitStep));
   const overlap = cardW - step;
-  const scrollHand = phone && handW > 0 && cardW + (hand.length - 1) * step > handW + 0.5;
+  const scrollHand = handW > 0 && cardW + (hand.length - 1) * step > handW + 0.5;
 
   // Numbers only beside each name; the breakdown is a tap away. The other side's meld and totals hide with the preference, bids never do.
   const sum = (seat: SeatIndex) => (view.melds[seat] ?? []).reduce((n, m) => n + m.points, 0);
@@ -544,6 +549,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   };
   const them: Team = myTeam === "red" ? "blue" : "red";
   const peeking = over && !recapOpen && peekKey === `${view.handNumber}-${view.phase}`;
+  const tabs: [MenuTab, string][] = [["score", "Score"], ["hand", "This hand"], ...(chat ? [["talk", unread > 0 ? `Talk (${unread})` : "Talk"] as [MenuTab, string]] : []), ["options", "Options"]];
   const linkCls = "tap-link text-left text-sm text-chalk-faint underline underline-offset-4 hover:text-chalk disabled:opacity-60";
 
   return (
@@ -676,10 +682,19 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
           </p>
           <button ref={closeButton} type="button" onClick={() => setMenu(false)} className="tap-link -mr-2 shrink-0 text-sm text-chalk-faint underline underline-offset-4 hover:text-chalk">Close</button>
         </div>
-        <div role="tablist" aria-label="Menu" className="mx-4 mt-2 flex gap-1 rounded-full bg-black/25 p-1 text-sm">
-          {([["score", "Score"], ["hand", "This hand"], ...(chat ? [["talk", unread > 0 ? `Talk (${unread})` : "Talk"]] : []), ["options", "Options"]] as [MenuTab, string][]).map(([t, label]) => (
-            <button key={t} type="button" role="tab" id={`menu-tab-${t}`} aria-selected={tab === t} aria-controls={`menu-panel-${t}`} onClick={() => setTab(t)}
-              className={`min-h-9 flex-1 whitespace-nowrap rounded-full px-2 ${tab === t ? "bg-chalk text-ink" : "text-chalk-faint hover:text-chalk"}`}>{label}</button>
+        <div role="tablist" aria-label="Menu" className="mx-4 mt-2 flex gap-1 rounded-full bg-black/25 p-1 text-sm"
+          onKeyDown={(e) => {
+            // Arrow keys move between tabs, Home and End jump to either end; focus follows the selection.
+            const i = tabs.findIndex(([t]) => t === tab);
+            const to = e.key === "ArrowRight" ? (i + 1) % tabs.length : e.key === "ArrowLeft" ? (i + tabs.length - 1) % tabs.length : e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : -1;
+            if (to < 0) return;
+            e.preventDefault();
+            setTab(tabs[to][0]);
+            document.getElementById(`menu-tab-${tabs[to][0]}`)?.focus();
+          }}>
+          {tabs.map(([t, label]) => (
+            <button key={t} type="button" role="tab" id={`menu-tab-${t}`} aria-selected={tab === t} aria-controls={`menu-panel-${t}`} tabIndex={tab === t ? 0 : -1} onClick={() => setTab(t)}
+              className={`min-h-11 flex-1 whitespace-nowrap rounded-full px-2 ${tab === t ? "bg-chalk text-ink" : "text-chalk-faint hover:text-chalk"}`}>{label}</button>
           ))}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
@@ -695,7 +710,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
           )}
           {chat && (
             <div role="tabpanel" id="menu-panel-talk" aria-labelledby="menu-tab-talk" hidden={tab !== "talk"} className="panel h-full min-h-[18rem] overflow-hidden">
-              {chat(menu && tab === "talk", setUnread)}
+              {chat.render(menu && tab === "talk")}
             </div>
           )}
           {tab === "options" && (
