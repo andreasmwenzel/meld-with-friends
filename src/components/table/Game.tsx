@@ -17,6 +17,7 @@ import { canCountdownAdvance } from "./nextHandCountdown";
 import { Recap, useSeenReporting } from "./Recap";
 import { MeldReview, itemLabel } from "./MeldReview";
 import { CardOptionsPanel } from "@/components/cards/CardOptions";
+import { NameChange } from "@/components/site/NameChange";
 import { useOpponentPointsPref } from "@/lib/prefs";
 import { useCardPrefs } from "@/lib/cardPrefs";
 import { usePushNotifications } from "@/lib/push";
@@ -728,6 +729,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
                 {SEAT_LABEL[view.seat]} · <span className={myTeam === "red" ? "text-deck-red-soft" : "text-deck-blue-soft"}>{myTeam} team</span>
                 {view.trump && <> · trump {SUIT_NAME[view.trump]}</>}
               </p>
+              {!local && <NameChange name={me.display_name} onSaved={onTableChange} />}
               <div className="flex flex-col items-start">
                 <button type="button" onClick={toggleChime} aria-pressed={chime} className={linkCls}>Sound {chime ? "on" : "off"}</button>
                 {push.supported && view.rules.pace === "leisurely" && (

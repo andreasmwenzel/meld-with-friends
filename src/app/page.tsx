@@ -31,6 +31,7 @@ async function Front() {
   return (
     <Returning
       name={profile?.display_name?.split(" ")[0] ?? null}
+      fullName={profile?.display_name ?? null}
       guest={!!user.is_anonymous}
       tables={tables}
       defaults={(profile?.default_rules as RulesPatch | null) ?? null}
