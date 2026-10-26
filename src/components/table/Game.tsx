@@ -495,18 +495,17 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
         {/* action bar */}
         <div ref={actionRef} {...keepFocus} className="board-action mt-2 min-h-[64px] sm:mt-4 sm:min-h-[88px]">
           <ActionBar key={view.rev} view={view} isMyTurn={isMyTurn} selected={selected} busy={busy} act={act} nameOf={nameOf} autoMeld={cardPrefs.autoMeld} />
+          {/* One slot of the same height whether the meld row or the "Review meld" link is in it, so the hand never moves. */}
           {view.phase === "playing" && (
-            (view.playedCards.length < 4 && meldHidden !== view.handNumber) || meldAsked === view.handNumber ? (
-              <div className="mt-1">
+            <div className="mt-1 flex min-h-11 items-center justify-center">
+              {(view.playedCards.length < 4 && meldHidden !== view.handNumber) || meldAsked === view.handNumber ? (
                 <MeldReview key={view.handNumber} melds={view.melds} seat={view.seat} nameOf={nameOf} compact={short}
                   onHide={() => { focusReview.current = true; setMeldHidden(view.handNumber); setMeldAsked(null); }} />
-              </div>
-            ) : (
-              <div className="flex justify-center">
+              ) : (
                 <button ref={reviewLink} type="button" className="tap-link text-xs text-chalk-faint underline underline-offset-4 hover:text-chalk"
                   onClick={() => setMeldAsked(view.handNumber)}>Review meld</button>
-              </div>
-            )
+              )}
+            </div>
           )}
           {(view.phase === "bidding" || (view.phase === "melding" && view.trump)) && (
             <MeldLine key={view.phase} rules={view.rules} hand={view.hand} trump={view.phase === "melding" ? view.trump : null} lit={lit} setLit={setLit} />

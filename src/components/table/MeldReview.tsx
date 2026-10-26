@@ -54,7 +54,7 @@ export function MeldReview({ melds, seat, nameOf, onHide, compact = false }: {
           <button key={s} type="button" data-meld-seat={s} aria-expanded={on} aria-controls={on ? popId : undefined}
             aria-label={`${nameOf(s)}, ${total} meld`}
             onClick={() => setOpen(on ? null : s)}
-            className={`inline-flex min-h-8 items-baseline gap-1.5 rounded-full px-2.5 py-1 ${on ? "bg-chalk text-[color:var(--pip-black)]" : "bg-white/10 text-chalk hover:bg-white/20"}`}>
+            className={`inline-flex min-h-8 items-baseline gap-1 rounded-full px-2 py-1 ${on ? "bg-chalk text-[color:var(--pip-black)]" : "bg-white/10 text-chalk hover:bg-white/20"}`}>
             <span className="max-w-[7em] truncate font-semibold"
               style={{ color: on ? undefined : teamOf(s) === "red" ? "var(--deck-red-soft)" : "var(--deck-blue-soft)" }}>{nameOf(s)}</span>
             <span className="tabular-nums">{total}</span>
@@ -77,7 +77,8 @@ export function MeldReview({ melds, seat, nameOf, onHide, compact = false }: {
         </div>
       )}
       {onHide && (
-        <button type="button" onClick={onHide} className="tap-link px-1 text-chalk-faint underline-offset-4 hover:text-chalk hover:underline">Hide</button>
+        <button type="button" onClick={onHide} aria-label="Hide the meld row" title="Hide"
+          className="inline-flex size-8 items-center justify-center rounded-full text-base leading-none text-chalk-faint hover:bg-white/10 hover:text-chalk">×</button>
       )}
     </div>
   );
