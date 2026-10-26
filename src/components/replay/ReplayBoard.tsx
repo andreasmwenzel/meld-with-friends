@@ -192,7 +192,7 @@ function SeatRow({ seat, info, score, mine, active, cards, meld, lit, raised, pr
   return (
     <div className={`relative z-[1] flex min-w-0 flex-col ${items} gap-1 ${big ? "mt-3" : "py-1"}`}>
       {big && laid}
-      <div className={`flex max-w-full items-center gap-1 ${vertical ? "flex-col" : "flex-row"}`}>
+      <div className={`relative flex max-w-full items-center ${vertical ? "flex-col" : "flex-row"}`}>
         <button type="button" data-chip="" onClick={() => { if (!atBottom) onSit(seat); }} aria-pressed={atBottom}
           aria-label={`${atBottom ? `${info.name}, at the bottom of the table` : `See the table from ${info.name}'s seat`}${mine ? " (you)" : ""}${score.dealer ? ", dealer" : ""}`}
           title={atBottom ? undefined : `See it from ${info.name}'s seat`}
@@ -204,7 +204,9 @@ function SeatRow({ seat, info, score, mine, active, cards, meld, lit, raised, pr
           </span>
           <span className={`truncate text-xs font-semibold ${vertical ? "max-w-[72px]" : "max-w-[140px]"} ${mine ? "text-brass" : ""}`} title={mine ? "You" : undefined}>{info.name}</span>
         </button>
-        <ScoreTag score={score} name={info.name} align={align} />
+        <div className={vertical ? "flex h-7 items-center" : "absolute left-full top-1/2 ml-1 -translate-y-1/2 whitespace-nowrap"}>
+          <ScoreTag score={score} name={info.name} align={align} />
+        </div>
       </div>
       {cards.length === 0 ? (
         <span className="text-xs text-chalk-faint" style={{ minHeight: vertical ? undefined : h + 8 }}>{big || !vertical ? "No cards left" : ""}</span>

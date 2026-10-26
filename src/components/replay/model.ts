@@ -52,8 +52,10 @@ export function walk(replay: Replay, nameOf: (seat: SeatIndex) => string): Walk 
     const before = frames[i], after = frames[i + 1];
     const completedTrick = step.action.type === "play_card" && before.currentTrick?.plays.length === 3;
     const record = after.history.length > before.history.length ? after.history[after.history.length - 1] : null;
+    // The pass that throws a hand in belongs to the hand it ended, though the board already shows the redeal.
+    const hand = step.action.type === "pass_bid" && after.handNumber !== before.handNumber ? before.handNumber : after.handNumber;
     moves.push({
-      frame: i + 1, hand: after.handNumber, kind: KIND[step.action.type], actor: step.action.seat,
+      frame: i + 1, hand, kind: KIND[step.action.type], actor: step.action.seat,
       label: describeStep(step.action, before, after, nameOf), cards: cardsOfStep(step.action, after),
       trick: completedTrick ? lastTrickOf(after) : null, record,
     });
