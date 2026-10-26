@@ -489,14 +489,15 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   // Picking your own meld: outline every card that scores, so nothing is missed.
   const meldable = new Set(view.phase === "melding" && !cardPrefs.autoMeld && view.trump && view.legal.canDeclareMeld ? autoMeldSelection(view.hand, view.trump) : []);
 
-  function toggle(card: CardId, at: number) {
+  function toggle(card: CardId, at: number | null) {
     if (view!.phase === "playing") {
       if (!view!.legal.playableCards.includes(card)) return;
       if (cardPrefs.confirmPlay) {
         const again = armed && armed.card === card && armed.rev === view!.rev;
-        // A quick second tap plays the card; coming back to it later puts it down. The Play button always plays.
-        if (!again) { setArmed({ card, rev: view!.rev, at }); return; }
-        if (at - armed.at > DOUBLE_TAP_MS) { setArmed(null); return; }
+        // A quick second tap plays the card; coming back to it later puts it down. Keyboard and screen-reader
+        // presses (null) can't be quick, so for them any second press plays. The Play button always plays.
+        if (!again) { setArmed({ card, rev: view!.rev, at: at ?? 0 }); return; }
+        if (at !== null && at - armed.at > DOUBLE_TAP_MS) { setArmed(null); return; }
       }
       setArmed(null);
       void act({ type: "play_card", card });
@@ -663,8 +664,8 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
               const sel = selected.includes(c) || isArmed;
               return (
                 <span key={c} data-keep-armed={isArmed || armedCard ? "" : undefined} className="shrink-0" style={{ marginLeft: -overlap }} onClick={() => { if (view.phase === "playing" && isMyTurn && !playable) showHint(); }}>
-                  <button onClick={(e) => toggle(c, e.timeStamp)} disabled={busy || !playable} aria-pressed={sel}
-                    className="group relative block rounded-[10px] focus-visible:z-20 disabled:pointer-events-none"
+                  <button onClick={(e) => toggle(c, e.detail === 0 ? null : e.timeStamp)} disabled={busy || !playable} aria-pressed={sel}
+                    className="group relative block touch-manipulation rounded-[10px] focus-visible:z-20 disabled:pointer-events-none"
                     style={{ transform: sel || lit?.includes(c) ? "translateY(-14px)" : undefined, transition: "transform .14s ease" }}>
                     {suggested?.includes(c) && <SuggestedMark />}
                     <PlayingCard card={c} width={cardW} prefs={cardPrefs} selected={sel || (lit?.includes(c) ?? false)} dimmed={(view.phase === "playing" && isMyTurn && !playable) || (lit !== null && !lit.includes(c))}
