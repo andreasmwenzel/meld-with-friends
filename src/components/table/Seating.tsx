@@ -87,7 +87,8 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
     <div className="mx-auto grid w-full max-w-6xl flex-1 gap-8 px-6 pb-16 pt-2 sm:gap-12 sm:pt-4 lg:grid-cols-[1fr_minmax(280px,360px)]">
       <section className="flex min-w-0 flex-col items-center justify-center py-4 sm:py-10">
         {/* the table */}
-        <div className={`relative flex w-full flex-col items-center sm:block sm:aspect-[1.35] sm:w-[min(560px,86vw)] ${turn.className}`} style={turn.style}>
+        {/* From sm up the chair cards hang half outside the oval, so the oval keeps room above and below for them. */}
+        <div className={`relative flex w-full flex-col items-center sm:my-24 sm:block sm:aspect-[1.35] sm:w-[min(560px,86vw)] ${turn.className}`} style={turn.style}>
           <div className="absolute inset-0 hidden rounded-[48%] sm:block border-[6px] border-cloth-edge"
             style={{ background: "radial-gradient(ellipse at 50% 40%, #6b2530, var(--cloth-deep))", boxShadow: "inset 0 12px 40px rgba(0,0,0,.35), 0 20px 50px -20px rgba(0,0,0,.7)" }} />
           <div className={`mb-6 flex flex-col items-center justify-center text-center sm:absolute sm:inset-0 sm:mb-0 ${turn.still.className}`} style={turn.still.style}>
@@ -151,7 +152,7 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
           })}
           </div>
         </div>
-        <p className="mt-8 max-w-md sm:mt-16 text-center text-chalk-faint">
+        <p className="mt-8 max-w-md text-center text-chalk-faint sm:mt-2">
           Partners sit across from each other. <span className="text-deck-red-soft">South and North</span> are one team,{" "}
           <span className="text-deck-blue-soft">West and East</span> the other.
         </p>
