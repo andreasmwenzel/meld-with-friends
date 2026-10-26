@@ -37,6 +37,8 @@ type MenuTab = "score" | "hand" | "talk" | "options";
 const TURN_PREFIX = "Your turn · ";
 /** With tap twice to play, a second tap on a lifted card within this long plays it; a later one puts it down. */
 const DOUBLE_TAP_MS = 500;
+/** How far a lifted card rises out of the hand. */
+const LIFT_PX = 14;
 
 function countersIn(trick: NonNullable<PlayerView["currentTrick"]>, rules: PlayerView["rules"]): number {
   const classic: Record<string, number> = { A: 11, T: 10, K: 4, Q: 3, J: 2 };
@@ -63,7 +65,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   /** Card lifted awaiting a second tap; only valid for the view revision it was lifted in.
    *  While `open`, a second tap plays it (the card wears its ring); once the window closes a tap puts it down. */
   const [armed, setArmed] = useState<{ card: CardId; rev: number; open: boolean; timed: boolean } | null>(null);
-  /** The card you just played, held up in the hand until the table takes it. */
+  /** The card you just played, held up in your hand while the play is sent. */
   const [sending, setSending] = useState<CardId | null>(null);
   /** Where that card sat in your hand, so it flies to the table from there. */
   const launch = useRef<{ card: CardId; rect: DOMRect } | null>(null);
@@ -112,8 +114,9 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   const { status } = useTableChannel(code, event => { if (event.type === "resync" || event.type === "game") void load(); });
   useDisconnectedPolling(status, load);
 
-  async function act(action: ClientAction) {
-    if (!view || busy) return;
+  /** Sends an action; resolves to the view it brought back, or null if nothing came back. */
+  async function act(action: ClientAction): Promise<PlayerView | null> {
+    if (!view || busy) return null;
     const request = ++requests.current.issued;
     const body = { action: { ...action, seat: view.seat }, expectedRev: view.rev, requestId: crypto.randomUUID() };
     setBusy(true); setError(null);
@@ -126,12 +129,15 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
       }
       applyView(next, request); setSelected([]);
       if (next.phase === "game_over") onTableChange();
+      return next;
     } catch (e) {
-      if (request < requests.current.applied) return;
+      if (request < requests.current.applied) return null;
       if (e instanceof ApiError && e.status === 409 && e.data && typeof (e.data as PlayerView).rev === "number") {
         applyView(e.data as PlayerView, request); setSelected([]);
+        return e.data as PlayerView;
       } else if (isTransientError(e)) setDegraded(true);
       else setError((e as Error).message);
+      return null;
     } finally { setBusy(false); }
   }
 
@@ -496,12 +502,16 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
     const out = view.phase === "melding" ? seat !== view.seat || view.meldConfirmed[seat] : view.phase === "playing" && view.playedCards.length === 0;
     return out ? sortHand([...new Set((view.melds[seat] ?? []).flatMap((m) => m.cards))], view.trump, cardPrefs.sort) : [];
   }, [view, cardPrefs.sort]);
+  // Lead while the last trick still rests on the table and your card waits, lifted in your hand, until the table shows it.
+  const unshown = view?.currentTrick?.plays.find((p) => p.seat === view.seat && !displayedTrick?.plays.some((d) => d.card === p.card))?.card ?? null;
   const hand = useMemo(() => {
     if (!view) return [];
     // Once play starts your meld is back in your hand to be played, even while it still shows on the table.
     const laid = new Set(view.phase === "melding" ? laidOf(view.seat) : []);
-    return sortHand((view.revealed ? view.revealed[which][view.seat] ?? [] : view.hand).filter((c) => !laid.has(c)), view.trump, cardPrefs.sort);
-  }, [view, cardPrefs.sort, which, laidOf]);
+    const cards = (view.revealed ? view.revealed[which][view.seat] ?? [] : view.hand).filter((c) => !laid.has(c));
+    if (unshown) cards.push(unshown);
+    return sortHand(cards, view.trump, cardPrefs.sort);
+  }, [view, cardPrefs.sort, which, laidOf, unshown]);
   const revealedFor = (seat: SeatIndex): CardId[] | undefined => view?.revealed ? sortHand(view.revealed[which][seat] ?? [], view.trump, cardPrefs.sort) : undefined;
 
   // The table has no header, so until the board loads (or if it cannot, say for someone without a seat) keep a way out.
@@ -524,10 +534,14 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
 
   function play(card: CardId) {
     setArmed(null);
-    const el = handRef.current?.querySelector(`[data-hand-card="${card}"]`);
-    launch.current = el ? { card, rect: el.getBoundingClientRect() } : null;
+    // Measure the card's slot, not the card, so a lift still under way doesn't matter; it flies from the lifted spot.
+    const slot = handRef.current?.querySelector(`[data-hand-card="${card}"]`)?.parentElement?.getBoundingClientRect();
+    launch.current = slot ? { card, rect: new DOMRect(slot.x, slot.y - LIFT_PX, slot.width, slot.height) } : null;
     setSending(card);
-    void act({ type: "play_card", card }).finally(() => setSending(null));
+    void act({ type: "play_card", card }).then((next) => {
+      if (!next || next.hand.includes(card)) launch.current = null;
+      setSending(null);
+    });
   }
 
   function toggle(card: CardId, timed: boolean) {
@@ -708,16 +722,16 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
         <div ref={handRef} tabIndex={-1} {...keepFocus} aria-label="Your hand" className={`board-hand relative mt-1 flex shrink-0 outline-none sm:mt-2 ${scrollHand ? "hand-scroll overflow-x-auto" : "justify-center"}`} style={{ minHeight: (cardW * 7) / 5 + (short ? 8 : 20), paddingTop: scrollHand ? 16 : undefined }}>
           <div className={`flex items-end ${scrollHand ? "mx-auto w-max" : ""}`} style={{ paddingLeft: overlap }}>
             {hand.map((c) => {
-              const playable = view.phase === "playing" ? view.legal.playableCards.includes(c) : picking;
+              const playable = view.phase === "playing" ? view.legal.playableCards.includes(c) || c === unshown : picking;
               const isArmed = armedCard === c;
-              const sel = selected.includes(c) || isArmed || sending === c;
+              const sel = selected.includes(c) || isArmed || c === sending || c === unshown;
               // The ring says a tap plays it; a lifted card without one goes back down when tapped.
               const ringed = (sel && !isArmed) || (isArmed && armed!.open);
               return (
                 <span key={c} data-keep-armed={isArmed || armedCard ? "" : undefined} className="shrink-0" style={{ marginLeft: -overlap }} onClick={() => { if (view.phase === "playing" && isMyTurn && !playable) showHint(); }}>
                   <button data-hand-card={c} onClick={(e) => toggle(c, e.detail !== 0)} disabled={busy || !playable} aria-pressed={sel}
                     className="group relative block touch-manipulation rounded-[10px] focus-visible:z-20 disabled:pointer-events-none"
-                    style={{ transform: sel || lit?.includes(c) ? "translateY(-14px)" : undefined, transition: "transform .14s ease" }}>
+                    style={{ transform: sel || lit?.includes(c) ? `translateY(-${LIFT_PX}px)` : undefined, transition: "transform .14s ease" }}>
                     {suggested?.includes(c) && <SuggestedMark />}
                     <PlayingCard card={c} width={cardW} prefs={cardPrefs} selected={ringed || (lit?.includes(c) ?? false)} dimmed={(view.phase === "playing" && isMyTurn && !playable) || (lit !== null && !lit.includes(c))}
                       {...(meldable.has(c) && !sel ? { style: { boxShadow: "0 0 0 2px var(--brass), var(--shadow-card)" }, title: `${cardName(c)}, scores in your meld` } : {})} />
@@ -1153,7 +1167,7 @@ function constraintSentence(view: PlayerView): string | null {
 
 function ActionBar({ view, isMyTurn, selected, busy, act, nameOf, autoMeld }: {
   view: PlayerView; isMyTurn: boolean; selected: CardId[]; busy: boolean;
-  act: (a: ClientAction) => Promise<void>; nameOf: (s: SeatIndex) => string; autoMeld: boolean;
+  act: (a: ClientAction) => Promise<unknown>; nameOf: (s: SeatIndex) => string; autoMeld: boolean;
 }) {
   const L = view.legal;
   const misdeal = L.canMisdeal ? () => void act({ type: "misdeal" }) : null;
