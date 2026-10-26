@@ -467,7 +467,15 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   }, [view, cardPrefs.sort, which, laidOf]);
   const revealedFor = (seat: SeatIndex): CardId[] | undefined => view?.revealed ? sortHand(view.revealed[which][seat] ?? [], view.trump, cardPrefs.sort) : undefined;
 
-  if (!view) return <div className="flex-1 px-6 text-chalk-faint">{error ?? "Dealing."}</div>;
+  // The table has no header, so until the board loads (or if it cannot, say for someone without a seat) keep a way out.
+  if (!view) {
+    return (
+      <div className="flex-1 px-6 py-6 text-chalk-faint">
+        <p>{error ?? "Dealing."}</p>
+        {!local && <Link href="/home" className="tap-link mt-2 inline-flex underline underline-offset-4 hover:text-chalk">Back to your tables</Link>}
+      </div>
+    );
+  }
 
   const myTeam = teamOf(view.seat);
   const rel = (seat: SeatIndex): 0 | 1 | 2 | 3 => (((seat - view.seat + 4) % 4) as 0 | 1 | 2 | 3);
