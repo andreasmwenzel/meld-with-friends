@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import type { MeldItem, PlayerView, SeatIndex } from "@/engine/types";
 import { SUIT_GLYPH, splitCard } from "@/components/cards/PlayingCard";
 import { teamOf } from "./types";
@@ -26,6 +26,18 @@ export function MeldReview({ melds, seat, nameOf, onHide, compact = false }: {
 }) {
   const [open, setOpen] = useState<SeatIndex | null>(null);
   const root = useRef<HTMLDivElement>(null);
+  // Sideways on a phone the row lives in a scrolling column that would clip an absolute popover,
+  // so there the popover is pinned to the viewport under its chip, kept inside the screen edges.
+  const [pin, setPin] = useState<CSSProperties | null>(null);
+  const place = (seat: SeatIndex) => {
+    if (!compact) { setPin(null); return; }
+    const chip = root.current?.querySelector<HTMLElement>(`[data-meld-seat="${seat}"]`);
+    if (!chip) { setPin(null); return; }
+    const r = chip.getBoundingClientRect();
+    const width = Math.min(256, window.innerWidth - 16);
+    const left = Math.min(Math.max(8, r.left + r.width / 2 - width / 2), window.innerWidth - 8 - width);
+    setPin({ position: "fixed", left, top: r.bottom + 6, width, maxHeight: window.innerHeight - r.bottom - 14, overflowY: "auto", translate: "none" });
+  };
   const baseId = useId();
   const seats = [0, 1, 2, 3].map((n) => ((seat + n) % 4) as SeatIndex);
   const popId = `${baseId}-pieces`;
@@ -40,10 +52,17 @@ export function MeldReview({ melds, seat, nameOf, onHide, compact = false }: {
       setOpen(null);
       root.current?.querySelector<HTMLButtonElement>(`[data-meld-seat="${open}"]`)?.focus();
     };
+    // Scrolling the column under it, or resizing, would leave the pinned popover adrift; scrolling its own list is fine.
+    const drift = (e: Event) => { if (pin && !(e.type === "scroll" && root.current?.contains(e.target as Node))) setOpen(null); };
     document.addEventListener("pointerdown", away);
     document.addEventListener("keydown", key);
-    return () => { document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", key); };
-  }, [open]);
+    window.addEventListener("resize", drift);
+    document.addEventListener("scroll", drift, true);
+    return () => {
+      document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", key);
+      window.removeEventListener("resize", drift); document.removeEventListener("scroll", drift, true);
+    };
+  }, [open, pin]);
 
   return (
     <div ref={root} role="group" aria-label="Meld this hand" className="relative mx-auto flex max-w-full flex-wrap items-center justify-center gap-1.5 text-xs">
@@ -53,8 +72,8 @@ export function MeldReview({ melds, seat, nameOf, onHide, compact = false }: {
         return (
           <button key={s} type="button" data-meld-seat={s} aria-expanded={on} aria-controls={on ? popId : undefined}
             aria-label={`${nameOf(s)}, ${total} meld`}
-            onClick={() => setOpen(on ? null : s)}
-            className={`inline-flex min-h-8 items-baseline gap-1.5 rounded-full px-2.5 py-1 ${on ? "bg-chalk text-[color:var(--pip-black)]" : "bg-white/10 text-chalk hover:bg-white/20"}`}>
+            onClick={() => { if (on) { setOpen(null); setPin(null); } else { place(s); setOpen(s); } }}
+            className={`inline-flex min-h-8 items-baseline gap-1 rounded-full px-2 py-1 ${on ? "bg-chalk text-[color:var(--pip-black)]" : "bg-white/10 text-chalk hover:bg-white/20"}`}>
             <span className="max-w-[7em] truncate font-semibold"
               style={{ color: on ? undefined : teamOf(s) === "red" ? "var(--deck-red-soft)" : "var(--deck-blue-soft)" }}>{nameOf(s)}</span>
             <span className="tabular-nums">{total}</span>
@@ -63,6 +82,7 @@ export function MeldReview({ melds, seat, nameOf, onHide, compact = false }: {
       })}
       {open !== null && (
         <div id={popId} role="region" aria-label={`${nameOf(open)}'s meld`}
+          style={pin ?? undefined}
           className={`panel absolute left-1/2 z-40 w-max min-w-[10rem] max-w-[min(16rem,calc(100vw-2rem))] -translate-x-1/2 px-3 py-2 text-left text-sm ${compact ? "top-full mt-1.5" : "bottom-full mb-1.5"}`}>
           <p className="font-semibold" style={{ color: teamOf(open) === "red" ? "var(--deck-red)" : "var(--deck-blue)" }}>{nameOf(open)}</p>
           {items.length === 0 ? <p className="text-ink-soft">No meld this hand.</p> : (
@@ -77,7 +97,8 @@ export function MeldReview({ melds, seat, nameOf, onHide, compact = false }: {
         </div>
       )}
       {onHide && (
-        <button type="button" onClick={onHide} className="tap-link px-1 text-chalk-faint underline-offset-4 hover:text-chalk hover:underline">Hide</button>
+        <button type="button" onClick={onHide} aria-label="Hide the meld row" title="Hide"
+          className="inline-flex h-11 w-9 items-center justify-center rounded-full text-base leading-none text-chalk-faint hover:bg-white/10 hover:text-chalk">×</button>
       )}
     </div>
   );
