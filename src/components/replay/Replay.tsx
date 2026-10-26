@@ -125,6 +125,8 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
   useEffect(() => {
     const list = listRef.current, row = list?.querySelector<HTMLElement>("[aria-current]");
     if (!list || !row) return;
+    // A fold the reader closed by hand opens again when the current move is inside it.
+    for (let d = row.closest("details:not([open])"); d; d = d.parentElement?.closest("details:not([open])") ?? null) (d as HTMLDetailsElement).open = true;
     const top = row.offsetTop - list.offsetTop, bottom = top + row.offsetHeight;
     if (top < list.scrollTop + 32) list.scrollTop = Math.max(0, top - 32);
     else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight + 8;
@@ -246,9 +248,15 @@ function phasesOf(moves: Move[], c: { hand: number; first: number; last: number 
     const first = i;
     while (i <= c.last && kinds.includes(moves[i].kind)) i++;
     if (i > first) {
-      const last = moves[i - 1];
-      const note = key === "bidding" ? last.label.replace(/^.*?\. /, "") : key === "meld" ? last.label.replace(/^Meld: /, "").replace(/\. .*$/, "") : undefined;
-      phases.push({ key: `${c.hand}:${key}`, title, note: note === last.label ? undefined : note, first, last: i - 1 });
+      const rows = moves.slice(first, i);
+      let note: string | undefined;
+      if (key === "bidding") {
+        // "Alice takes it at 33" from the pass that closed the auction, then the suit from the trump call.
+        const closed = [...rows].reverse().find(m => m.kind === "bid" && m.label.includes(". "));
+        const trump = rows.find(m => m.kind === "trump")?.label.match(/names (\w+) trump/)?.[1];
+        note = closed ? closed.label.replace(/^.*?\. /, "") + (trump ? `, ${trump}` : "") : trump;
+      } else if (key === "meld") note = rows[rows.length - 1].label.replace(/^Meld: /, "").replace(/\. .*$/, "");
+      phases.push({ key: `${c.hand}:${key}`, title, note, first, last: i - 1 });
     }
   };
   take(["bid", "trump"], "bidding", "Bidding");
@@ -286,7 +294,7 @@ function Fold({ open, level, title, children }: { open: boolean; level: 0 | 1 | 
 }
 
 function MoveRow({ move, current, onClick }: { move: Move; current: boolean; onClick: () => void }) {
-  const indent = move.kind === "play" ? "pl-4" : move.kind === "deal" ? "" : "pl-2";
+  const indent = move.kind === "deal" ? "" : "pl-1";
   const tone = move.kind === "deal" ? "text-chalk" : move.trick || move.record ? "text-chalk" : "text-chalk-faint";
   return (
     <li>
