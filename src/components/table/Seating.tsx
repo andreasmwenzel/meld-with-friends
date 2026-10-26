@@ -90,7 +90,7 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
 
   return (
     <div className="mx-auto grid w-full max-w-6xl flex-1 gap-8 px-6 pb-16 pt-2 sm:gap-12 sm:pt-4 lg:grid-cols-[1fr_minmax(280px,360px)]">
-      <section className="flex min-w-0 flex-col items-center justify-center py-4 sm:py-10">
+      <section className="flex min-w-0 flex-col items-center justify-center overflow-x-clip py-4 sm:py-10">
         <div className="mb-4 flex flex-col items-center text-center sm:hidden">{codeBlock}</div>
         {/* the table */}
         {/* From sm up the chair cards hang half outside the oval, so the oval keeps room above and below for them. */}
@@ -105,7 +105,7 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
             const team = teamOf(i);
             const bot = s?.bot ?? null;
             return (
-              <div key={i} className={`absolute ${POS[rel(i)]} flex w-[108px] min-w-0 flex-col items-center gap-1 sm:w-[132px] sm:gap-1.5`}>
+              <div key={i} className={`absolute ${POS[rel(i)]} flex w-[96px] min-w-0 flex-col items-center gap-1 sm:w-[132px] sm:gap-1.5`}>
                 {bot ? (
                   <div className="panel flex w-full flex-col items-center gap-1 px-2 py-2.5 sm:px-3 sm:py-3" style={{ background: "var(--chalk-dim)" }}>
                     <Avatar name={bot} team={team} size={44} bot />
