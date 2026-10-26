@@ -36,7 +36,7 @@ export function MeldReview({ melds, seat, nameOf, onHide, compact = false }: {
     const r = chip.getBoundingClientRect();
     const width = Math.min(256, window.innerWidth - 16);
     const left = Math.min(Math.max(8, r.left + r.width / 2 - width / 2), window.innerWidth - 8 - width);
-    setPin({ position: "fixed", left, top: r.bottom + 6, width, maxHeight: window.innerHeight - r.bottom - 14, overflowY: "auto", transform: "none" });
+    setPin({ position: "fixed", left, top: r.bottom + 6, width, maxHeight: window.innerHeight - r.bottom - 14, overflowY: "auto", translate: "none" });
   };
   const baseId = useId();
   const seats = [0, 1, 2, 3].map((n) => ((seat + n) % 4) as SeatIndex);
@@ -52,7 +52,8 @@ export function MeldReview({ melds, seat, nameOf, onHide, compact = false }: {
       setOpen(null);
       root.current?.querySelector<HTMLButtonElement>(`[data-meld-seat="${open}"]`)?.focus();
     };
-    const drift = () => { if (pin) setOpen(null); };
+    // Scrolling the column under it, or resizing, would leave the pinned popover adrift; scrolling its own list is fine.
+    const drift = (e: Event) => { if (pin && !(e.type === "scroll" && root.current?.contains(e.target as Node))) setOpen(null); };
     document.addEventListener("pointerdown", away);
     document.addEventListener("keydown", key);
     window.addEventListener("resize", drift);
@@ -71,7 +72,7 @@ export function MeldReview({ melds, seat, nameOf, onHide, compact = false }: {
         return (
           <button key={s} type="button" data-meld-seat={s} aria-expanded={on} aria-controls={on ? popId : undefined}
             aria-label={`${nameOf(s)}, ${total} meld`}
-            onClick={() => { if (on) setOpen(null); else { place(s); setOpen(s); } }}
+            onClick={() => { if (on) { setOpen(null); setPin(null); } else { place(s); setOpen(s); } }}
             className={`inline-flex min-h-8 items-baseline gap-1 rounded-full px-2 py-1 ${on ? "bg-chalk text-[color:var(--pip-black)]" : "bg-white/10 text-chalk hover:bg-white/20"}`}>
             <span className="max-w-[7em] truncate font-semibold"
               style={{ color: on ? undefined : teamOf(s) === "red" ? "var(--deck-red-soft)" : "var(--deck-blue-soft)" }}>{nameOf(s)}</span>
