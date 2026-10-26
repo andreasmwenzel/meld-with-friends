@@ -58,6 +58,20 @@ export function walk(replay: Replay, nameOf: (seat: SeatIndex) => string): Walk 
       trick: completedTrick ? lastTrickOf(after) : null, record,
     });
   });
+  // Melding is one moment at the table, not four: the run of lay-downs and confirms becomes one move.
+  for (let i = 0; i < moves.length; i++) {
+    if (moves[i].kind !== "meld") continue;
+    let j = i;
+    while (j + 1 < moves.length && moves[j + 1].kind === "meld") j++;
+    const last = moves[j], after = frames[last.frame];
+    const order = [1, 2, 3, 4].map(n => ((after.dealer + n) % 4) as SeatIndex);
+    const parts = order.map(seat => `${nameOf(seat)} ${after.players[seat].meldPoints}`);
+    const label = `Meld: ${parts.join(", ")}${after.phase === "playing" && after.turn !== null ? `. ${nameOf(after.turn)} leads` : ""}`;
+    moves.splice(i, j - i + 1, {
+      frame: last.frame, hand: last.hand, kind: "meld", actor: null, label, trick: null, record: null,
+      cards: [...new Set(after.players.flatMap(p => p.meld.flatMap(item => item.cards)))],
+    });
+  }
   const chapters: Chapter[] = [];
   moves.forEach((move, i) => {
     const current = chapters[chapters.length - 1];
