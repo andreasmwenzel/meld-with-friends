@@ -23,7 +23,7 @@ export function BidPicker({ min, step, busy, onBid, pass, shoot }: {
       <button type="button" className="btn btn-ghost btn-compact" style={{ color: inDialog ? "var(--brass-deep)" : "var(--brass)", boxShadow: "inset 0 0 0 1.5px var(--brass)" }} onClick={shoot} disabled={busy}
         aria-label="Shoot the moon">
         {/* Short on narrow phones so bid, pass and shoot stay on one row. */}
-        <span className={inDialog ? "" : "sm:hidden"}>Shoot</span><span className={inDialog ? "hidden" : "hidden sm:inline"}>Shoot the moon</span>
+        <span className={inDialog ? "hidden" : "sm:hidden"}>Shoot</span><span className={inDialog ? "" : "hidden sm:inline"}>Shoot the moon</span>
       </button>
     )}
   </>;
