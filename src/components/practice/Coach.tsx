@@ -2,6 +2,7 @@
 
 import { useId, useState } from "react";
 import type { PlayerView } from "@/engine/types";
+import { useCardPrefs } from "@/lib/cardPrefs";
 import { coachLines } from "./coach";
 
 /** A suggestion the coach can act on: an engine Advice, or a practice step such as starting play. */
@@ -26,13 +27,15 @@ function Mark() {
 
 /**
  * Chalk-on-cloth coaching: a left column on desktop, a one-row strip on phones. On a phone the
- * headline is the toggle: tap it to see why, the rules notes and Start over.
+ * headline is the toggle: tap it to see why, the rules notes and Start over. Sideways on a phone
+ * the board needs the whole screen, so the coach floats in the top left corner over the table.
  */
 export function Coach({ view, autoMeld, step, onStartOver }: {
   view: PlayerView; autoMeld: boolean; step: CoachStep | null; onStartOver: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const bodyId = useId();
+  const { short } = useCardPrefs();
   const lines = coachLines(view, autoMeld);
   const title = step ? step.headline : lines[0];
   const rest = step ? [step.reason, ...lines] : lines.slice(1);
@@ -42,6 +45,28 @@ export function Coach({ view, autoMeld, step, onStartOver }: {
       <span className={step ? "display text-chalk" : `text-[15px] leading-normal text-chalk ${open ? "" : "line-clamp-2"} lg:line-clamp-none`} style={step ? { fontSize: 21, lineHeight: 1.25 } : undefined}>{title}</span>
     </>
   );
+
+  if (short) {
+    return (
+      <aside aria-label="Coaching" className="fixed left-2 top-1.5 z-30 max-w-[min(38vw,22rem)]">
+        <div aria-live="polite" className="flex items-center gap-2">
+          <button type="button" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen((o) => !o)}
+            className="flex min-h-9 min-w-0 flex-1 items-center gap-1.5 rounded-full bg-black/35 px-3 text-left backdrop-blur-sm">
+            {step?.marks && <Mark />}
+            <span className={`truncate text-sm ${step ? "display text-chalk" : "text-chalk"}`} style={step ? { fontSize: 17 } : undefined}>{title}</span>
+            <span aria-hidden className="ml-auto shrink-0 pl-1 text-xs text-chalk-faint">{open ? "Less" : step ? "Why" : "More"}</span>
+          </button>
+          {step && <button type="button" className="btn btn-brass btn-compact shrink-0" style={{ height: "2.25rem" }} onClick={step.run}>{step.act}</button>}
+        </div>
+        <div id={bodyId} className={`${open ? "block" : "hidden"} panel mt-1.5 max-h-[calc(100dvh-4rem)] overflow-y-auto px-3 py-2 text-sm text-ink`}>
+          <div className="space-y-1.5 leading-normal">
+            {rest.map((l, i) => <p key={`${view.phase}-${i}`} className={step && i === 0 ? "" : "text-ink-soft"}>{l}</p>)}
+          </div>
+          <button type="button" className="tap-link -ml-2 text-sm text-ink-soft underline-offset-4 hover:text-ink hover:underline" onClick={onStartOver}>Start over</button>
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside aria-label="Coaching" className="px-4 pb-1 lg:sticky lg:top-6 lg:self-start lg:px-0 lg:pb-0 lg:pt-6">
