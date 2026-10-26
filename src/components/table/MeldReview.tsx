@@ -78,7 +78,7 @@ export function MeldReview({ melds, seat, nameOf, onHide, compact = false }: {
       )}
       {onHide && (
         <button type="button" onClick={onHide} aria-label="Hide the meld row" title="Hide"
-          className="inline-flex size-8 items-center justify-center rounded-full text-base leading-none text-chalk-faint hover:bg-white/10 hover:text-chalk">×</button>
+          className="inline-flex h-11 w-9 items-center justify-center rounded-full text-base leading-none text-chalk-faint hover:bg-white/10 hover:text-chalk">×</button>
       )}
     </div>
   );
