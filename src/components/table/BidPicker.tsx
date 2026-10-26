@@ -5,9 +5,11 @@ import { useId, useRef, useState } from "react";
 const BATCH_SIZE = 30;
 
 /** Append legal increments so scrolling never discards earlier bids or the selection. */
-export function BidPicker({ min, step, busy, onBid, pass, shoot }: {
+export function BidPicker({ min, step, busy, onBid, pass, shoot, misdeal = null }: {
   min: number; step: number; busy: boolean; onBid: (amount: number) => void;
   pass: { label: string; run: () => void } | null; shoot: (() => void) | null;
+  /** throw the hand in for nines; offered on the table row only, not inside the bid dialog */
+  misdeal?: (() => void) | null;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -34,6 +36,7 @@ export function BidPicker({ min, step, busy, onBid, pass, shoot }: {
         {picked === null ? "Choose bid" : `Choose bid (${picked})`}
       </button>
       {alternatives()}
+      {misdeal && <MisdealButton busy={busy} run={misdeal} />}
       <dialog ref={dialog} aria-labelledby={titleId}
         className="panel m-auto w-[calc(100%-2rem)] max-w-sm max-h-[calc(100dvh-2rem)] overflow-hidden p-0 backdrop:bg-black/50">
         <div className="flex max-h-[calc(100dvh-2rem)] flex-col">
@@ -67,5 +70,15 @@ export function BidPicker({ min, step, busy, onBid, pass, shoot }: {
         </div>
       </dialog>
     </div>
+  );
+}
+
+/** Five nines and no meld: the player may scrap the deal before their first call. */
+export function MisdealButton({ busy, run }: { busy: boolean; run: () => void }) {
+  return (
+    <button type="button" className="btn btn-ghost btn-compact" style={{ color: "var(--chalk)", boxShadow: "inset 0 0 0 1.5px var(--chalk-faint)" }} disabled={busy}
+      aria-label="Throw the hand in for nines" onClick={() => { if (window.confirm("Throw this hand in? You hold five or more nines and no other meld, so the same dealer deals again.")) run(); }}>
+      Throw in
+    </button>
   );
 }

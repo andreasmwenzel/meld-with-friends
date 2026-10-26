@@ -46,3 +46,9 @@ export function computeMeld(cards: CardId[], trump: Suit, rules: Pick<RulesConfi
   for (const card of matching('9', trump)) add('dix', [card]);
   return { items, total: items.reduce((sum, item) => sum + item.points, 0) };
 }
+
+/** Five or more nines and nothing else to meld whatever trump turns out to be: the hand may be thrown in. */
+export function qualifiesForMisdeal(hand: CardId[]): boolean {
+  if (hand.filter(card => card[0] === '9').length < 5) return false;
+  return SUITS.every(trump => computeMeld(hand, trump).items.every(item => item.kind === 'dix'));
+}

@@ -129,7 +129,7 @@ describe('advice helpers', () => {
   });
 
   it('suggests passing once the bid is past the limit', () => {
-    const state = buildScenario({ dealer: 0, to: 'bidding', bids: [40, null, 45], hands: { 0: ['9S', '9S', 'JC', 'JC', '9D', '9D', 'JH', '9H', 'TC', 'QD', 'JS', '9C'] } }).state;
+    const state = buildScenario({ dealer: 0, to: 'bidding', rules: { ninesMisdeal: false }, bids: [40, null, 45], hands: { 0: ['9S', '9S', 'JC', 'JC', '9D', '9D', 'JH', '9H', 'TC', 'QD', 'JS', '9C'] } }).state;
     const advice = adviseBid(viewFor(state, 0))!;
     expect(advice.action.type).toBe('pass_bid');
     expect(advice.headline).toBe('Pass');

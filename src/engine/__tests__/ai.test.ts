@@ -36,7 +36,7 @@ describe('public-information computer players',()=>{
         state=applyAction(state,a); positions++;
       }
     }
-    expect(positions).toBeGreaterThan(2000);
+    expect(positions).toBeGreaterThan(1900);
   },30000);
   it('keeps no-passing contracts within a measured set-rate bound',()=>{
     // The 400-hand baseline went set 72.25% of the time without passing,

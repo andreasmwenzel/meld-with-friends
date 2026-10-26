@@ -7,7 +7,7 @@ const SUIT_OF: Record<string, string> = { "♠": "S", "♥": "H", "♦": "D", "�
 // Third-person verbs the engine log uses, and their form after "You".
 const YOU_VERB: Record<string, string> = {
   bids: "bid", passes: "pass", plays: "play", takes: "take", declares: "declare", melds: "meld",
-  confirms: "confirm", shoots: "shoot", wins: "win", deals: "deal", is: "are",
+  confirms: "confirm", shoots: "shoot", throws: "throw", wins: "win", deals: "deal", is: "are",
 };
 
 /**

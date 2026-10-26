@@ -70,6 +70,7 @@ export function describeRules(patch: RulesPatch | Record<string, unknown> | unde
       : `Aces, tens and kings count ${r.counterValue} each, plus ${r.lastTrickBonus} for the last trick.`,
     r.mustTakeTrickToSaveMeld ? "Take a trick to keep your meld." : "Meld counts even without a trick.",
     r.dealerStuck ? `If everyone passes, the dealer is stuck at ${r.minBid}.` : "If everyone passes, redeal.",
+    ...r.ninesMisdeal ? ["Five or more nines and no other meld: you may throw the hand in before you bid, and the same dealer redeals."] : [],
   ];
   lines.push(r.revealHands ? "Everyone's cards are shown after each hand." : "Hands stay hidden after each hand.");
   if (r.shoot === "game") lines.push("Shooting the moon wins or loses the game.");

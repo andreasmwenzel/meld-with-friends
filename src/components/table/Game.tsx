@@ -11,7 +11,7 @@ import { Avatar } from "@/components/site/Avatar";
 import { SEAT_LABEL, teamOf, type Snapshot } from "./types";
 import { Scorepad } from "./Scorepad";
 import { DealerMark, ScoreTag, seatScore, type ScoreFacts, type SeatScore } from "./SeatScore";
-import { BidPicker } from "./BidPicker";
+import { BidPicker, MisdealButton } from "./BidPicker";
 import { ResultSheet, type Which } from "./Result";
 import { canCountdownAdvance } from "./nextHandCountdown";
 import { Recap, useSeenReporting } from "./Recap";
@@ -22,6 +22,7 @@ import { useCardPrefs } from "@/lib/cardPrefs";
 import { usePushNotifications } from "@/lib/push";
 import { autoMeldSelection, meldBySuit, sortHand } from "@/engine/hand";
 import { describeConstraint } from "@/engine/rules";
+import { cardLabel } from "@/engine/deck";
 import { motionTimings, flyFrom, sweepTo } from "./motion";
 import { newLogLines, speakLine } from "./announce";
 
@@ -1094,11 +1095,20 @@ function ActionBar({ view, isMyTurn, selected, busy, act, nameOf, autoMeld }: {
   act: (a: ClientAction) => Promise<void>; nameOf: (s: SeatIndex) => string; autoMeld: boolean;
 }) {
   const L = view.legal;
+  const misdeal = L.canMisdeal ? () => void act({ type: "misdeal" }) : null;
+  // Right after a throw-in, everyone sees the hand that scrapped the deal while the new one is bid.
+  const thrown = view.phase === "bidding" && view.misdeal ? (
+    <p className="px-3 text-center text-xs text-chalk-faint">
+      {nameOf(view.misdeal.seat)} threw in {view.misdeal.hand.filter((c) => c[0] === "9").length} nines and no meld:{" "}
+      <span className="text-chalk">{sortHand(view.misdeal.hand, null).map(cardLabel).join(" ")}</span>
+    </p>
+  ) : null;
 
   if (view.phase === "bidding" && !L.canBid && L.canPassBid) {
     const shooter = view.highBid?.shoot ? nameOf(view.highBid.seat) : null;
     const stuck = view.rules.dealerStuck && view.dealer === view.seat && !view.highBid;
-    return (
+    return (<>
+      {thrown}
       <Bar>
         {!stuck && <span className="text-chalk-faint">{shooter ? `${shootLine(shooter, false)}.` : "If everyone passes, redeal."}</span>}
         <button className="btn btn-ghost btn-compact" style={{ color: "var(--chalk-faint)" }} onClick={() => act({ type: "pass_bid" })} disabled={busy}>
@@ -1110,20 +1120,24 @@ function ActionBar({ view, isMyTurn, selected, busy, act, nameOf, autoMeld }: {
             <span className="sm:hidden">Shoot</span><span className="hidden sm:inline">Shoot the moon</span>
           </button>
         )}
+        {misdeal && <MisdealButton busy={busy} run={misdeal} />}
       </Bar>
-    );
+    </>);
   }
   if (view.phase === "bidding" && L.canBid) {
-    return (
+    return (<>
+      {thrown}
       <BidPicker
         key={`${L.minBid ?? view.rules.minBid}:${view.rules.bidStep}`}
         min={L.minBid ?? view.rules.minBid} step={view.rules.bidStep} busy={busy}
         onBid={(amount) => act({ type: "bid", amount })}
         pass={L.canPassBid ? { label: "Pass", run: () => act({ type: "pass_bid" }) } : null}
         shoot={L.canShoot ? () => { if (window.confirm("Shoot the moon? Your side must take every trick.")) void act({ type: "shoot" }); } : null}
+        misdeal={misdeal}
       />
-    );
+    </>);
   }
+  if (thrown) return <Bar>{thrown}</Bar>;
   if (view.phase === "declaring_trump" && L.canDeclareTrump) {
     return (
       <Bar>
