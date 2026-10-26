@@ -8,18 +8,17 @@ import { Avatar } from "@/components/site/Avatar";
 import { SEAT_LABEL, teamOf, type Snapshot } from "./types";
 import { RulesForm } from "@/components/rules/RulesForm";
 import { usePushNotifications } from "@/lib/push";
-import { useCardPrefs } from "@/lib/cardPrefs";
 import { describeRules, resolveRules, type RulesPatch } from "@/components/rules/rules";
 import { useTableTurn } from "./turn";
 
-// From sm up the chairs sit around the oval, your own chair at the bottom. On phones they drop into
-// a 2x2 grid under the code, partners side by side (you and your partner, then the other pair), so
-// nothing overlaps or clips. Keyed by position relative to your seat: 0 bottom, 1 left, 2 across, 3 right.
+// The chairs sit around the oval, your own chair at the bottom. Keyed by position relative to your seat:
+// 0 bottom, 1 left, 2 across, 3 right. From sm up the code sits on the cloth and the chairs hang half
+// outside the oval; on phones the code goes above the table and the oval is inset so the chairs stay on screen.
 const POS: Record<SeatIndex, string> = {
-  0: "sm:absolute sm:bottom-0 sm:left-1/2 sm:-translate-x-1/2 sm:translate-y-1/2",
-  1: "order-3 sm:order-none sm:absolute sm:left-0 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2",
-  2: "order-2 sm:order-none sm:absolute sm:top-0 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2",
-  3: "order-4 sm:order-none sm:absolute sm:right-0 sm:top-1/2 sm:translate-x-1/2 sm:-translate-y-1/2",
+  0: "bottom-0 left-1/2 -translate-x-1/2 sm:translate-y-1/2",
+  1: "left-0 top-1/2 -translate-y-1/2 sm:-translate-x-1/2",
+  2: "top-0 left-1/2 -translate-x-1/2 sm:-translate-y-1/2",
+  3: "right-0 top-1/2 -translate-y-1/2 sm:translate-x-1/2",
 };
 
 type TablemateStatus = "friend" | "pending_out" | "pending_in" | "none" | "guest";
@@ -52,9 +51,7 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
   const outgoing = snap.offers.find((o) => o.from_user === me.id);
   // Standing, you look at the table from South.
   const bottom: SeatIndex = snap.mySeat ?? 0;
-  // On phones the chairs are a grid under the code, not a round table, so they land without a turn.
-  const { phone } = useCardPrefs();
-  const turn = useTableTurn(bottom, !phone);
+  const turn = useTableTurn(bottom);
   const rel = (seat: SeatIndex): SeatIndex => (((seat - bottom + 4) % 4) as SeatIndex);
 
   async function run(fn: () => Promise<unknown>) {
@@ -83,20 +80,24 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
     } catch {}
   }
 
+  const codeBlock = (
+    <>
+      <p className="text-chalk-faint text-sm">Table code</p>
+      <p className="code mt-1 text-chalk" style={{ fontSize: "clamp(40px, 8vw, 64px)" }}>{code}</p>
+      <button className="btn btn-ghost mt-3" style={{ height: "2.25rem" }} onClick={copy}>{copied ? "Link copied" : "Share invite link"}</button>
+    </>
+  );
+
   return (
     <div className="mx-auto grid w-full max-w-6xl flex-1 gap-8 px-6 pb-16 pt-2 sm:gap-12 sm:pt-4 lg:grid-cols-[1fr_minmax(280px,360px)]">
       <section className="flex min-w-0 flex-col items-center justify-center py-4 sm:py-10">
+        <div className="mb-4 flex flex-col items-center text-center sm:hidden">{codeBlock}</div>
         {/* the table */}
         {/* From sm up the chair cards hang half outside the oval, so the oval keeps room above and below for them. */}
-        <div className={`relative flex w-full flex-col items-center sm:my-24 sm:block sm:aspect-[1.35] sm:w-[min(560px,86vw)] ${turn.className}`} style={turn.style}>
-          <div className="absolute inset-0 hidden rounded-[48%] sm:block border-[6px] border-cloth-edge"
+        <div className={`relative aspect-[0.72] w-full max-w-[380px] sm:my-24 sm:aspect-[1.35] sm:w-[min(560px,86vw)] sm:max-w-none ${turn.className}`} style={turn.style}>
+          <div className="absolute inset-x-[54px] inset-y-[72px] rounded-[48%] border-[6px] border-cloth-edge sm:inset-0"
             style={{ background: "radial-gradient(ellipse at 50% 40%, #6b2530, var(--cloth-deep))", boxShadow: "inset 0 12px 40px rgba(0,0,0,.35), 0 20px 50px -20px rgba(0,0,0,.7)" }} />
-          <div className={`mb-6 flex flex-col items-center justify-center text-center sm:absolute sm:inset-0 sm:mb-0 ${turn.still.className}`} style={turn.still.style}>
-            <p className="text-chalk-faint text-sm">Table code</p>
-            <p className="code mt-1 text-chalk" style={{ fontSize: "clamp(40px, 8vw, 64px)" }}>{code}</p>
-            <button className="btn btn-ghost mt-3" style={{ height: "2.25rem" }} onClick={copy}>{copied ? "Link copied" : "Share invite link"}</button>
-          </div>
-          <div className="grid w-full grid-cols-2 gap-3 sm:contents">
+          <div className={`absolute inset-0 hidden flex-col items-center justify-center text-center sm:flex ${turn.still.className}`} style={turn.still.style}>{codeBlock}</div>
           {([0, 1, 2, 3] as SeatIndex[]).map((i) => {
             const s = snap.seats.find((x) => x.seat === i);
             const p = s?.profile ?? null;
@@ -104,16 +105,16 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
             const team = teamOf(i);
             const bot = s?.bot ?? null;
             return (
-              <div key={i} className={`${POS[rel(i)]} flex min-w-0 flex-col items-center gap-1.5 sm:w-[132px]`}>
+              <div key={i} className={`absolute ${POS[rel(i)]} flex w-[108px] min-w-0 flex-col items-center gap-1 sm:w-[132px] sm:gap-1.5`}>
                 {bot ? (
-                  <div className="panel flex w-full flex-col items-center gap-1 px-3 py-3" style={{ background: "var(--chalk-dim)" }}>
+                  <div className="panel flex w-full flex-col items-center gap-1 px-2 py-2.5 sm:px-3 sm:py-3" style={{ background: "var(--chalk-dim)" }}>
                     <Avatar name={bot} team={team} size={44} bot />
                     <p className="w-full truncate text-center text-sm font-semibold">{bot}</p>
-                    <p className="text-xs text-ink-soft">{SEAT_LABEL[i]} · computer</p>
+                    <p className="text-center text-xs text-ink-soft">{SEAT_LABEL[i]}<span className="hidden sm:inline"> · </span><br className="sm:hidden" />computer</p>
                     {isHost && <button className="tap text-xs text-deck-blue underline" onClick={() => removeBot(i)} disabled={busy}>Remove</button>}
                   </div>
                 ) : p ? (
-                  <div className="panel flex w-full flex-col items-center gap-1 px-3 py-3" style={mine ? { boxShadow: "0 0 0 3px var(--brass), var(--shadow-card)" } : undefined}>
+                  <div className="panel flex w-full flex-col items-center gap-1 px-2 py-2.5 sm:px-3 sm:py-3" style={mine ? { boxShadow: "0 0 0 3px var(--brass), var(--shadow-card)" } : undefined}>
                     <Avatar name={p.display_name} seed={p.avatar_seed} team={team} size={44} />
                     <p className="w-full truncate text-center text-sm font-semibold">{mine ? "You" : p.display_name}</p>
                     <p className="text-xs text-ink-soft">{SEAT_LABEL[i]}</p>
@@ -134,7 +135,7 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
                   </div>
                 ) : (
                   <button
-                    className="flex w-full flex-col items-center gap-1 rounded-[14px] px-3 py-4 text-chalk-faint hover:text-chalk disabled:opacity-50"
+                    className="flex w-full flex-col items-center gap-1 rounded-[14px] px-2 py-3 sm:px-3 sm:py-4 text-chalk-faint hover:text-chalk disabled:opacity-50"
                     style={{ border: `2px dashed ${team === "red" ? "var(--deck-red-soft)" : "var(--deck-blue-soft)"}`, background: "rgba(0,0,0,.12)" }}
                     onClick={() => sit(i)} disabled={busy}
                     aria-label={`Sit at ${SEAT_LABEL[i]}`}
@@ -150,9 +151,8 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
               </div>
             );
           })}
-          </div>
         </div>
-        <p className="mt-8 max-w-md text-center text-chalk-faint sm:mt-2">
+        <p className="mt-6 max-w-md text-center text-chalk-faint sm:mt-2">
           Partners sit across from each other. <span className="text-deck-red-soft">South and North</span> are one team,{" "}
           <span className="text-deck-blue-soft">West and East</span> the other.
         </p>

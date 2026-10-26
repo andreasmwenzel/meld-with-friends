@@ -557,6 +557,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
     const seat = seatAt(r);
     return { seat, view, name: nameOf(seat), bot: isBot(seat), score: scoreOf(seat), faceUp: revealedFor(seat), laid: laidOf(seat).length, standIn: standInFor(seat), makeHost: makeHostFor(seat), compact: short };
   };
+  const myContract = view.bidder === view.seat && view.highBid !== null && view.phase !== "bidding";
   const them: Team = myTeam === "red" ? "blue" : "red";
   const peeking = over && !recapOpen && peekKey === `${view.handNumber}-${view.phase}`;
   const tabs: [MenuTab, string][] = [["score", "Score"], ["hand", "This hand"], ...(chat ? [["talk", unread > 0 ? `Talk (${unread})` : "Talk"] as [MenuTab, string]] : []), ["options", "Options"]];
@@ -568,11 +569,19 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
       <div className={`board-flat flex min-h-0 flex-1 flex-col ${menu ? "lg:pr-[380px]" : ""}`} inert={menu && !wide ? true : undefined}>
         {/* One slim strip: the hand, the score, and the way to everything else. */}
         <div className="board-score flex shrink-0 flex-wrap items-center justify-between gap-x-3 px-3 py-1.5 text-sm tabular-nums sm:px-4">
-          <p className="min-w-0 truncate">
-            <span className="font-semibold">Hand {view.handNumber}</span>
-            {view.dealer === view.seat && view.phase === "bidding" && <span className="text-chalk-faint"> · you deal</span>}
-            {view.highBid && <span className="text-chalk-faint"> · <span className="text-chalk">{view.highBid.shoot ? "moon" : view.highBid.amount}</span>{view.trump && <span style={{ color: view.trump === "H" || view.trump === "D" ? "var(--deck-red-soft)" : "var(--chalk)" }}>{SUIT_GLYPH[view.trump]}</span>} {nameOf(view.highBid.seat)}</span>}
-          </p>
+          {/* Your own chair has no chip, so once you hold the bid your contract and side's total sit here. */}
+          {myContract ? (
+            <div className="flex min-w-0 items-center gap-1">
+              <p className="min-w-0 truncate"><span className="font-semibold">Hand {view.handNumber}</span><span className="text-chalk-faint"> · You</span></p>
+              <ScoreTag score={scoreOf(view.seat)} name="You" align="left" />
+            </div>
+          ) : (
+            <p className="min-w-0 truncate">
+              <span className="font-semibold">Hand {view.handNumber}</span>
+              {view.dealer === view.seat && view.phase === "bidding" && <span className="text-chalk-faint"> · you deal</span>}
+              {view.highBid && <span className="text-chalk-faint"> · <span className="text-chalk">{view.highBid.shoot ? "moon" : view.highBid.amount}</span>{view.trump && <span style={{ color: view.trump === "H" || view.trump === "D" ? "var(--deck-red-soft)" : "var(--chalk)" }}>{SUIT_GLYPH[view.trump]}</span>} {nameOf(view.highBid.seat)}</span>}
+            </p>
+          )}
           <p className="whitespace-nowrap short:order-last short:basis-full">
             <span className={myTeam === "red" ? "text-deck-red-soft" : "text-deck-blue-soft"}>Us</span> {view.score[myTeam].toLocaleString()}
             <span className="px-1.5 text-chalk-faint">·</span>
