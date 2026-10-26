@@ -26,7 +26,7 @@ export interface TableTurn {
  * Turns the table when the seat at the bottom changes. Nothing remounts, so focus and scroll stay
  * put: each turn switches between two identical animations, which is what restarts one. With the
  * card motion setting off, or reduced motion, the new seating fades in instead. Pass `enabled`
- * false where the layout is not a round table (the seating grid on phones) to land at once.
+ * false where the layout is not a round table to land at once.
  */
 export function useTableTurn(bottom: SeatIndex, enabled = true): TableTurn {
   const { prefs, reducedMotion } = useCardPrefs();
