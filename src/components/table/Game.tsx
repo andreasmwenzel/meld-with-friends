@@ -35,6 +35,8 @@ const subscribeWide = (cb: () => void) => { const mq = window.matchMedia(WIDE); 
 const readWide = () => window.matchMedia(WIDE).matches;
 type MenuTab = "score" | "hand" | "talk" | "options";
 const TURN_PREFIX = "Your turn · ";
+/** With tap twice to play, a second tap on a lifted card within this long plays it; a later one puts it down. */
+const DOUBLE_TAP_MS = 500;
 
 function countersIn(trick: NonNullable<PlayerView["currentTrick"]>, rules: PlayerView["rules"]): number {
   const classic: Record<string, number> = { A: 11, T: 10, K: 4, Q: 3, J: 2 };
@@ -59,7 +61,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   /** Card lifted awaiting a second tap; only valid for the view revision it was lifted in. */
-  const [armed, setArmed] = useState<{ card: CardId; rev: number } | null>(null);
+  const [armed, setArmed] = useState<{ card: CardId; rev: number; at: number } | null>(null);
   const [cardHint, setCardHint] = useState<string | null>(null);
   const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (hintTimer.current) clearTimeout(hintTimer.current); }, []);
@@ -487,10 +489,15 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   // Picking your own meld: outline every card that scores, so nothing is missed.
   const meldable = new Set(view.phase === "melding" && !cardPrefs.autoMeld && view.trump && view.legal.canDeclareMeld ? autoMeldSelection(view.hand, view.trump) : []);
 
-  function toggle(card: CardId) {
+  function toggle(card: CardId, at: number) {
     if (view!.phase === "playing") {
       if (!view!.legal.playableCards.includes(card)) return;
-      if (cardPrefs.confirmPlay && !(armed && armed.card === card && armed.rev === view!.rev)) { setArmed({ card, rev: view!.rev }); return; }
+      if (cardPrefs.confirmPlay) {
+        const again = armed && armed.card === card && armed.rev === view!.rev;
+        // A quick second tap plays the card; coming back to it later puts it down. The Play button always plays.
+        if (!again) { setArmed({ card, rev: view!.rev, at }); return; }
+        if (at - armed.at > DOUBLE_TAP_MS) { setArmed(null); return; }
+      }
       setArmed(null);
       void act({ type: "play_card", card });
       return;
@@ -642,7 +649,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
         {/* my hand */}
         {armedCard && (
           <div className="board-armed relative h-0">
-            <button data-keep-armed="" onClick={() => toggle(armedCard)} aria-label={`Play ${cardName(armedCard)}`}
+            <button data-keep-armed="" onClick={() => { setArmed(null); void act({ type: "play_card", card: armedCard }); }} aria-label={`Play ${cardName(armedCard)}`}
               className="btn btn-brass absolute bottom-6 right-1 z-30 whitespace-nowrap shadow-lg" style={{ minHeight: 36, padding: "0 16px" }}>
               Play {SUIT_GLYPH[splitCard(armedCard).suit]}{RANK_LABEL[splitCard(armedCard).rank]}
             </button>
@@ -656,7 +663,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
               const sel = selected.includes(c) || isArmed;
               return (
                 <span key={c} data-keep-armed={isArmed || armedCard ? "" : undefined} className="shrink-0" style={{ marginLeft: -overlap }} onClick={() => { if (view.phase === "playing" && isMyTurn && !playable) showHint(); }}>
-                  <button onClick={() => toggle(c)} disabled={busy || !playable} aria-pressed={sel}
+                  <button onClick={(e) => toggle(c, e.timeStamp)} disabled={busy || !playable} aria-pressed={sel}
                     className="group relative block rounded-[10px] focus-visible:z-20 disabled:pointer-events-none"
                     style={{ transform: sel || lit?.includes(c) ? "translateY(-14px)" : undefined, transition: "transform .14s ease" }}>
                     {suggested?.includes(c) && <SuggestedMark />}
