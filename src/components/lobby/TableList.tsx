@@ -53,10 +53,10 @@ export function TableList({ tables }: { tables: TableSummary[] }) {
             <div className="min-w-0 flex-1">
               <p className={`flex items-baseline gap-2 leading-snug ${t.yours ? "font-semibold text-brass" : "text-chalk"}`}>
                 {t.fresh && <span className="inline-block h-2 w-2 shrink-0 -translate-y-px rounded-full bg-brass" title="New moves since your last visit" />}
-                <span>{t.line}</span>
+                <span className="min-w-0 [overflow-wrap:anywhere]">{t.line}</span>
                 {t.fresh && <span className="sr-only">(new moves since your last visit)</span>}
               </p>
-              <p className="mt-0.5 truncate text-sm text-chalk-faint">{company(t.chairs, t.mySeat)}</p>
+              <p className="mt-0.5 truncate text-sm text-chalk-faint" title={company(t.chairs, t.mySeat)}>{company(t.chairs, t.mySeat)}</p>
             </div>
             <div className="shrink-0 text-right">
               <p className="code text-chalk group-hover:text-brass" style={{ fontSize: 15, letterSpacing: ".08em" }}>{t.code}</p>

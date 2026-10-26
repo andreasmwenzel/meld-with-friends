@@ -50,9 +50,17 @@ describe("summarizeTable", () => {
   });
 
   it("asks you to ready up after a hand", () => {
-    const s = summarizeTable(facts({}, { phase: "hand_over", turn: null, ready: [1, 3] }), ME)!;
+    const s = summarizeTable(facts({ host: "lee" }, { phase: "hand_over", turn: null, ready: [3] }), ME)!;
     expect(s.line).toBe("Hand over. Ready up for the next deal");
     expect(s.yours).toBe(true);
+  });
+
+  it("counts the host as ready and offers the deal once nobody is pending", () => {
+    expect(summarizeTable(facts({}, { phase: "hand_over", turn: null, ready: [] }), ME)!.line).toBe("Waiting on Lee and Jo to ready up");
+    const s = summarizeTable(facts({}, { phase: "hand_over", turn: null, ready: [1, 3] }), ME)!;
+    expect(s.line).toBe("Hand over. Deal the next hand");
+    expect(s.yours).toBe(true);
+    expect(s.chairs.some((c) => c.up)).toBe(false);
   });
 
   it("counts chairs at an open table and prompts the host to start", () => {

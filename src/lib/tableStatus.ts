@@ -78,10 +78,12 @@ export function summarizeTable(t: TableFacts, userId: string): TableSummary | nu
     const won = g.winner === teamOf(mine.seat);
     line = g.winner ? (won ? "Game over. You won" : "Game over. You lost") : "Game over";
   } else if (g.phase === "hand_over") {
-    const waiting = t.seats.filter((s) => s.userId && !g.ready.includes(s.seat));
+    // The host counts as ready, as at the table; once nobody is pending, anyone may deal.
+    const waiting = t.seats.filter((s) => s.userId && s.userId !== t.host && !g.ready.includes(s.seat));
     waiting.forEach((s) => up.add(s.seat));
     if (waiting.some((s) => s.seat === mine.seat)) { line = "Hand over. Ready up for the next deal"; yours = true; }
-    else line = waiting.length ? `Waiting on ${names(waiting.map((s) => firstName(s.name)))} to ready up` : "Dealing the next hand";
+    else if (waiting.length) line = `Waiting on ${names(waiting.map((s) => firstName(s.name)))} to ready up`;
+    else { line = "Hand over. Deal the next hand"; yours = true; }
   } else if (g.phase === "melding") {
     const waiting = t.seats.filter((s) => !g.meldConfirmed[s.seat]);
     waiting.forEach((s) => up.add(s.seat));
