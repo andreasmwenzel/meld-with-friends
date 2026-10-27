@@ -26,6 +26,8 @@ The engine is game-agnostic at the storage layer (`games.state` is jsonb keyed b
 - `game_result_players` (game_id, user_id, team, won) indexes each seated human, including guests. RLS permits users to read their own index rows and matching results.
 - `banned_users` (user_id primary key, reason, created_at) is service-role only. Bans survive guest pruning.
 
+Logical conflicts in SQL functions (a stale revision, a table that changed, a paused table) raise `PT409`, which the database API returns as HTTP 409, or return null as `commit_bot_action` does. They are never raised as `40001`: the API treats that serialization failure as transient and retries the statement until its upstream timeout, so a burst of stale requests holds every pooled connection (migration 0017). `src/server/__tests__/conflict-codes.test.ts` checks the live definition of every function.
+
 ## Realtime channels
 
 - `table:{code}` — broadcast events: `seats` (seat map changed), `trade` (offer created/answered), `game` ({ rev }), `chat`.

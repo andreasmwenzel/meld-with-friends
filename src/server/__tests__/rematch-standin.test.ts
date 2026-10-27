@@ -71,8 +71,8 @@ describe("rematch", () => {
     expect((await rematchRoute(request(), context)).status).toBe(403);
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
-  it("does not broadcast when a competing rematch wins", async () => {
-    mocks.rpc.mockResolvedValue({ error: { code: "40001", message: "Table changed" } });
+  it.each(["40001", "PT409"])("does not broadcast when a competing rematch wins (%s)", async code => {
+    mocks.rpc.mockResolvedValue({ error: { code, message: "Table changed" } });
     expect((await rematchRoute(request(), context)).status).toBe(409);
     expect(mocks.broadcast).not.toHaveBeenCalled();
   });
