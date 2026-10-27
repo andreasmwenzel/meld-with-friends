@@ -36,14 +36,15 @@ export function talkSituations(facts: TalkFacts, bot: SeatIndex): TalkSituation[
   const { hand, score, winner, scale, minBid } = facts;
   const ours = teamOf(bot);
   const theirs = ours === "red" ? "blue" : "red";
-  if (hand.shotMade !== undefined) return [hand.shotMade ? "shootMade" : "shootMissed"];
+  const side = hand.bidder === bot ? "self" : teamOf(hand.bidder) === ours ? "partner" : "opponent";
+  // A shoot decides the game, so its line is the only game-over comment.
+  if (hand.shotMade !== undefined) return [`${side}Shoot${hand.shotMade ? "Made" : "Missed"}` as const];
   if (winner) return [winner === ours ? "win" : "loss"];
   const situations: TalkSituation[] = [];
   if (Math.max(hand.meld.red, hand.meld.blue) >= 400 * scale) situations.push("bigMeld");
   if (Math.abs(score.red - score.blue) >= 750 * scale) situations.push(score[ours] > score[theirs] ? "leading" : "trailing");
-  if (teamOf(hand.bidder) === ours) {
-    situations.push(hand.wentSet ? "ownSet" : hand.bidder === bot ? "selfMade" : "partnerMade");
-  } else if (hand.wentSet) situations.push("opponentSet");
+  if (side !== "opponent") situations.push(`${side}${hand.wentSet ? "Set" : "Made"}` as const);
+  else if (hand.wentSet) situations.push("opponentSet");
   else situations.push(hand.bid >= minBid * 2 ? "opponentMade" : "opponentSmallMade");
   return situations;
 }
@@ -51,16 +52,27 @@ export function talkSituations(facts: TalkFacts, bot: SeatIndex): TalkSituation[
 /** All variety comes from an independent seed, never the engine's shuffle seed. `speaker` picks the voice. */
 export function pickLine(situation: TalkSituation, seed: string, names: { bidder: string; partner: string }, speaker = ""): string {
   const choices = voiceFor(speaker)[situation];
-  // Bound public display names before substitution so every message stays below 80 characters.
-  const name = (value: string) => {
+  return choices[hash(seed) % choices.length]
+    .replaceAll("{bidder}", () => shortName(names.bidder)).replaceAll("{partner}", () => shortName(names.partner));
+}
+
+/**
+ * Bound public display names so every message stays below 80 characters: the whole name when it
+ * fits in 16 characters, else its first word when that fits, else a 16-character cut.
+ */
+function shortName(value: string): string {
+  const clean = value.replace(/[\r\n\t]/g, " ").trim();
+  const cut = (text: string) => {
     let result = "";
-    for (const char of value.replace(/[\r\n\t]/g, " ")) {
+    for (const char of text) {
       if (result.length + char.length > 16) break;
       result += char;
     }
     return result;
   };
-  return choices[hash(seed) % choices.length].replaceAll("{bidder}", name(names.bidder)).replaceAll("{partner}", name(names.partner));
+  if (clean.length <= 16) return clean;
+  const first = clean.split(" ")[0];
+  return first.length <= 16 ? first : cut(clean);
 }
 
 export function pickTableTalk(seats: TalkSeat[], seed: string, facts: TalkFacts | "redeal" | "rematch") {

@@ -74,10 +74,16 @@ A successful rematch also gets a greeting, separately from the hand cadence.
 The pure, seeded picker in `src/lib/bots/tableTalk.ts` uses only the scored hand record, public
 scores and seat names. It reacts to made or set contracts, big opposing bids, moon attempts,
 big meld, score gaps and game results. It receives no hands, passes, private views or deal seed.
-Display names in lines are bounded to keep comments under 80 characters.
+Display names in lines are bounded to keep comments under 80 characters: a name longer than 16
+characters is shortened to its first word, or cut at 16 when that word is still too long. Names are
+substituted literally, so `$&` in a name stays as typed.
+
+Situations are told apart by who bid: the speaker itself, its partner, or an opponent, each for a
+made bid, a set and (for the bidder's side) a moon. A shoot decides the game, so a moon line is
+the only comment on that game and reads as a game-over line.
 
 Each bot has its own voice, rooted in its name, in `src/lib/bots/tableTalkLines.ts`: at least six
-lines per bot for each of the fifteen situations. Any other speaker name falls back to a plain,
+lines per bot for each of the twenty situations. Any other speaker name falls back to a plain,
 neutral voice. The voices:
 
 - **Mabel**: a cheerful grandmother. Calls everyone "dear" and "love", talks in baking and kitchen
@@ -92,9 +98,11 @@ neutral voice. The voices:
 - **Walt**: an unhurried old-timer. Fishing and porch talk, and tall tales from back in '62.
 
 House rules for the words: friendly table banter only, nothing that could sting a beginner, no
-gambling talk. When the speaker's own side goes set the bot is kind to its partner; teasing an
-opponent who went set stays playful. Moon and big-meld lines name nobody and never gloat, since
-either side may have shot or melded. Lines speak only of the scored, public result.
+gambling talk. A bot that bid and went set, or shot and missed, owns it and apologizes to its
+partner; when the partner bid, the bot is kind and never scolds. Teasing an opponent who went set
+stays playful, and an opponent's missed moon gets respect, not gloating. Big-meld lines name
+nobody, since either side may have melded. Lines speak only of the scored, public result and
+never claim a margin ("so close") the picker cannot know. Moon lines promise no next hand.
 
 Both human and bot scoring actions schedule a comment only after winning the revision-guarded
 commit. Losing ticks and duplicate human actions schedule nothing. `src/server/botTableTalk.ts`
