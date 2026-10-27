@@ -1370,8 +1370,9 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld }: {
   const L = view.legal;
   const trumpLabel = useId();
   const misdeal = L.canMisdeal ? () => void act({ type: "misdeal" }) : null;
-  // Right after a throw-in, everyone sees the hand that scrapped the deal while the new one is bid.
-  const thrown = view.phase === "bidding" && view.misdeal ? (
+  // Right after a throw-in, the other seats see the hand that scrapped the deal while the new one is bid.
+  // The player who threw it in already knows it and does not need the reminder.
+  const thrown = view.phase === "bidding" && view.misdeal && view.misdeal.seat !== view.seat ? (
     <p className="px-3 text-center text-xs text-chalk-faint">
       {nameOf(view.misdeal.seat)} threw in {view.misdeal.hand.filter((c) => c[0] === "9").length} nines and no meld:{" "}
       <span className="text-chalk">{sortHand(view.misdeal.hand, null).map(cardLabel).join(" ")}</span>
