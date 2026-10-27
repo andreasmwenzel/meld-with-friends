@@ -45,3 +45,4 @@ N=$(psql -c "select public.regenerate_handle('$M')")
 expect "a re-roll saves the drawn handle" "$(psql -c "select handle from public.profiles where id='$M'")" "$N"
 psql -c "select public.regenerate_handle(gen_random_uuid())" 2>/dev/null && fail "re-rolled a missing profile"
 expect "only the service role may re-roll" "$(psql -c "select has_function_privilege('authenticated','public.regenerate_handle(uuid)','execute')::text || has_function_privilege('service_role','public.regenerate_handle(uuid)','execute')::text")" "falsetrue"
+expect "players cannot write their handle directly" "$(psql -c "select has_column_privilege('authenticated','public.profiles','handle','update')::text")" "false"

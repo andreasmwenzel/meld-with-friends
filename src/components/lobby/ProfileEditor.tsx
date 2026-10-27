@@ -51,7 +51,7 @@ export function ProfileEditor({ me }: { me: Profile }) {
         <p>Handle</p>
         <div className="mt-1 flex items-center justify-between gap-2">
           <p className="min-w-0 truncate text-base font-semibold text-ink">@{handle}</p>
-          <button type="button" className="btn btn-compact shrink-0" style={{ color: "var(--ink)" }} onClick={reroll} disabled={busy} aria-label="Draw a new random handle">New words</button>
+          <button type="button" className="btn btn-compact shrink-0" style={{ color: "var(--ink)" }} onClick={reroll} disabled={busy} aria-label="New words: draw a random handle">New words</button>
         </div>
       </div>
       <div className="flex flex-wrap gap-2">
