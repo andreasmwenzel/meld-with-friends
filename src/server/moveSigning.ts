@@ -3,6 +3,7 @@ import { createHash, createPrivateKey, createPublicKey, sign, type KeyObject } f
 import { getServerEnv } from "@/lib/env";
 import type { PublicMove } from "@/engine/publicMove";
 import { moveMessage } from "@/lib/moveAuth";
+import { BUILD_ID } from "@/lib/staleClient";
 
 // Ed25519 PKCS#8 header for a raw 32-byte seed.
 const PKCS8_ED25519 = Buffer.from("302e020100300506032b657004220420", "hex");
@@ -29,6 +30,6 @@ export const movePublicKey = () => moveKeys().publicKey;
 
 /** The signed form of a game's public move, for the `game` broadcast. */
 export function signMove(gameId: string, move: PublicMove): { move: string; sig: string } {
-  const message = moveMessage(gameId, move);
+  const message = moveMessage(gameId, move, BUILD_ID);
   return { move: message, sig: sign(null, Buffer.from(message), moveKeys().privateKey).toString("base64url") };
 }

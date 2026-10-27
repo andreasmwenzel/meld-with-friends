@@ -47,9 +47,13 @@ exactly one past the client's; anything else (a gap, out of order, no Ed25519 in
 Every table view, fetched or returned by an action, also carries the deploy that answered (`build`, the
 Vercel commit set as `NEXT_PUBLIC_BUILD_ID` in `next.config.ts`, "dev" elsewhere). A board whose own
 bundle is from another build applies the view, shows "Updating the table…" and reloads once per build
-after outstanding mutations settle. While updating, the board ignores new actions. A separate
-`sessionStorage` key for each attempted build prevents loops even when deploys alternate; a view
-without `build` never reloads (`src/lib/staleClient.ts`).
+after outstanding mutations settle, with a five-second deadline for hung requests. Background seen
+reports do not delay the reload. While updating, the board ignores new actions. Reload attempts are
+recorded immediately before reloading, with the latest eight builds in one `sessionStorage` JSON key
+to prevent loops within that window, even when deploys alternate. Unavailable or full storage falls
+back to one reload per page load. A view without `build` never reloads (`src/lib/staleClient.ts`).
+Signed public moves also include `build` inside the signature. A move from a different build is never
+applied locally: the client fetches `/view` and follows the same build check and reload path.
 - `presence:lobby` — presence keyed by user id with `{ handle, tableCode | null }`.
 - `invites:{userId}` — broadcast event `invites` with an empty payload when a friend deals that player in; the lobby refetches `GET /api/invites` under its own session. Public like the table channels, so it carries nothing beyond the fact of a nudge.
 

@@ -4,8 +4,10 @@
 // a bare revision, which fetches the view.
 import type { PublicMove } from "@/engine/publicMove";
 
-/** The exact text that is signed: the move bound to its game, so it cannot be replayed into another. */
-export const moveMessage = (gameId: string, move: PublicMove) => JSON.stringify({ game: gameId, move });
+/** The exact text signed: the move bound to its game and the build whose rules produced it. */
+export const moveMessage = (gameId: string, move: PublicMove, build: string) => JSON.stringify({ game: gameId, build, move });
+
+export type VerifiedMove = { move: PublicMove; build: string };
 
 function fromBase64Url(value: string): Uint8Array<ArrayBuffer> {
   const text = atob(value.replace(/-/g, "+").replace(/_/g, "/"));
@@ -28,12 +30,13 @@ function verifyKey(publicKey: string): Promise<CryptoKey> {
  * The move, if `sig` is the server's signature of exactly `message` and it is for `gameId`; otherwise
  * null (including in browsers without Ed25519, which then simply fetch).
  */
-export async function openMove(publicKey: string, gameId: string, message: unknown, sig: unknown): Promise<PublicMove | null> {
+export async function openMove(publicKey: string, gameId: string, message: unknown, sig: unknown): Promise<VerifiedMove | null> {
   if (typeof message !== "string" || typeof sig !== "string") return null;
   try {
     const ok = await crypto.subtle.verify({ name: "Ed25519" }, await verifyKey(publicKey), fromBase64Url(sig), new TextEncoder().encode(message));
     if (!ok) return null;
-    const parsed = JSON.parse(message) as { game?: unknown; move?: PublicMove };
-    return parsed.game === gameId && parsed.move ? parsed.move : null;
+    const parsed = JSON.parse(message) as { game?: unknown; build?: unknown; move?: PublicMove };
+    return parsed.game === gameId && parsed.move && typeof parsed.build === "string" && parsed.build
+      ? { move: parsed.move, build: parsed.build } : null;
   } catch { return null; }
 }

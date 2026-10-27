@@ -38,7 +38,7 @@ describe('paced bot ticks', () => {
     const event = mocks.broadcast.mock.calls[0][1];
     expect(mocks.broadcast).toHaveBeenCalledWith('ABC234', expect.objectContaining({ type: 'game', rev: 1, move: expect.any(String), sig: expect.any(String) }));
     const move = await openMove(movePublicKey(), 'game-id', event.move, event.sig);
-    expect(move).toMatchObject({ rev: 1, action: { seat: 1 } });
+    expect(move).toMatchObject({ move: { rev: 1, action: { seat: 1 } } });
     expect(await openMove(movePublicKey(), 'other-game', event.move, event.sig)).toBeNull();
     for (const card of state.players.flatMap(p => p.hand)) expect(event.move).not.toContain(`"${card}"`);
     expect(mocks.notify).toHaveBeenCalledWith('game-id');

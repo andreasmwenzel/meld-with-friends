@@ -7,7 +7,7 @@ import { api, ApiError, isTransientError, type Profile } from "@/lib/api";
 import { ViewSync, type GameFeed } from "./viewSync";
 import { applyPublicMove, type PublicMove } from "@/engine/publicMove";
 import { openMove } from "@/lib/moveAuth";
-import { reloadPage, staleBuild } from "@/lib/staleClient";
+import { BUILD_ID, recordBuildReload, reloadPage, staleBuild } from "@/lib/staleClient";
 import type { Action, CardId, PlayerView, SeatIndex, Suit, Team } from "@/engine/types";
 import { PlayingCard, CardBack, SUIT_GLYPH, SUIT_NAME, RANK_LABEL, splitCard, cardName } from "@/components/cards/PlayingCard";
 import { Avatar } from "@/components/site/Avatar";
@@ -85,7 +85,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const [degraded, setDegraded] = useState(false);
   const [updating, setUpdating] = useState(false);
   // The ref blocks handlers immediately, before React renders the inert controls.
-  const updatingRef = useRef(false);
+  const updatingRef = useRef<string | null>(null);
   const pendingMutations = useRef(0);
   const [mutations, setMutations] = useState(0);
   const mutate = useCallback(async <T,>(send: () => Promise<T>): Promise<T> => {
@@ -94,16 +94,26 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     finally { setMutations(--pendingMutations.current); }
   }, []);
   const checkBuild = useCallback((next: PlayerView & { build?: string }) => {
-    if (updatingRef.current || !staleBuild(next.build)) return;
-    updatingRef.current = true;
+    if (updatingRef.current || !next.build || !staleBuild(next.build)) return;
+    updatingRef.current = next.build;
     setUpdating(true);
   }, []);
+  const reloadIfNeeded = useCallback(() => {
+    const build = updatingRef.current;
+    if (build && recordBuildReload(build)) reloadPage();
+  }, []);
+  useEffect(() => {
+    if (!updating) return;
+    // A hung request must not leave the table inert forever. This deadline never resets on settlement.
+    const timer = setTimeout(reloadIfNeeded, 5000);
+    return () => clearTimeout(timer);
+  }, [updating, reloadIfNeeded]);
   useEffect(() => {
     if (!updating || mutations > 0) return;
-    // Let the status paint, and never interrupt a mutation, including sync.act's settlement.
-    const timer = setTimeout(() => { if (pendingMutations.current === 0) reloadPage(); }, 300);
+    // Let the status paint and sync.act settle, unless the drain deadline above expires first.
+    const timer = setTimeout(() => { if (pendingMutations.current === 0) reloadIfNeeded(); }, 300);
     return () => clearTimeout(timer);
-  }, [updating, mutations]);
+  }, [updating, mutations, reloadIfNeeded]);
   // eslint-disable-next-line react-hooks/refs -- ViewSync stores apply; it runs only after requests or feed events, never during render.
   const [sync] = useState(() => new ViewSync<PlayerView, PublicMove>({
     fetchView: () => api<PlayerView>(`/api/tables/${code}/view`),
@@ -146,7 +156,10 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
       // The server's public key for broadcast moves comes with the view.
       const key = (sync.latest as (PlayerView & { moveKey?: string }) | null)?.moveKey;
       const move = key && gameId && event.move ? await openMove(key, gameId, event.move, event.sig) : null;
-      sync.event(event.rev, move ?? undefined);
+      // A newer server may describe rules this bundle cannot apply. Fetch its view before reloading,
+      // even if this build was already attempted, and let the normal view path check the build.
+      if (move && move.build !== BUILD_ID) { await sync.load(); return; }
+      sync.event(event.rev, move?.move);
     }).catch(() => sync.event(event.rev)); // never let one bad event stop the ones after it
   }), [feed, sync, gameId]);
   const live = !!feed && connection === "ok";
@@ -436,8 +449,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const autoRecap = useRef(false);
   const sendSeen = useCallback((path: string, init: Parameters<typeof api>[1]) => {
     if (updatingRef.current) return Promise.resolve(null);
-    return mutate(() => api(path, init));
-  }, [mutate]);
+    return api(path, init);
+  }, []);
   useSeenReporting(code, snap.mySeat !== null && view ? view.rev : null, sendSeen);
   useEffect(() => {
     if (!view || autoRecap.current) return;

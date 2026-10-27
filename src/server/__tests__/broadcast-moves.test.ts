@@ -7,6 +7,7 @@ import { PRESETS } from '@/engine/scenarios';
 import { applyPublicMove, type PublicMove } from '@/engine/publicMove';
 import type { Action, CardId, GameState, PlayerView, SeatIndex } from '@/engine/types';
 import { moveMessage, openMove } from '@/lib/moveAuth';
+import { BUILD_ID } from '@/lib/staleClient';
 import { ViewSync } from '@/components/table/viewSync';
 vi.mock('../push', () => ({ scheduleTurnNotification: vi.fn() }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({}) }));
@@ -79,6 +80,8 @@ describe('the game broadcast', () => {
     expect(await openMove(movePublicKey(), 'another-game', signed.move, signed.sig)).toBeNull();
     const forged = signed.move!.replace(/"rev":(\d+)/, (_m, n) => `"rev":${Number(n) + 1}`);
     expect(await openMove(movePublicKey(), GAME, forged, signed.sig)).toBeNull();
+    expect(await openMove(movePublicKey(), GAME, signed.move!.replace(`"build":"${BUILD_ID}"`, '"build":"forged-build"'), signed.sig)).toBeNull();
+    expect(await openMove(movePublicKey(), GAME, signed.move, signed.sig)).toMatchObject({ build: BUILD_ID });
   });
 
   it('is a bare revision for a nines misdeal and for the play that ends a shoot', () => {
@@ -108,7 +111,7 @@ function tab(seat: SeatIndex, server: { state: GameState; fetches: number }) {
   /** What the board does with a channel event: check the signature, then hand the move to the sync. */
   const receive = async (event: ReturnType<typeof gameEvent>) => {
     const move = event.move ? await openMove(movePublicKey(), GAME, event.move, event.sig) : null;
-    sync.event(event.rev, move ?? undefined);
+    sync.event(event.rev, move?.build === BUILD_ID ? move.move : undefined);
   };
   return { sync, receive, get shown() { return shown; }, get applied() { return applied; } };
 }
@@ -124,7 +127,7 @@ describe('a move signed with another key', () => {
     server.fetches = 0;
     // A valid move for this game and revision, signed by someone who is not the server.
     const move = JSON.parse(step.event.move!).move as PublicMove;
-    const message = moveMessage(GAME, move);
+    const message = moveMessage(GAME, move, BUILD_ID);
     const { privateKey } = generateKeyPairSync('ed25519');
     const forged = { type: 'game' as const, rev: step.next.rev, move: message, sig: sign(null, Buffer.from(message), privateKey).toString('base64url') };
     server.state = step.next;
