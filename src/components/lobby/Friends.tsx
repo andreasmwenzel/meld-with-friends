@@ -5,6 +5,8 @@ import Link from "next/link";
 import { api, type FriendsPayload, type Profile } from "@/lib/api";
 import { usePresence } from "@/lib/realtime/usePresence";
 import { Avatar } from "@/components/site/Avatar";
+import { Groups } from "./Groups";
+import { reloadGroups } from "./groupsStore";
 
 export function Friends({ me }: { me: Profile }) {
   const [friends, setFriends] = useState<FriendsPayload | null>(null);
@@ -32,7 +34,8 @@ export function Friends({ me }: { me: Profile }) {
     try { await api(`/api/friends/${id}`, { body: { accept } }); void load(); } catch (err) { setNote((err as Error).message); }
   }
   async function remove(id: string) {
-    try { await api(`/api/friends/${id}`, { method: "DELETE" }); void load(); } catch (err) { setNote((err as Error).message); }
+    // Ending a friendship takes each of you out of the other's groups, so the shared groups reload too.
+    try { await api(`/api/friends/${id}`, { method: "DELETE" }); void load(); void reloadGroups(); } catch (err) { setNote((err as Error).message); }
   }
 
   const other = (f: { requester: string; requester_profile: Profile; addressee_profile: Profile }) =>
@@ -106,6 +109,8 @@ export function Friends({ me }: { me: Profile }) {
           </li>
         ))}
       </ul>
+
+      {friends && <Groups friends={friends.accepted.map(other)} />}
     </section>
   );
 }

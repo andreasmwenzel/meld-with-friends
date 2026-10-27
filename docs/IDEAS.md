@@ -44,7 +44,7 @@ Working list of improvements for Meld. Status: `done`, `doing`, `next`, `idea`, 
 ## Ideas
 - done · Guided practice hand for first-time players, driven by the real engine
 - done · Everyone-ready acknowledgement before the next deal, with host override
-- done · Tablemates endpoint for adding table companions as friends (UI pending); named groups still an idea
+- done · Tablemates endpoint for adding table companions as friends (UI pending); named friend groups that can be invited when dealing (#2)
 - done · Table pause and host handoff (bots stop while paused)
 - done · Admin telemetry: tick no-ops, broadcast failures, resync fetches, last cleanup run
 - idea · Spectator chairs (watch a table without a seat)

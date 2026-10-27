@@ -20,6 +20,10 @@ import { describe, expect, it } from "vitest";
 import * as me from "@/app/api/me/route";
 import * as friends from "@/app/api/friends/route";
 import * as friend from "@/app/api/friends/[id]/route";
+import * as groups from "@/app/api/groups/route";
+import * as group from "@/app/api/groups/[id]/route";
+import * as invites from "@/app/api/invites/route";
+import * as invite from "@/app/api/invites/[code]/route";
 import * as tables from "@/app/api/tables/route";
 import * as table from "@/app/api/tables/[code]/route";
 import * as join from "@/app/api/tables/[code]/join/route";
@@ -54,6 +58,10 @@ const contracts: [string, object, string[]][] = [
   ["/api/me", me, ["GET", "PATCH"]],
   ["/api/friends", friends, ["GET", "POST"]],
   ["/api/friends/[id]", friend, ["POST", "DELETE"]],
+  ["/api/groups", groups, ["GET", "POST"]],
+  ["/api/groups/[id]", group, ["PATCH", "DELETE"]],
+  ["/api/invites", invites, ["GET"]],
+  ["/api/invites/[code]", invite, ["DELETE"]],
   ["/api/tables", tables, ["POST"]],
   ["/api/tables/[code]", table, ["GET", "PATCH"]],
   ["/api/tables/[code]/join", join, ["POST"]],
