@@ -13,7 +13,7 @@ The computer player entry point is `chooseAction(view, options)` in `src/engine/
 
 ## What a bot knows
 
-`knowledge.ts` groups the ordered plays into tricks. Failing to follow a lead proves a void in the led suit. Discarding a different non-trump suit also proves a void in trump, since this ruleset requires trumping when unable to follow. Played cards are definitely gone. Unplayed cards exposed in meld stay assigned to the declaring seat. Every other card outside the bot's hand is unknown. Per-seat estimates include the most recent bid, public known cards, remaining hand count, and suit expectations distributed among seats that have not shown a void. Bids affect the partnership strength estimate, but never become hard ownership constraints.
+`knowledge.ts` groups the ordered plays into tricks. Failing to follow a lead proves a void in the led suit. Discarding a different non-trump suit also proves a void in trump, since this ruleset requires trumping when unable to follow. Played cards are definitely gone. Unplayed cards exposed in meld stay assigned to the declaring seat. Cards the bot passed to its partner (`recap.myPassedOut`, its own action) stay assigned to the partner unless they came back or were played. Every other card outside the bot's hand is unknown. Per-seat estimates include the most recent bid, public known cards, remaining hand count, and suit expectations distributed among seats that have not shown a void. Bids weight where unknown cards are sampled (below), but never become hard ownership constraints.
 
 ## Bidding
 
@@ -21,7 +21,20 @@ For each possible trump, `bid.ts` computes own meld and estimates trick points. 
 
 `own meld + partner signal + 35 + 12 × trump length + 17 × aces + 8 × tens backed by an ace + 0.15 × own counter points`
 
-The trick-strength part scales with the configured deck counter total. The partner signal is 60 before any partner action, 25 after a partner pass, or 100 after a partner bid. A bid is a rough meld signal. It does not reveal any specific card. The ceiling is the projection minus 35, rounded down to `bidStep`. The bot bids only the legal minimum, and passes when that minimum exceeds the ceiling. A forced dealer contract remains the engine's decision.
+The trick-strength part scales with the configured deck counter total. The partner signal comes from partner's public calls (conventions below). A bid is a rough meld signal. It does not reveal any specific card. The ceiling is the projection minus the bid margin, rounded down to `bidStep`. The bot bids only the legal minimum, and passes when that minimum exceeds the ceiling. A forced dealer contract remains the engine's decision.
+
+### Bidding conventions
+
+`chooseBid` and `partnerSignal` in `bid.ts`. Signal values are in classic units (modern games scale them by 0.1).
+
+- **Don't bid against partner.** When partner holds the high bid, a bot passes and lets it stand. It takes over only if its own hand could carry the higher contract with no help: its ceiling, computed with the weak 25 partner signal, still reaches the next legal bid. This holds whether or not an opponent is still in the auction, so two bots on one side never race each other, and once both opponents have passed the auction ends at partner's bid.
+- **Reading partner's calls.** No call yet: 60. A pass at any time when the other side held the bid, or when nobody had bid: 25, a weak hand. A pass over our own side's high bid: 60, since by the first convention it only says partner had no takeover hand. Any bid, even one partner later stopped raising: 100 plus `partnerBidBonus`.
+- **Jump bids show meld.** Each step a partner's bid goes over the cheapest legal bid adds 30, up to two steps (60). Bots do not make jump bids themselves (the arena showed it cost them, see Measured results); the reading is there for a human partner who jumps to show meld.
+- **Opponents' calls** do not change the bid, but they shape how a bot imagines the hidden hands during play.
+
+### Opponent modelling from the auction
+
+`bidStrength` in `knowledge.ts` reads each seat's public calls: -0.5 for passing without a bid, 0 before any call, and 0.4 rising to 1 for a bid ten steps above the minimum (or a shoot). `cardWeights` turns that into relative odds for unknown cards: aces `exp(0.6 × strength)`, trump `exp(0.4 × strength)`, and on top of that trump is `exp(0.8)` likelier with the declarer (it chose trump and was passed trump) and `exp(-0.4)` with the declarer's partner, when passing is on. `sampleDeal` tries seats for each card in a weighted random order (first choice proportional to weight) inside the same backtracking, so counts, voids and public meld still hold exactly.
 
 For example, in classic scoring, `AS0 AH0 AD0 AC0 TS0 KS0 QS0 JS0 9S0 KH0 QH0 JD0` has 320 meld with spades: a run, dix, heart marriage, aces around, and pinochle. Six trump, four aces, one protected ten, and 70 counter points give a 573.5 projection before the partner acts. With a 35 safety margin and a step of 10, the ceiling is 530. A partner pass lowers it to 500; a partner bid raises it to 570. The bot still bids only the next legal increment. Shooting requires permission from the rules plus eight trump, both trump aces, and an ace in every side suit.
 
@@ -31,7 +44,7 @@ Trump selection maximizes this projection, whose suit-dependent terms reward mel
 
 ## Trick play: determinized Monte Carlo
 
-`play.ts` evaluates only `legal.playableCards`. For each sample, `knowledge.ts` assigns the unknown deck to opponents, respecting remaining counts, shown voids, and ownership established by public meld. Randomized backtracking gives constrained deals; an assignment has a bounded search limit and failure falls back to the heuristic. Every candidate uses the same sampled deal, reducing sampling noise between candidates.
+`play.ts` evaluates only `legal.playableCards`. For each sample, `knowledge.ts` assigns the unknown deck to the other seats, respecting remaining counts, shown voids, ownership established by public meld and passing, and leaning toward what each seat's bids suggest. Randomized backtracking gives constrained deals; an assignment has a bounded search limit and failure falls back to the heuristic. Every candidate uses the same sampled deal, reducing sampling noise between candidates.
 
 Each candidate is played to the hand's end. All four simulated seats use the same heuristic and `legalPlays` from the real rules. The policy leads boss cards, favors drawing trump when the bidding team holds length, wins cheaply against an opponent, puts counters on a safe partner trick, and otherwise discards low non-counters. The policy sees its simulated own hand and the union of unplayed cards, which is public information, rather than consulting a simulated opponent's hand to select a card. Scoring includes counters, the last trick bonus, whether each side saved meld, and the bidding side's make/set result. Shoot contracts use the all-tricks outcome. The candidate with the best mean team score difference wins.
 
@@ -55,9 +68,22 @@ Measured results are recorded below after running `node scripts/bot-arena.mjs 50
 
 The reduced-budget run won 50/50 games, 100%, over 20,715 positions. Its 10,300 bot decisions averaged 0.454 ms. At the default 60 ms effort budget, the bots also won 50/50 games over 20,247 positions. Its 10,055 decisions averaged 8.119 ms. Both measurements include bidding, passing, and melding decisions as well as trick decisions, and exclude database and network time.
 
+### Bidding conventions against the previous bots (issue #5)
+
+`node scripts/bot-duel.mjs [deals] [ref] [budgetMs]` plays the working tree's bots against the bots at a git ref, default `origin/main`. Every deal is played twice with the teams swapped and the same sampling seeds, so deal luck cancels. Games use default rules (modern scoring, 150 to win). `partnerRaises` counts bids over partner's high bid after both opponents had passed.
+
+Against the bots before this change (2026-10-26):
+
+| Run | Games | New bots win | Mean final score, new minus old | Bids made, new / old | Partner raises, new / old |
+| --- | --- | --- | --- | --- | --- |
+| `bot-duel.mjs 500 origin/main 0` (heuristic play) | 1000 | 54.9% | +9.2 | 82.9% / 78.8% | 222 / 4447 |
+| `bot-duel.mjs 150 origin/main 15` (10 samples per play) | 300 | 55.7% | +10.8 | 87.8% / 82.5% | 76 / 1276 |
+
+Variants tried on the way, each as a paired duel of new against new with one switch: allowing one "support" raise of partner while an opponent is still bidding lost 44.7% of 2000 games (-9.1 per game), so bots never make it. Jump bids to show meld cost about 2 points per game against the old bots, so bots don't jump. Turning the auction-based card weights off lost 47.5% of 400 games at 15 ms (-3.6 per game), so the weights stay.
+
 ## Known weaknesses and next steps
 
-The bots have no convention for partner signals, no learned opponent model, and no memory across hands beyond public information in the view. The projection does not estimate the value of each possible four-card exchange. Sampling uses hard public constraints without weighting deals by bidding style or subtle card choices. The playout policy has no search for coordinated squeezes or deliberate losing plays. Future work should evaluate partner signalling, fit opponent bidding tendencies, and learn calibrated projections from audited game logs. A stronger baseline and held-out seeds would give a more useful measure than random opponents.
+The partner conventions are hand-set, not learned, and the auction-based card weights are fixed constants rather than fitted to real players. Bots keep no memory across hands beyond public information in the view. The projection does not estimate the value of each possible four-card exchange. Sampling does not read subtle card choices during play (for example a discard showing strength). The playout policy has no search for coordinated squeezes or deliberate losing plays. Future work should evaluate partner signalling, fit opponent bidding tendencies, and learn calibrated projections from audited game logs. A stronger baseline and held-out seeds would give a more useful measure than random opponents.
 
 ## Validation
 

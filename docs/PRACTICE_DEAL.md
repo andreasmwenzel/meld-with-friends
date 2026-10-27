@@ -24,11 +24,12 @@ and needs only a jack to complete a run. Spades have only three cards, A K Q,
 and need both a ten and a jack. South has two aces and no complete run, so the
 opening hand still needs help from the partner and points from trick play.
 
-- **Bidding.** West bids 25, North passes, and East bids 26 under the existing
-  bot policy. A learner raise to 31 makes West and East pass on their second
-  turns. This is the repeatable teaching path. A smaller raise lets West compete
-  again. The initial 11 heart meld does not cover the contract; account for
-  partner support and counters. If everyone passes instead, South is stuck at 25.
+- **Bidding.** West bids 25, North passes, and East passes rather than raise its
+  own partner (bots let a partner's bid stand; see `docs/COMPUTER_PLAYERS.md`).
+  West has bid to its limit, so any raise from South wins the auction, and the
+  learner can take it cheaply at 26. The initial 11 heart meld does not cover
+  the contract; account for partner support and counters. If South passes too,
+  West plays at 25.
 - **Trump.** Hearts give 11 opening meld: royal marriage 4, spade marriage 2,
   pinochle 4 and dix 1. Spades give 10, clubs 9 and diamonds 8. Heart length
   and the easier run completion make hearts the clear choice beyond the small
@@ -41,7 +42,7 @@ opening hand still needs help from the partner and points from trick play.
   the spade marriage. The learner can compare keeping that marriage with keeping
   the extra ace or trump. The resulting 20 meld is run 15, pinochle 4 and
   dix 1. The royal marriage is part of the run and does not score separately.
-- **Trick play.** With 20 personal meld against a 31 bid, counters and the
+- **Trick play.** With 20 personal meld against a 26 bid, counters and the
   partner's contribution still matter. Observe follow-suit, heading and trumping
   obligations. A side must take a trick to save its meld.
 
@@ -50,7 +51,7 @@ opening hand still needs help from the partner and points from trick play.
 The coach (`src/engine/coach/advice.ts`, tests in `src/engine/__tests__/advice.test.ts`) follows
 the same teaching path. Its bid limit for South is 31: 11 heart meld, about 15 in tricks, about 2
 from a partner who passed, and the chance that North holds the J♥ for the run, less a small
-margin. It suggests the minimum each turn (27, 29, then 31), which wins the auction at 31.
+margin. It suggests the minimum, 26, which wins the auction.
 It names hearts. On the pass back it suggests 9♣, K♣, 10♣ and A♦ instead of the bot's K♠:
 that keeps the spade marriage for 22 meld, leaves South void in clubs, and the A♦ still wins
 for North. The bot's choice stays as it is, so the two can be compared. Once everyone has
