@@ -33,7 +33,7 @@ function client(srv: ReturnType<typeof server>, { board = true } = {}) {
   const errors: unknown[] = [];
   const sync = new ViewSync<View>({ fetchView: () => srv.fetchView(), apply: v => applied.push(v.rev), onError: e => errors.push(e) });
   const feed = createGameFeed();
-  if (board) feed.subscribe(event => { if (event.type === "game") sync.event(event.rev); else void sync.load(); });
+  if (board) feed.subscribe(event => sync.handle(event));
   const refresh = vi.fn();
   /** What the realtime channel would deliver. */
   const channel = (event: TableEvent) => routeTableEvent(event, feed, refresh);
@@ -164,13 +164,22 @@ describe("one fetch per game event", () => {
     expect(tab.refresh).toHaveBeenCalledTimes(1);
   });
 
-  it("refreshes only the table for seat and trade events", () => {
+  it("refreshes only the table for trade events", () => {
     const srv = server();
     const tab = client(srv);
-    tab.channel({ type: "seats" });
     tab.channel({ type: "trade" });
-    expect(tab.refresh).toHaveBeenCalledTimes(2);
+    expect(tab.refresh).toHaveBeenCalledTimes(1);
     expect(srv.fetches).toBe(0);
+  });
+
+  it("refreshes the table and fetches the view once for a seat event (a ready check)", async () => {
+    const srv = server(2);
+    const tab = client(srv);
+    void tab.sync.load(); await srv.answer();
+    srv.fetches = 0;
+    tab.channel({ type: "seats" });
+    expect(tab.refresh).toHaveBeenCalledTimes(1);
+    expect(srv.fetches).toBe(1);
   });
 
   it("fetches nothing for a chat event on the table channel", () => {
@@ -223,12 +232,100 @@ describe("revisions reported by the bot worker", () => {
     expect(srv.fetches).toBe(2);
   });
 
+  it("fetches the announced revision when its grace runs out during an older fetch", async () => {
+    vi.useFakeTimers();
+    const srv = server(3);
+    const tab = client(srv);
+    void tab.sync.load(); await srv.answer();
+    srv.fetches = 0;
+
+    srv.rev = 4;
+    void tab.sync.load(); // an older GET is running (rev 4)
+    tab.sync.expect(5, 2000); // the worker reports rev 5; its broadcast is lost
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(srv.fetches).toBe(1);
+    await srv.answer(); // comes back with rev 4
+    expect(srv.fetches).toBe(2);
+    srv.rev = 5;
+    await srv.answer();
+    expect(tab.applied.at(-1)).toBe(5);
+  });
+
   it("fetches at once without a live channel", async () => {
     const srv = server(4);
     const tab = client(srv);
     void tab.sync.load(); await srv.answer();
     srv.fetches = 0;
     tab.sync.expect(5, 0);
+    expect(srv.fetches).toBe(1);
+  });
+});
+
+describe("ready checks", () => {
+  /** A server whose view carries a ready list, like the table's. */
+  type ReadyView = { rev: number; ready: number[] };
+  function readyTab() {
+    const pending: ((v: ReadyView) => void)[] = [];
+    let fetches = 0;
+    const applied: ReadyView[] = [];
+    const sync = new ViewSync<ReadyView>({
+      fetchView: () => { fetches++; return new Promise<ReadyView>(r => pending.push(r)); },
+      apply: v => applied.push(v), onError: () => {},
+    });
+    const feed = createGameFeed();
+    feed.subscribe(event => sync.handle(event));
+    const channel = (event: TableEvent) => routeTableEvent(event, feed, () => {});
+    const answer = async (v: ReadyView) => { pending.shift()!(v); await flush(); };
+    return { sync, channel, answer, applied, get fetches() { return fetches; }, get open() { return pending.length; } };
+  }
+
+  it("fetches each ready check even when the same players ready again next hand", async () => {
+    const tab = readyTab();
+    void tab.sync.load(); await tab.answer({ rev: 10, ready: [] });
+    tab.channel({ type: "seats" }); await tab.answer({ rev: 10, ready: [1] });
+    // next hand, played out, then the same player readies again
+    tab.channel({ type: "game", rev: 20 }); await tab.answer({ rev: 20, ready: [] });
+    tab.channel({ type: "seats" });
+    expect(tab.fetches).toBe(4);
+    await tab.answer({ rev: 20, ready: [1] });
+    expect(tab.applied.at(-1)).toEqual({ rev: 20, ready: [1] });
+  });
+
+  it("fetches again when a ready check lands while the hand-over view is still on its way", async () => {
+    const tab = readyTab();
+    void tab.sync.load(); await tab.answer({ rev: 10, ready: [] });
+    tab.channel({ type: "game", rev: 11 }); // the hand ends
+    tab.channel({ type: "seats" }); // a player readies before that view comes back
+    expect(tab.fetches).toBe(2);
+    await tab.answer({ rev: 11, ready: [] }); // the slow hand-over view, from before the ready check
+    expect(tab.fetches).toBe(3);
+    await tab.answer({ rev: 11, ready: [2] });
+    expect(tab.applied.at(-1)).toEqual({ rev: 11, ready: [2] });
+    expect(tab.open).toBe(0);
+  });
+});
+
+describe("disposal", () => {
+  it("cancels the bot grace timer when the board unmounts", async () => {
+    vi.useFakeTimers();
+    const srv = server(4);
+    const tab = client(srv);
+    void tab.sync.load(); await srv.answer();
+    srv.fetches = 0;
+    tab.sync.expect(5, 2000);
+    tab.sync.dispose();
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(srv.fetches).toBe(0);
+  });
+
+  it("ignores answers and events that arrive after it is disposed", async () => {
+    const srv = server(4);
+    const tab = client(srv);
+    void tab.sync.load();
+    tab.sync.dispose();
+    await srv.answer();
+    tab.channel({ type: "game", rev: 6 });
+    expect(tab.applied).toEqual([]);
     expect(srv.fetches).toBe(1);
   });
 });
