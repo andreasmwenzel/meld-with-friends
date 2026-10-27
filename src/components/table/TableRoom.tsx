@@ -20,7 +20,7 @@ export function TableRoom({ code, me, guest = false }: { code: string; me: Profi
   const [feed] = useState(createGameFeed);
   usePresence({ userId: me.id, handle: me.handle, tableCode: code });
   const [seated, setSeated] = useState(false);
-  const chat = useTableChat(code, me, seated);
+  const chat = useTableChat(code, me, seated, snap?.moveKey, snap?.serverNow);
 
   const refresh = useCallback(async () => {
     const request = ++requests.current.issued;

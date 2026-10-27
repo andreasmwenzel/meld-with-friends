@@ -1,5 +1,6 @@
 vi.mock("@/server/bans", () => ({ isBanned: async () => false }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("../moveSigning", () => ({ movePublicKey: () => "test-public-key" }));
 import { scheduleRematchTalk } from "../botTableTalk";
 vi.mock("../botTableTalk", () => ({ scheduleRematchTalk: vi.fn() }));
 import { resolveRules } from "@/engine/scoring";

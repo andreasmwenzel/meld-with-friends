@@ -66,6 +66,10 @@ Each bot action uses `commit_bot_action`. That service-role-only transaction ver
 
 ## Table talk
 
+Table talk is sent through the server and signed, like moves. Bot lines carry a `bot:` sender
+and the bot's name in the same signed format as human messages. Clients verify the signature and
+table code before showing a line. Messages remain transient and are not stored.
+
 A seated bot offers a short comment every three or four deals, alternating those gaps with a
 starting offset derived from the table id. The first deal stays quiet. Throw-ins and all-pass
 redeals count as deals too. One bot speaks per event, even when several bots are seated.
@@ -113,8 +117,8 @@ lookup, scheduling and delivery failures are logged. There are no retries or sto
 Delivery is best effort, with at most one send attempt per committed event. A disconnected player
 may miss a line, just as with human chat.
 
-Bot messages use the existing `chat:{code}` channel's `message` event and
-`{ id, from, name, text, at }` shape. `from` is `bot:{tableId}:{seat}`, distinct from human UUIDs;
+Bot messages use the `chat:{code}` channel's `chat` event with `{ message, sig }`.
+The signed message contains the table code and `{ id, from, name, text, at }`. `from` is `bot:{tableId}:{seat}`, distinct from human UUIDs;
 the stable event id also lets the client deduplicate delivery. No chat UI changes are needed.
 
 ## Measured results

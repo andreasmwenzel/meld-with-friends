@@ -4,6 +4,7 @@ import type { Action, GameState } from "@/engine/types";
 import { pickTableTalk, talkDue, type TalkFacts, type TalkSeat } from "@/lib/bots/tableTalk";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkDb } from "./errors";
+import { signChat } from "./moveSigning";
 import { broadcastChat } from "./realtime";
 
 type Table = { id: string; code: string };
@@ -42,10 +43,10 @@ function schedule(table: Table, eventId: string, facts: TalkFacts | "redeal" | "
         }));
         const line = pickTableTalk(seats, eventId, facts);
         if (!line) return;
-        await broadcastChat(table.code, {
+        await broadcastChat(table.code, signChat(table.code, {
           id: `bot:${eventId}`, from: `bot:${table.id}:${line.seat}`,
           name: line.name, text: line.text, at: Date.now(),
-        });
+        }));
       } catch (error) { console.error("Bot table talk failed", error); }
     });
   } catch (error) { console.error("Bot table talk scheduling failed", error); }

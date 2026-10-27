@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { signChat, movePublicKey } from "../moveSigning";
+import { openChat } from "@/lib/chatAuth";
 import { broadcastTable, broadcastChat, notifyInvited } from "@/server/realtime";
 
 const send = vi.fn();
@@ -40,10 +42,12 @@ it("nudges each invited player's lobby in one request, with nothing in the paylo
   expect(send).toHaveBeenCalledTimes(1);
 });
 
-it("sends bot chat with the existing client topic, event and message shape", async () => {
+it("sends signed bot chat on the normalized transient topic", async () => {
   const message = { id: "bot:game:hand:3", from: "bot:table:1", name: "Otto", text: "Nice set, Margaret.", at: 123 };
-  await broadcastChat(" bcdfgh ", message);
+  const signed = signChat("BCDFGH", message);
+  await broadcastChat(" bcdfgh ", signed);
+  expect(await openChat(movePublicKey(), "BCDFGH", signed.message, signed.sig, 123)).toEqual(message);
   expect(JSON.parse(send.mock.calls[0][1].body)).toEqual({ messages: [
-    { topic: "chat:BCDFGH", event: "message", payload: message, private: false },
+    { topic: "chat:BCDFGH", event: "chat", payload: signed, private: false },
   ] });
 });
