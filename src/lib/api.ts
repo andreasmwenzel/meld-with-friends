@@ -29,3 +29,5 @@ export interface Friendship {
   requester_profile: Profile; addressee_profile: Profile;
 }
 export interface FriendsPayload { accepted: Friendship[]; incoming: Friendship[]; outgoing: Friendship[] }
+export interface GroupMember { userId: string; handle: string; displayName: string; avatarSeed: string }
+export interface Group { id: string; name: string; members: GroupMember[] }

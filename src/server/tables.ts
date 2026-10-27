@@ -29,7 +29,12 @@ export async function tableByCode(code: string): Promise<TableRow> {
   return data as TableRow;
 }
 
-export async function createTable(gameKind: "pinochle", rules: Partial<RulesConfig>, userId: string) {
+/**
+ * Deals a new table. With a group, the database seats the host in the first chair and invites the
+ * group in the same transaction (deal_for_group), so the host is never locked out and never gets a
+ * table whose invitations failed.
+ */
+export async function createTable(gameKind: "pinochle", rules: Partial<RulesConfig>, userId: string, groupId?: string): Promise<TableRow & { invited?: string[] }> {
   const { limits } = await getSettings();
   await enforce(`tables:${userId}`, limits.tablesPerHour, 3600);
   const admin = createAdminClient();
@@ -37,10 +42,15 @@ export async function createTable(gameKind: "pinochle", rules: Partial<RulesConf
   checkDb(count.error);
   if ((count.count ?? 0) >= limits.maxOpenTablesPerHost) { bump("rate_limited"); throw new ApiError(429, "Slow down: too many unfinished tables"); }
   for (let attempt = 0; attempt < 8; attempt++) {
-    const { data, error } = await admin.rpc("create_table", { p_code: generateTableCode(), p_user: userId, p_kind: gameKind, p_rules: resolveRules(rulesSchema.parse(rules)) });
+    const args = { p_code: generateTableCode(), p_user: userId, p_kind: gameKind, p_rules: resolveRules(rulesSchema.parse(rules)) };
+    const { data, error } = groupId
+      ? await admin.rpc("deal_for_group", { ...args, p_group: groupId })
+      : await admin.rpc("create_table", args);
     if (error?.code === "23505") continue;
     checkDb(error);
-    return data as TableRow;
+    if (!groupId) return data as TableRow;
+    const dealt = data as { table: TableRow; invited: string[] };
+    return { ...dealt.table, invited: dealt.invited };
   }
   throw new ApiError(503, "Could not allocate a table code; retry");
 }

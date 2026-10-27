@@ -53,3 +53,7 @@ export const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("next_hand"), seat: seatSchema }).strict(),
 ]);
 export const handleSchema = z.string().trim().toLowerCase().regex(/^[a-z0-9_]{3,32}$/);
+export const MAX_GROUP_MEMBERS = 12;
+export const groupNameSchema = z.string().trim().min(1, "Name the group").max(40, "Keep the name under 40 characters");
+export const groupMembersSchema = z.array(z.uuid()).max(MAX_GROUP_MEMBERS, `A group can have up to ${MAX_GROUP_MEMBERS} members`)
+  .refine(ids => new Set(ids).size === ids.length, "Duplicate members");

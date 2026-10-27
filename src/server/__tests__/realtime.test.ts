@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { broadcastTable } from "@/server/realtime";
+import { broadcastTable, notifyInvited } from "@/server/realtime";
 
 const send = vi.fn();
 beforeEach(() => {
@@ -27,4 +27,15 @@ it.each(["network", "http"])("keeps a committed mutation successful after a %s n
   else send.mockResolvedValue(new Response(null, { status: 503 }));
   await expect(broadcastTable("BCDFGH", { type: "seats" })).resolves.toBeUndefined();
   expect(log).toHaveBeenCalled();
+});
+
+it("nudges each invited player's lobby in one request, with nothing in the payload", async () => {
+  await notifyInvited(["u1", "u2"]);
+  expect(send).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(send.mock.calls[0][1].body)).toEqual({ messages: [
+    { topic: "invites:u1", event: "invites", payload: { type: "invites" }, private: false },
+    { topic: "invites:u2", event: "invites", payload: { type: "invites" }, private: false },
+  ] });
+  await notifyInvited([]);
+  expect(send).toHaveBeenCalledTimes(1);
 });
