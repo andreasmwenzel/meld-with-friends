@@ -451,6 +451,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const recapOpen = menu && tab === "hand";
   // Table talk's popover and draft belong to the board, so they survive the button moving onto the result sheet.
   const [talkOpen, setTalkOpen] = useState(false);
+  // The menu covers the chat popover, so opening it closes talk: hidden messages then count as unread again.
+  if (menu && talkOpen) setTalkOpen(false);
   const [talkDraft, setTalkDraft] = useState("");
   const autoRecap = useRef(false);
   const sendSeen = useCallback((path: string, init: Parameters<typeof api>[1]) => {

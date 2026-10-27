@@ -49,7 +49,7 @@ export function ChatBody({ chat, open, text, setText, inputRef, compact = false 
 
   return (
     <>
-      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-2 text-sm">
+      <div ref={listRef} role="log" aria-live="polite" aria-label="Table talk messages" className="min-h-0 flex-1 overflow-y-auto px-4 py-2 text-sm">
         {messages.length === 0 && <p className="text-ink-soft">Say hello. Messages stay at the table and are not saved.</p>}
         {messages.map((m) => (
           <p key={m.id} className="mb-1.5 leading-snug">

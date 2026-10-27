@@ -136,6 +136,14 @@ describe("table talk at the board", () => {
     expect(tabs).toEqual(["Score", "This hand", "Options"]);
   });
 
+  it("closes when the menu opens, so messages hidden behind the menu count as unread", async () => {
+    await table("play-lead");
+    fireEvent.click(talkButton());
+    await vi.waitFor(() => { if (talkButton().getAttribute("aria-expanded") !== "true") throw new Error("talk not open"); });
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    await vi.waitFor(() => { if (talkButton().getAttribute("aria-expanded") !== "false") throw new Error("talk still open"); });
+  });
+
   it("is not there without table talk (practice, the lab by default)", async () => {
     await table("play-lead", false);
     expect(screen.queryByRole("button", { name: /^Table talk/ })).toBeNull();
