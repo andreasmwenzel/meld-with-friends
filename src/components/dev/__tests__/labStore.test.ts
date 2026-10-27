@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import archived from '@/engine/__tests__/fixtures/legacy-shoot.json';
+import continuation from '@/engine/__tests__/fixtures/legacy-shoot-continuation.json';
 import type { Action, GameState } from '@/engine/types';
 import { applyAction } from '@/engine';
 import { buildScenario } from '@/engine/scenario';
@@ -10,6 +11,24 @@ const shuffleKeys = (v: unknown): unknown => Array.isArray(v) ? v.map(shuffleKey
   : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).reverse().map(([k, x]) => [k, shuffleKeys(x)])) : v;
 
 describe('lab import', () => {
+  it('keeps the timeline after continuing an old points game during an ordinary hand', () => {
+    const before = continuation.final as unknown as GameState;
+    const action: Action = { type: 'bid', seat: before.turn!, amount: before.rules.minBid };
+    const state = applyAction(before, action);
+    const actions = [...continuation.actions as Action[], action];
+    const parsed = parseImport({ state: shuffleKeys(state), actions });
+    expect(parsed.note).toMatch(/Rebuilt from seed/);
+    expect(parsed.actions).toEqual(actions);
+    const store = new LabStore();
+    store.load(parsed.base, parsed.actions, { kind: 'import', name: 'continued-legacy' }, { running: false });
+    expect(store.get().error).toBeNull();
+    expect(store.state.score).toEqual(state.score);
+    store.goto(actions.length - 1);
+    expect(store.state).toMatchObject({ phase: 'bidding', handNumber: 2, highBid: null });
+    store.redo();
+    expect(store.state.highBid).toEqual(state.highBid);
+  });
+
   it('rebuilds a production game from its seed even when jsonb reordered the keys', () => {
     const built = buildScenario({ dealer: 2, bidder: 3, bid: 260, to: 'playing', tricks: 5 });
     const parsed = parseImport({ state: shuffleKeys(built.state), actions: built.actions });

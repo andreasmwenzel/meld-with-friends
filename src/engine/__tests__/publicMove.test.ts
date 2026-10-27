@@ -124,7 +124,9 @@ describe('public moves for shoots and misdeals', () => {
     expect(last.action.type).toBe('play_card');
     expect(['hand_over', 'game_over']).toContain(last.next.phase);
     expect(last.move).toBeNull();
-    for (const { prev, move } of steps.filter(s => s.move)) for (const seat of SEATS) expect(applyPublicMove(viewFor(prev, seat), move!)).not.toBeNull();
+    for (const { prev, next, move } of steps.filter(s => s.move)) for (const seat of SEATS) {
+      expect(applyPublicMove(viewFor(prev, seat), move!)).toEqual(viewFor(next, seat));
+    }
   });
 
   it('a missed shoot ends the hand early, on the first trick lost, with no move', () => {

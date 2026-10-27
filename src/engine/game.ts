@@ -320,7 +320,9 @@ function apply(previous: GameState, action: Action, legacyShoot: boolean): GameS
   requireAction(SEATS.includes(action.seat), 'Invalid seat');
   const legal = legalActionsFor(previous, action.seat);
   const state: EngineState = clone(previous);
-  if ((legacyShoot || state.highBid?.shoot && state.sittingOut == null) && !state.legacyShootRules) {
+  const rawShoot = (state.rules as unknown as Record<string, unknown>).shoot;
+  // Normal hands in old games still need their original stake to rebuild earlier shoots.
+  if ((rawShoot === 'game' || rawShoot === 'points' || legacyShoot || state.highBid?.shoot && state.sittingOut == null) && !state.legacyShootRules) {
     state.legacyShootRules = legacyShootRules(state.rules);
   }
   state.rules = resolveRules(state.rules, true);

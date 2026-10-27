@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applyAction, newGame, viewFor } from "@/engine/game";
 import archived from "@/engine/__tests__/fixtures/legacy-shoot.json";
+import continuation from "@/engine/__tests__/fixtures/legacy-shoot-continuation.json";
 import { expandReplay } from "@/engine/replay";
 import { randomAction } from "@/engine/ai/arena";
 import { random } from "@/engine/ai/shared";
@@ -110,6 +111,23 @@ describe("getReplay", () => {
 
 describe("GET /api/replay/[id]", () => {
   const context = { params: Promise.resolve({ id: GAME }) };
+  it("serves the completed shoot after an old points game continues during an ordinary hand", async () => {
+    const before = continuation.final as unknown as GameState;
+    const action: Action = { type: 'bid', seat: before.turn!, amount: before.rules.minBid };
+    const state = applyAction(before, action);
+    database({
+      games: gameRow(state), game_actions: log([...continuation.actions as Action[], action]),
+      game_results: null, tables: { code: 'BCDFGH' },
+      seats: snapshot.map(s => ({ ...s, bot: s.bot ? s.name : null, profile: { display_name: s.name } })),
+    });
+    mocks.session.mockResolvedValue({ id: 'alice' });
+    const response = await GET(new Request('http://localhost/api/replay'), context);
+    expect(response.status).toBe(200);
+    const replay = await response.json();
+    expect(replay).toMatchObject({ finished: false, hands: 1 });
+    expect(expandReplay(replay).at(-1)!.score).toEqual(state.score);
+  });
+
   it("serves anonymous readers, keyed by the forwarded address", async () => {
     const { state, actions } = playUntil(s => s.phase === "game_over");
     database({ games: gameRow(state), game_actions: log(actions), game_results: { code: "BCDFGH", seats: snapshot, finished_at: "x" } });

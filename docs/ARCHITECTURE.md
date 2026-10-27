@@ -23,10 +23,13 @@ The other three seats follow the ordinary follow, head, trump and overtrump rule
 the declarer loses ends the game with the opponents winning, regardless of score. Winning all twelve
 tricks adds exactly the target to the declaring side. A negative starting score can leave the game
 unfinished. Neither side scores meld, counters or the last trick.
+Claims are disabled during solo shoots because the claim proof assumes four active seats. Each
+three-card trick must be played out, skipping the sitting-out partner.
 
 New auction shoots are illegal. Trusted log replay uses `applyLegacyAction` for archived auction
 shoots and old post-pass shoots followed by meld. Those hands keep their four-player play and stored
-stake through `legacyShootRules`, including when continuing an old stored hand. Replay steps mark
+stake through `legacyShootRules`, captured before rule normalization on any continuation of an old
+game, including ordinary hands after a shoot. Replay steps mark
 legacy declarations so browser playback uses the same rules. The server rebuild and lab import share
 `rebuildFromLog`. Stored rule preferences `"game"` and `"points"` normalize to `"on"`, and migration
 0019 removes the old stake from table and profile preferences. Stored game states and logs remain

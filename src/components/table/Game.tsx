@@ -974,7 +974,8 @@ function SuggestedMark() {
 function shootStake(view: PlayerView, nameOf: (s: SeatIndex) => string): string {
   const who = view.bidder === null ? "The bidder" : nameOf(view.bidder);
   if (who !== "You") return `${who} may shoot the moon. Their partner sits out; they must take every trick.`;
-  return "Your partner sits out; take every trick to win the game";
+  const wins = view.score[teamOf(view.bidder!)] + view.rules.target >= view.rules.target;
+  return `Your partner sits out; take every trick and your side gains ${view.rules.target} points${wins ? "; that wins the game" : ""}.`;
 }
 
 /** "You are shooting the moon" or "West is shooting the moon". */

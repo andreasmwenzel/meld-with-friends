@@ -71,7 +71,9 @@ function fuzzAction(state: GameState, seat: SeatIndex): Action {
 export function verifyClaim(state: GameState, seed: string): number {
   if (state.turn === null) return 0;
   const seat = state.turn;
-  const line = claimLine(viewFor(state, seat));
+  const view = viewFor(state, seat);
+  if (!view.legal.canClaim) return 0;
+  const line = claimLine(view);
   if (!line) return 0;
   const claimed = applyAction(state, { type: 'claim', seat });
   const before = viewFor(state, seat).recap.tricks.length;

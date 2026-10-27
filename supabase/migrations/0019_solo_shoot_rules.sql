@@ -1,5 +1,5 @@
 -- Shooting now has one enabled rule. Keep games.state and action logs intact for legacy replay.
-create function pg_temp.solo_shoot_rules(r jsonb) returns jsonb
+create or replace function pg_temp.solo_shoot_rules(r jsonb) returns jsonb
 language sql immutable as $$
   select (r - 'shootPoints') || case when r->>'shoot' in ('game', 'points')
     then '{"shoot":"on"}'::jsonb else '{}'::jsonb end

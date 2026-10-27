@@ -37,7 +37,7 @@ async function table(state: GameState, { autoMeld = true, frozen = false } = {})
   server = state;
   localStorage.setItem("meld.cards", JSON.stringify({ motion: "off", autoMeld }));
   window.matchMedia = ((query: string) => ({ matches: query.includes("coarse") || query.includes("max-width"), media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} })) as unknown as typeof window.matchMedia;
-  window.confirm = () => true;
+  window.confirm = vi.fn(() => false);
   const snap = {
     table: { id: "t", code: CODE, host: "u0", status: "playing", rules: { ...state.rules } },
     seats: [0, 1, 2, 3].map((seat) => seat === 0 ? { seat, user_id: "u0", bot: null, profile: me } : { seat, user_id: null, profile: null, bot: "Robo" }),
@@ -77,7 +77,7 @@ describe("the shoot decision after the pass", () => {
     const { state } = buildScenario(spec);
     await table(state);
     expect(screen.getByText("Shoot the moon?")).toBeTruthy();
-    expect(screen.getByText(/Your partner sits out; take every trick to win the game/)).toBeTruthy();
+    expect(screen.getByText(/Your partner sits out; take every trick and your side gains 150 points; that wins the game/)).toBeTruthy();
     // Automatic meld is on, yet nothing is laid down while the decision is open.
     await act(() => new Promise((r) => setTimeout(r, 700)));
     expect(sent).toEqual([]);
@@ -134,11 +134,21 @@ describe("the shoot decision after the pass", () => {
     await table(state);
     await act(() => { fireEvent.click(screen.getByRole("button", { name: "Shoot the moon" })); });
     await vi.waitFor(() => expect(sent[0]).toMatchObject({ type: "shoot" }));
+    expect(window.confirm).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(server.phase).toBe("playing"));
     expect(server.sittingOut).toBe(2);
     expect(screen.getByText("sitting out")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Lay down/ })).toBeNull();
     expect(server.highBid).toMatchObject({ shoot: true });
+  });
+
+  it.each([-30, 0, 20])("describes the target reward from a starting score of %i", async score => {
+    const { state } = buildScenario({ ...spec, handNumber: 2, score: { red: score } });
+    await table(state, { frozen: true });
+    const text = screen.getByText(/Your partner sits out; take every trick/).textContent!;
+    expect(text).toContain("take every trick and your side gains 150 points");
+    expect(text.includes("that wins the game")).toBe(score >= 0);
+    expect(text).not.toContain("take every trick to win the game");
   });
 
   it("shows your own sitting-out hand face down without playable cards", async () => {
