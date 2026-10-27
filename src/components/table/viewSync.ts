@@ -3,9 +3,10 @@ import type { TableEvent } from "@/lib/realtime/useTableChannel";
 /**
  * Keeps one client's game view in step with the server with as few GETs as possible.
  *
- * - A `game` event fetches the view at most once. Events the client already has (its own move, a
- *   duplicate) fetch nothing. Events arriving together (in the same tick, before the fetch goes out)
- *   share one fetch; events that land while a fetch is running share one follow-up fetch.
+ * - A `game` event that carries the public move for the next revision is applied without a fetch.
+ * - Otherwise a `game` event fetches the view at most once. Events the client already has (its own
+ *   move, a duplicate) fetch nothing. Events arriving together (in the same tick, before the fetch
+ *   goes out) share one fetch; events that land while a fetch is running share one follow-up fetch.
  * - While this client's own action is in flight, events wait for its response, which carries the view.
  *   If it fails or brings no view back, one fetch follows.
  * - A table (seats) event, which is how ready checks arrive, always needs a view fetched after it: the
@@ -14,14 +15,16 @@ import type { TableEvent } from "@/lib/realtime/useTableChannel";
  * - Responses are applied in request order, and never move the view back to an older revision.
  * - Once disposed (the board unmounted) it fetches nothing more and ignores answers still on the way.
  */
-export interface ViewSyncOptions<V extends { rev: number }> {
+export interface ViewSyncOptions<V extends { rev: number }, M = never> {
   fetchView: () => Promise<V>;
+  /** Apply a broadcast move to the current view; null when it cannot, and the view is fetched instead. */
+  applyMove?: (view: V, move: M) => V | null;
   apply: (view: V) => void;
   /** A fetch failed and no newer request has answered since. */
   onError: (error: unknown) => void;
 }
 
-export class ViewSync<V extends { rev: number }> {
+export class ViewSync<V extends { rev: number }, M = never> {
   private issued = 0;
   private applied = 0;
   private loading = 0;
@@ -42,8 +45,11 @@ export class ViewSync<V extends { rev: number }> {
   /** Highest revision the server has announced. */
   private announced = -1;
   rev = -1;
+  private view: V | null = null;
+  /** The view last applied, fetched or built from a move. */
+  get latest(): V | null { return this.view; }
 
-  constructor(private readonly options: ViewSyncOptions<V>) {}
+  constructor(private readonly options: ViewSyncOptions<V, M>) {}
 
   /** Number a request so its answer can be ordered against the others. */
   begin(): number { return ++this.issued; }
@@ -55,6 +61,7 @@ export class ViewSync<V extends { rev: number }> {
     this.applied = request;
     this.rev = view.rev;
     if (this.pending !== null && request > this.pending) this.pending = null;
+    this.view = view;
     this.options.apply(view);
     return true;
   }
@@ -90,10 +97,22 @@ export class ViewSync<V extends { rev: number }> {
     else void this.load();
   }
 
-  /** A `game` broadcast announced revision `rev`. */
-  event(rev: number): void {
+  /** A `game` broadcast announced revision `rev`, with the public move when it can be applied locally. */
+  event(rev: number, move?: M): void {
+    if (this.disposed) return;
     this.announced = Math.max(this.announced, rev);
     if (rev <= this.rev) return;
+    // The very next revision applies without a fetch. Any gap (a missed or out-of-order event) fetches.
+    if (move !== undefined && this.view && rev === this.rev + 1 && this.options.applyMove) {
+      let next: V | null = null;
+      try { next = this.options.applyMove(this.view, move); } catch { /* fetch instead */ }
+      if (next && next.rev === rev) {
+        this.rev = rev;
+        this.view = next;
+        this.options.apply(next);
+        return;
+      }
+    }
     if (this.loading || this.acting) { this.stale = true; return; }
     this.pending = this.issued;
     this.request();
@@ -182,7 +201,8 @@ export class ViewSync<V extends { rev: number }> {
 }
 
 /** What the table's one channel subscription passes down to the board. */
-export type GameFeedEvent = { type: "game"; rev: number } | { type: "table" } | { type: "resync" };
+/** A game event, with its signed public move when the server sent one (see src/lib/moveAuth.ts). */
+export type GameFeedEvent = { type: "game"; rev: number; move?: string; sig?: string } | { type: "table" } | { type: "resync" };
 
 export interface GameFeed {
   subscribe: (listener: (event: GameFeedEvent) => void) => () => void;

@@ -12,6 +12,7 @@ import { act } from '../game';
 let state: GameState;
 let duplicate: boolean;
 beforeEach(() => {
+  for (const [key, value] of Object.entries({ NEXT_PUBLIC_SUPABASE_URL: "https://meld.supabase.co", NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon", SUPABASE_SERVICE_ROLE_KEY: "service-role", CRON_SECRET: "cron" })) vi.stubEnv(key, value);
   vi.clearAllMocks();
   state = newGame('action-ids'); duplicate = false;
   mocks.from.mockImplementation((name: string) => {

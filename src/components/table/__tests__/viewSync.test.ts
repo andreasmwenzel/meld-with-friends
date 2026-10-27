@@ -400,3 +400,83 @@ describe("disposal", () => {
     expect(srv.fetches).toBe(1);
   });
 });
+
+describe("public moves from the broadcast", () => {
+  /** A move here is just the revision it produces; applying it needs the view to be one behind. */
+  function mover(srv: ReturnType<typeof server>) {
+    const applied: number[] = [];
+    const sync = new ViewSync<View, number>({
+      fetchView: () => srv.fetchView(),
+      applyMove: (view, rev) => (rev === view.rev + 1 ? { rev } : null),
+      apply: v => applied.push(v.rev),
+      onError: () => {},
+    });
+    return { sync, applied };
+  }
+
+  it("applies the next revision without a fetch", async () => {
+    const srv = server(4);
+    const { sync, applied } = mover(srv);
+    void sync.load(); await srv.answer();
+    srv.fetches = 0;
+    for (const rev of [5, 6, 7]) sync.event(rev, rev);
+    expect(srv.fetches).toBe(0);
+    expect(applied).toEqual([4, 5, 6, 7]);
+  });
+
+  it("fetches after a dropped event, then applies moves again", async () => {
+    const srv = server(4);
+    const { sync, applied } = mover(srv);
+    void sync.load(); await srv.answer();
+    srv.fetches = 0;
+    sync.event(5, 5);
+    srv.rev = 7;
+    sync.event(7, 7); // 6 never arrived
+    await flush();
+    expect(srv.fetches).toBe(1);
+    await srv.answer();
+    sync.event(8, 8);
+    expect(srv.fetches).toBe(1);
+    expect(applied).toEqual([4, 5, 7, 8]);
+  });
+
+  it("fetches when events arrive out of order, and ends on the newest", async () => {
+    const srv = server(4);
+    const { sync, applied } = mover(srv);
+    void sync.load(); await srv.answer();
+    srv.fetches = 0;
+    srv.rev = 6;
+    sync.event(6, 6); // ahead of 5
+    sync.event(5, 5); // late, but it still follows the view; the running fetch brings 6
+    await srv.answer();
+    expect(applied.at(-1)).toBe(6);
+    sync.event(6, 6); // the duplicate of what the fetch brought changes nothing
+    expect(applied.at(-1)).toBe(6);
+    expect(srv.fetches).toBe(1);
+  });
+
+  it("fetches when a move cannot be applied", async () => {
+    const srv = server(4);
+    const sync = new ViewSync<View, number>({
+      fetchView: () => srv.fetchView(), apply: () => {}, onError: () => {},
+      applyMove: () => { throw new Error("bad move"); },
+    });
+    void sync.load(); await srv.answer();
+    srv.fetches = 0;
+    expect(() => sync.event(5, 5)).not.toThrow();
+    await flush();
+    expect(srv.fetches).toBe(1);
+  });
+
+  it("fetches for an event without a move (a deal, a new hand)", async () => {
+    const srv = server(4);
+    const { sync, applied } = mover(srv);
+    void sync.load(); await srv.answer();
+    srv.fetches = 0;
+    srv.rev = 5;
+    sync.event(5);
+    await srv.answer();
+    expect(srv.fetches).toBe(1);
+    expect(applied).toEqual([4, 5]);
+  });
+});
