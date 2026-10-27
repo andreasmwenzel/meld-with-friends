@@ -49,17 +49,11 @@ async function table({ seat = 0 as SeatIndex, motion = 'normal', reduced = false
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-it('requires confirmation and sends a single claim from the native keyboard-accessible button', async () => {
+it('sends a single claim on one tap from the native keyboard-accessible button', async () => {
   const t = await table({ motion: 'off' });
-  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
   const button = screen.getByRole('button', { name: 'Claim all' });
   expect(button.getAttribute('type')).toBe('button');
   button.focus();
-  await act(() => { fireEvent.click(button, { detail: 0 }); });
-  expect(confirm).toHaveBeenCalledOnce();
-  expect(t.sent).toEqual([]);
-  expect(document.activeElement).toBe(button);
-  confirm.mockReturnValue(true);
   await act(() => { fireEvent.click(button, { detail: 0 }); });
   await vi.waitFor(() => expect(t.sent).toEqual([{ type: 'claim', seat: 0 }]));
   expect(document.querySelector('[data-announcer]')?.textContent).toContain('You claim the rest.');

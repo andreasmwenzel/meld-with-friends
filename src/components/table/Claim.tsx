@@ -5,7 +5,7 @@ import { claimSweep, motionTimings } from "./motion";
 
 export function ClaimButton({ busy, onClaim }: { busy: boolean; onClaim: () => void }) {
   return <button type="button" disabled={busy} className="tap-link ml-3 text-sm font-semibold text-brass underline underline-offset-4"
-    onClick={() => { if (window.confirm("Claim all remaining tricks? Everyone's remaining cards will be revealed and your side takes the rest.")) onClaim(); }}>
+    onClick={() => onClaim()}>
     Claim all
   </button>;
 }

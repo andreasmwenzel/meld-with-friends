@@ -93,7 +93,7 @@ export function BidPicker({ min, step, busy, onBid, pass, shoot, misdeal = null 
 export function MisdealButton({ busy, run }: { busy: boolean; run: () => void }) {
   return (
     <button type="button" className="btn btn-ghost btn-compact" style={{ color: "var(--chalk)", boxShadow: "inset 0 0 0 1.5px var(--chalk-faint)" }} disabled={busy}
-      aria-label="Throw the hand in for nines" onClick={() => { if (window.confirm("Throw this hand in? You hold five or more nines and no other meld, so the same dealer deals again.")) run(); }}>
+      aria-label="Throw the hand in for nines" onClick={() => run()}>
       Throw in
     </button>
   );

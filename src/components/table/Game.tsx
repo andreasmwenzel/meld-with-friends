@@ -1378,8 +1378,9 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld }: {
   const L = view.legal;
   const trumpLabel = useId();
   const misdeal = L.canMisdeal ? () => void act({ type: "misdeal" }) : null;
-  // Right after a throw-in, everyone sees the hand that scrapped the deal while the new one is bid.
-  const thrown = view.phase === "bidding" && view.misdeal ? (
+  // Right after a throw-in, the other seats see the hand that scrapped the deal while the new one is bid.
+  // The player who threw it in already knows it and does not need the reminder.
+  const thrown = view.phase === "bidding" && view.misdeal && view.misdeal.seat !== view.seat ? (
     <p className="px-3 text-center text-xs text-chalk-faint">
       {nameOf(view.misdeal.seat)} threw in {view.misdeal.hand.filter((c) => c[0] === "9").length} nines and no meld:{" "}
       <span className="text-chalk">{sortHand(view.misdeal.hand, null).map(cardLabel).join(" ")}</span>
@@ -1398,7 +1399,7 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld }: {
         </button>
         {L.canShoot && (
           <button className="btn btn-ghost btn-compact" style={{ color: "var(--brass)", boxShadow: "inset 0 0 0 1.5px var(--brass)" }} disabled={busy} aria-label="Shoot the moon"
-            onClick={() => { if (window.confirm("Shoot the moon? Your side must take every trick.")) void act({ type: "shoot" }); }}>
+            onClick={() => { void act({ type: "shoot" }); }}>
             <span className="sm:hidden">Shoot</span><span className="hidden sm:inline">Shoot the moon</span>
           </button>
         )}
@@ -1414,7 +1415,7 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld }: {
         min={L.minBid ?? view.rules.minBid} step={view.rules.bidStep} busy={busy}
         onBid={(amount) => act({ type: "bid", amount })}
         pass={L.canPassBid ? { label: "Pass", run: () => act({ type: "pass_bid" }) } : null}
-        shoot={L.canShoot ? () => { if (window.confirm("Shoot the moon? Your side must take every trick.")) void act({ type: "shoot" }); } : null}
+        shoot={L.canShoot ? () => { void act({ type: "shoot" }); } : null}
         misdeal={misdeal}
       />
     </>);
@@ -1441,7 +1442,7 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld }: {
     return (
       <Bar>
         <button className="btn btn-ghost btn-compact" style={{ color: "var(--brass)", boxShadow: "inset 0 0 0 1.5px var(--brass)" }} disabled={busy || !L.canShoot} aria-label="Shoot the moon"
-          onClick={() => { if (window.confirm("Shoot the moon? Your side must take every trick.")) void act({ type: "shoot" }); }}>
+          onClick={() => { void act({ type: "shoot" }); }}>
           Shoot
         </button>
         <button className="btn btn-brass" disabled={busy} onClick={() => act({ type: "decline_shoot" })}>Play it out</button>
