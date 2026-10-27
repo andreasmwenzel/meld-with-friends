@@ -72,7 +72,8 @@ export function DealerMark() {
 }
 
 /** The numbers beside a name. Tapping them opens the breakdown; Escape or a tap elsewhere closes it. */
-export function ScoreTag({ score, name, align }: { score: SeatScore; name: string; align: "left" | "center" | "right" }) {
+/** `placement` is where the breakdown opens: above for your own seat, which sits at the bottom of the board. */
+export function ScoreTag({ score, name, align, placement = "below" }: { score: SeatScore; name: string; align: "left" | "center" | "right"; placement?: "above" | "below" }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -105,7 +106,7 @@ export function ScoreTag({ score, name, align }: { score: SeatScore; name: strin
         {body}
       </button>
       {open && (
-        <div role="dialog" aria-label={`${name}'s side this hand`} className={`panel absolute top-full z-30 mt-1 min-w-[150px] px-3 py-2 text-xs ${side}`}>
+        <div role="dialog" aria-label={name === "You" ? "Your side this hand" : `${name}'s side this hand`} className={`panel absolute z-30 min-w-[150px] ${placement === "above" ? "bottom-full mb-1" : "top-full mt-1"} px-3 py-2 text-xs ${side}`}>
           <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 tabular-nums">
             {score.rows.map(([k, v], i) => (
               <div key={i} className={`contents ${i === score.rows.length - 1 ? "font-semibold" : ""}`}><dt className="text-left text-ink-soft">{k}</dt><dd className="text-right">{v}</dd></div>
