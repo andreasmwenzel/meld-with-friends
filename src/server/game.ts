@@ -59,7 +59,7 @@ export async function act(code: string, userId: string, action: Action, expected
     p_game: game.id, p_user: userId, p_old_rev: game.rev, p_state: next, p_action: action, p_request_id: requestId,
   });
   if (error?.message === "The table is paused.") throw new ApiError(409, error.message);
-  if (error?.code === "40001") {
+  if (isStaleCommit(error)) {
     if (error.message.startsWith("Game changed")) bump("act_conflict");
     throw new ApiError(409, "Game changed", await getView(code, userId));
   }
@@ -73,6 +73,15 @@ export async function act(code: string, userId: string, action: Action, expected
     return getView(code, userId);
   }
   return { ...viewFor(next, seat), ready: next.phase === "hand_over" ? game.ready ?? [] : [] };
+}
+
+/**
+ * The commit lost a revision or table race. Migration 0017 raises these as PT409 (40001 is retried by
+ * the database API); 40001 is still accepted until that migration is applied everywhere.
+ */
+function isStaleCommit(error: { code?: string; message: string } | null): error is { code?: string; message: string } {
+  return error?.code === "40001" || (error?.code === "PT409"
+    && (error.message.startsWith("Game changed") || error.message.startsWith("Table is not playing")));
 }
 
 /** Service-only worker. The HTTP route verifies the caller is a seated human. */
@@ -118,7 +127,7 @@ async function performBotTick(code: string, meldingOnly: boolean): Promise<{ act
     const next = applyAction(state, action);
     const { data: committedRev, error } = await admin.rpc("commit_bot_action", { p_game: game.id, p_old_rev: state.rev, p_state: next, p_action: action });
     if (error?.message === "The table is paused.") throw new ApiError(409, error.message);
-    if (error?.code === "40001" || (!error && committedRev === null)) {
+    if (isStaleCommit(error) || (!error && committedRev === null)) {
       const current = await admin.from("games").select("rev").eq("id", game.id).single();
       checkDb(current.error);
       return { acted: false, rev: current.data!.rev };

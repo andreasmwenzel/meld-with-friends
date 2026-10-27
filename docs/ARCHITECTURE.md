@@ -26,6 +26,8 @@ The engine is game-agnostic at the storage layer (`games.state` is jsonb keyed b
 - `game_result_players` (game_id, user_id, team, won) indexes each seated human, including guests. RLS permits users to read their own index rows and matching results.
 - `banned_users` (user_id primary key, reason, created_at) is service-role only. Bans survive guest pruning.
 
+Logical conflicts in SQL functions (a stale revision, a table that changed, a paused table) raise `PT409`, which the database API returns as HTTP 409, or return null as `commit_bot_action` does. They are never raised as `40001`: the API treats that serialization failure as transient and retries the statement until its upstream timeout, so a burst of stale requests holds every pooled connection (migration 0017). `src/server/__tests__/conflict-codes.test.ts` checks the live definition of every function.
+
 ## Realtime channels
 
 - `table:{code}` — broadcast events: `seats` (seat map changed), `trade` (offer created/answered), `game` ({ rev }), `chat`.
@@ -54,11 +56,11 @@ Supabase Auth with magic link email and Google. `profiles` row is created by a t
 | `replaysPerHour` | 120 per client address | `GET /api/replay/[id]` before any database read |
 | `idleTableHours` | 48 hours | Daily cron finishes open or playing tables with no recent game activity |
 | `retainFinishedDays` | 30 days | Daily cron deletes finished tables whose last activity predates retention |
-| `retainGuestDays` | 30 days | Daily cron deletes old anonymous auth users who occupy no seats and host no tables |
+| `retainGuestDays` | 30 days | Daily cron deletes anonymous auth users inactive for this long who occupy no seats and host no tables |
 
 `src/server/limits.ts` calls the service-role-only `consume_rate` function. An atomic upsert counts attempts in fixed UTC-aligned hourly windows shared by all function instances. Over-limit requests return 429 with a `Slow down:` message. Failed attempts can consume allowance. Direct authenticated profile edits and friend-request inserts are revoked so callers cannot bypass these API limits. Friend reads, responses, and removal retain their existing policies. Guests receive 403 when adding or filling computer players, enforced in HTTP and SQL.
 
-The existing `0 9 * * *` Vercel schedule calls `/api/cron/keepalive` daily at 09:00 UTC with `CRON_SECRET`. It finishes idle tables, deletes expired finished tables, prunes rate counter windows older than two hours, then prunes unused guests. Table age is the latest of `tables.created_at` and `games.updated_at`, including for finished-table retention. Foreign keys cascade table deletion through games, action logs, seats, and trade offers. Profiles cascade from deleted auth users; historical trade offers also cascade to avoid blocking guest removal. The response reports `tablesFinished`, `tablesDeleted`, `rateLimitsDeleted`, and `guestsDeleted`. Database work also keeps the project active.
+The existing `0 9 * * *` Vercel schedule calls `/api/cron/keepalive` daily at 09:00 UTC with `CRON_SECRET`. It finishes idle tables, deletes expired finished tables, prunes rate counter windows older than two hours, then prunes unused guests. A guest is pruned only when they sit at no seat, host no table, are not banned, and have been inactive for `retainGuestDays`. Activity is the newest of account creation, last sign-in, the last auth user update, and the newest refresh of any of their Supabase Auth sessions or refresh tokens. An open tab refreshes its session about hourly, so a guest who keeps playing is kept even while between tables, and Meld needs no last-seen column of its own. Table age is the latest of `tables.created_at` and `games.updated_at`, including for finished-table retention. Foreign keys cascade table deletion through games, action logs, seats, and trade offers. Profiles cascade from deleted auth users; historical trade offers also cascade to avoid blocking guest removal. The response reports `tablesFinished`, `tablesDeleted`, `rateLimitsDeleted`, and `guestsDeleted`. Database work also keeps the project active.
 
 Usage counts use UTC midnight for today's tables, actions, and bot actions. `game_actions.by_bot` records bot commits in their transaction, rather than inferring ownership after seats change. Total storage counts and anonymous-user counts are available only through the admin stats route.
 
