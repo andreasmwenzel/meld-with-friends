@@ -14,8 +14,8 @@ import { TableList } from "./TableList";
  * The lobby: tables you sit at and tables you are invited to come first, then dealing a new one,
  * then finished games. House rules are set in the deal panel, which remembers the last ones dealt.
  */
-export function Lobby({ profile, guest, tables, invites, autoDeal, defaults }: {
-  profile: (Profile & { default_rules?: unknown }) | null; guest: boolean; tables: TableSummary[]; invites: Invitation[];
+export function Lobby({ userId, profile, guest, tables, invites, autoDeal, defaults }: {
+  userId: string; profile: (Profile & { default_rules?: unknown }) | null; guest: boolean; tables: TableSummary[]; invites: Invitation[];
   autoDeal: boolean; defaults: RulesPatch | null;
 }) {
   const waiting = tables.filter((t) => t.yours).length;
@@ -26,11 +26,11 @@ export function Lobby({ profile, guest, tables, invites, autoDeal, defaults }: {
           Evening, {profile?.display_name?.split(" ")[0] ?? "friend"}.
         </h1>
         {profile && <div className="mt-3"><ProfileEditor me={profile} /></div>}
-        <Invitations invites={invites} userId={guest || !profile ? null : profile.id} />
+        <Invitations invites={invites} userId={guest ? null : userId} />
         <div className="mt-8 flex items-baseline justify-between gap-4">
           <h2 className="display" style={{ fontSize: 34 }}>Your tables</h2>
           {tables.length > 0 && (
-            <p className="text-sm text-chalk-faint">{waiting === 0 ? "Nothing waiting on you" : `${waiting} waiting on you`}</p>
+            <p className="text-sm text-chalk-faint">{waiting === 0 ? "Nothing is waiting on you" : waiting === 1 ? "One is waiting on you" : `${waiting} are waiting on you`}</p>
           )}
         </div>
         {tables.length === 0 ? (

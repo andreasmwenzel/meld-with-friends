@@ -20,5 +20,5 @@ async function Preview({ searchParams }: { searchParams: PageProps<"/dev/home">[
   const sp = await searchParams;
   const count = sp.tables === undefined ? SAMPLE_TABLES.length : Number(sp.tables);
   const tables = sortTables(SAMPLE_TABLES.slice(0, count).flatMap((t) => summarizeTable(t, ME) ?? []));
-  return <Lobby profile={PROFILE} guest={sp.as === "guest"} tables={tables} invites={[]} autoDeal={sp.new === "1"} defaults={null} />;
+  return <Lobby userId={ME} profile={PROFILE} guest={sp.as === "guest"} tables={tables} invites={[]} autoDeal={sp.new === "1"} defaults={null} />;
 }

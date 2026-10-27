@@ -42,5 +42,5 @@ async function LoadLobby({ searchParams }: { searchParams: PageProps<"/home">["s
   ]);
 
   const defaults = (profile?.default_rules as RulesPatch | null) ?? null;
-  return <Lobby profile={profile} guest={!!user.is_anonymous} tables={tables} invites={invites} autoDeal={sp.new === "1"} defaults={defaults} />;
+  return <Lobby userId={user.id} profile={profile} guest={!!user.is_anonymous} tables={tables} invites={invites} autoDeal={sp.new === "1"} defaults={defaults} />;
 }

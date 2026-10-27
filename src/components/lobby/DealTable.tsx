@@ -42,7 +42,7 @@ export function DealTable({ autoOpen = false, defaults = null, saved = false }: 
   // groups editor, so a group made or deleted while this panel is open shows up or goes away here too.
   const shared = useGroups(open && saved).groups;
   const groups = saved && shared ? shared : [];
-  // The panel sits below the player's tables, so one opened from a link (`/home?new=1`) is brought into view.
+  // The panel sits below the player's tables, so one opened by `/home?new=1` is brought into view.
   const panel = useRef<HTMLDivElement>(null);
   useEffect(() => { if (autoOpen) panel.current?.scrollIntoView?.({ block: "start" }); }, [autoOpen]);
   const [picked, setPicked] = useState<string | null>(null);
