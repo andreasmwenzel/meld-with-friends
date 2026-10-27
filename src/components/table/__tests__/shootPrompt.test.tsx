@@ -32,11 +32,11 @@ let server: GameState;
  * the mock applies each action to its game and answers with the new view, and a tick plays the next
  * computer seat. With `frozen`, actions are recorded but the game never moves.
  */
-async function table(state: GameState, { autoMeld = true, frozen = false } = {}) {
+async function table(state: GameState, { autoMeld = true, frozen = false, motion = "off", reduced = false } = {}) {
   sent = [];
   server = state;
-  localStorage.setItem("meld.cards", JSON.stringify({ motion: "off", autoMeld }));
-  window.matchMedia = ((query: string) => ({ matches: query.includes("coarse") || query.includes("max-width"), media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} })) as unknown as typeof window.matchMedia;
+  localStorage.setItem("meld.cards", JSON.stringify({ motion, autoMeld }));
+  window.matchMedia = ((query: string) => ({ matches: query.includes("coarse") || query.includes("max-width") || (reduced && query.includes("reduce")), media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} })) as unknown as typeof window.matchMedia;
   window.confirm = vi.fn(() => false);
   const snap = {
     table: { id: "t", code: CODE, host: "u0", status: "playing", rules: { ...state.rules } },
@@ -151,14 +151,50 @@ describe("the shoot decision after the pass", () => {
     expect(text).not.toContain("take every trick to win the game");
   });
 
-  it("shows your own sitting-out hand face down without playable cards", async () => {
+  it("sets your own hand aside when you sit out, with no cards to play", async () => {
     const { state } = buildScenario({ dealer: 1, bidder: 2, trump: 'S', shoot: true, rules: { shoot: 'on', passCount: 0 }, to: 'playing' });
-    await table(state, { frozen: true });
+    await table(state, { frozen: true, motion: "normal" });
     expect(screen.getByText("sitting out")).toBeTruthy();
-    expect(screen.getByRole("img", { name: "12 cards face down, sitting out" })).toBeTruthy();
+    const stack = screen.getByRole("img", { name: "Your cards are set aside; you sit this hand out" });
+    expect(screen.getByRole("group", { name: "Your hand" }).contains(stack)).toBe(true);
+    // Joining mid-shoot shows the stack as it is; the fold does not replay.
+    expect(stack.classList.contains("sit-out-fold")).toBe(false);
     expect(document.querySelectorAll("[data-hand-card]")).toHaveLength(0);
-    expect(document.querySelector("[data-play-status]")?.textContent).toContain("You are sitting out; your cards stay face down.");
+    expect(document.querySelector("[data-play-status]")?.textContent).toContain("Your partner is shooting the moon. You sit this hand out.");
   });
+
+  it("shows no hand for the sitting-out partner during play, only the set-aside stack", async () => {
+    const { state } = buildScenario(PRESETS.find((p) => p.id === "bid-after-shoot")!.spec);
+    expect(state.sittingOut).toBe(2);
+    await table(state, { frozen: true, motion: "normal" });
+    const seat = document.querySelector('[data-claim-seat="2"]')!;
+    expect(seat.querySelector('[aria-label="12 cards"]')).toBeNull();
+    expect(seat.querySelector('[aria-label="Robo sits this hand out; cards set aside"]')).toBeTruthy();
+    expect(seat.querySelector(".sit-out-fold")).toBeNull();
+    // The other seats keep their fans.
+    expect(document.querySelector('[data-claim-seat="1"] [aria-label="12 cards"]')).toBeTruthy();
+    expect(document.querySelector('[data-claim-seat="3"] [aria-label="12 cards"]')).toBeTruthy();
+  });
+
+  it("folds the partner's cards away when the shoot is declared, then leaves the stack", async () => {
+    const { state } = buildScenario(spec);
+    await table(state, { motion: "normal" });
+    expect(document.querySelector('[data-claim-seat="2"] [aria-label="12 cards"]')).toBeTruthy();
+    await act(() => { fireEvent.click(screen.getByRole("button", { name: "Shoot the moon" })); });
+    await vi.waitFor(() => expect(document.querySelector('[data-claim-seat="2"] .sit-out-fold')).toBeTruthy());
+    expect(document.querySelector('[data-claim-seat="2"] [aria-label="12 cards"]')).toBeNull();
+    await vi.waitFor(() => expect(document.querySelector(".sit-out-fold")).toBeNull(), { timeout: 2000 });
+    expect(screen.getByRole("img", { name: "Robo sits this hand out; cards set aside" })).toBeTruthy();
+  });
+
+  it.each([["reduced motion", { motion: "normal", reduced: true }], ["motion off", { motion: "off", reduced: false }]])(
+    "with %s, goes straight to the set-aside stack", async (_, opts) => {
+      const { state } = buildScenario(spec);
+      await table(state, opts);
+      await act(() => { fireEvent.click(screen.getByRole("button", { name: "Shoot the moon" })); });
+      await vi.waitFor(() => expect(screen.getByRole("img", { name: "Robo sits this hand out; cards set aside" })).toBeTruthy());
+      expect(document.querySelector(".sit-out-fold")).toBeNull();
+    });
 
   it("tells the other seats who they are waiting on", async () => {
     const { state } = buildScenario({ ...spec, bidder: 1, hands: undefined });
