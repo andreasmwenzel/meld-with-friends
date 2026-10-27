@@ -30,6 +30,7 @@ import { cardLabel } from "@/engine/deck";
 import { motionTimings, flyFrom, sweepTo } from "./motion";
 import { ClaimButton, useClaimReveal } from "./Claim";
 import { ChatDock, type TableChat } from "./ChatDock";
+import { FOLD_MS, SitOutStack } from "./SitOutStack";
 import { newLogLines, speakLine } from "./announce";
 import { DOUBLE_TAP_MS, isRealPress, isTimedActivation, releasePress, secondPress, type Armed, type Press } from "./tapTwice";
 
@@ -494,6 +495,21 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   // eslint-disable-next-line react-hooks/set-state-in-effect -- resets per-game display choices
   useEffect(() => { if (gameOver) setMeldHidden(null); }, [gameOver]);
   // A choice made in one phase never carries into the next (an outside move, such as the practice coach, can change it).
+  // A shoot sets the partner's hand aside. Seen happening (no one sitting out, then someone, in the same hand), the cards
+  // fold away; a view that arrives with the shoot already declared (a reload, joining mid-hand) shows the stack as it is.
+  const outKey = view ? `${view.handNumber}:${view.sittingOut ?? ""}` : "";
+  const [seenOut, setSeenOut] = useState(outKey);
+  const [folding, setFolding] = useState<string | null>(null);
+  if (seenOut !== outKey) {
+    setSeenOut(outKey);
+    const [hand, out] = outKey.split(":");
+    if (out && seenOut === `${hand}:`) setFolding(outKey);
+  }
+  useEffect(() => {
+    if (!folding) return;
+    const timer = setTimeout(() => setFolding(null), FOLD_MS + 100);
+    return () => clearTimeout(timer);
+  }, [folding]);
   const phaseKey = view ? `${view.handNumber}:${view.phase}` : "";
   // eslint-disable-next-line react-hooks/set-state-in-effect -- drops a stale choice when the phase moves on
   useEffect(() => { setSelected([]); }, [phaseKey]);
@@ -721,9 +737,10 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     if (view.phase === "melding" && !view.meldConfirmed[seat] && !view.melds[seat]?.length) score.small = null;
     return hidePoints && teamOf(seat) !== myTeam && view.phase !== "bidding" ? { ...score, total: null, small: null, rows: [] } : score;
   };
+  const fold = folding === outKey && motion !== "off";
   const seatProps = (r: 1 | 2 | 3) => {
     const seat = seatAt(r);
-    return { seat, view, name: nameOf(seat), bot: isBot(seat), score: scoreOf(seat), faceUp: revealedFor(seat), laid: laidOf(seat).length, standIn: standInFor(seat), makeHost: makeHostFor(seat), compact: short };
+    return { seat, view, name: nameOf(seat), bot: isBot(seat), score: scoreOf(seat), faceUp: revealedFor(seat), laid: laidOf(seat).length, standIn: standInFor(seat), makeHost: makeHostFor(seat), compact: short, fold };
   };
   const them: Team = myTeam === "red" ? "blue" : "red";
   const peekingResult = over && !recapOpen && peekKey === `${view.handNumber}-${view.phase}`;
@@ -852,9 +869,11 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
         )}
         <div ref={handRef} tabIndex={-1} {...keepFocus} role="group" aria-label="Your hand" onKeyDown={moveInHand} className={`board-hand relative mt-1 flex shrink-0 outline-none sm:mt-2 ${scrollHand ? "hand-scroll overflow-x-auto" : "justify-center"}`} style={{ minHeight: (cardW * 7) / 5 + (short ? 8 : 20), paddingTop: scrollHand ? 16 : undefined }}>
           <div className={`flex items-end ${scrollHand ? "mx-auto w-max" : ""}`} style={{ paddingLeft: overlap }}>
-            {view.sittingOut === view.seat && view.phase === "playing" && <span role="img" aria-label={`${view.handCounts[view.seat]} cards face down, sitting out`} className="flex">
-              {Array.from({ length: view.handCounts[view.seat] }, (_, i) => <CardBack key={i} width={cardW} team={teamOf(view.seat)} style={{ marginLeft: -overlap }} />)}
-            </span>}
+            {/* Your partner is shooting: your cards are set aside in a small stack, in the room the fan had. */}
+            {view.sittingOut === view.seat && view.phase === "playing" && (
+              <SitOutStack n={view.handCounts[view.seat]} team={teamOf(view.seat)} cardW={cardW} step={step} orient="row" fold={fold} token={28}
+                label="Your cards are set aside; you sit this hand out" style={{ marginLeft: -overlap }} />
+            )}
             {hand.map((c) => {
               const playable = view.phase === "playing" ? view.legal.playableCards.includes(c) || c === unshown : picking;
               const isArmed = armedCard === c;
@@ -1003,11 +1022,13 @@ const REV_W = 36;
 const MELD_W = 28;
 
 /** A player round the table: the name chip with its score tag, then their cards (backs while playing, face up at the end). */
-function OpponentRow({ seat, view, name, align, score, laid, bot = false, standIn, makeHost, faceUp, compact = false, className = "" }: {
+function OpponentRow({ seat, view, name, align, score, laid, bot = false, standIn, makeHost, faceUp, compact = false, fold = false, className = "" }: {
   faceUp?: CardId[]; seat: SeatIndex; view: PlayerView; name: string; align: "left" | "center" | "right"; score: SeatScore;
   /** how many of their cards lie on the table as meld */
   laid: number;
   bot?: boolean; standIn?: { away: boolean; run: () => void }; makeHost?: () => void; compact?: boolean; className?: string;
+  /** the shoot was just declared: this seat's cards fold away as you watch */
+  fold?: boolean;
 }) {
   // The engine keeps meld in the hand; while it lies on the table it is not among the backs.
   const n = faceUp?.length ?? view.handCounts[seat] - laid;
@@ -1027,7 +1048,7 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
     </>
   );
   if (compact) {
-    return <CompactSeat {...{ seat, className, team, active, name, chip, score, n, faceUp, standIn, align }} />;
+    return <CompactSeat {...{ seat, className, team, active, name, chip, score, n, faceUp, standIn, align }} setAside={sittingOut && !faceUp} />;
   }
   return (
     <div data-claim-seat={seat} className={`group flex flex-col ${items} gap-1 py-1 sm:gap-1.5 sm:py-2 min-w-0 ${className}`}>
@@ -1041,7 +1062,11 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
           <ScoreTag score={score} name={name} align={align} />
         </div>
       </div>
-      <div className={`flex ${vertical ? "flex-col" : "flex-row"}`} style={vertical ? { padding: "0 7px" } : undefined} role={faceUp ? "group" : "img"} aria-label={`${n} cards`}>
+      {/* A shoot sets this hand aside: a small stack where the fan was, until the hand is shown at the end. */}
+      {sittingOut && !faceUp ? (
+        <SitOutStack n={n} team={team} cardW={34} step={vertical ? (34 * 7) / 5 - 40 : 10} pad={7} orient={vertical ? align as "left" | "right" : "row"}
+          fold={fold} label={`${name} sits this hand out; cards set aside`} />
+      ) : <div className={`flex ${vertical ? "flex-col" : "flex-row"}`} style={vertical ? { padding: "0 7px" } : undefined} role={faceUp ? "group" : "img"} aria-label={`${n} cards`}>
         {faceUp ? faceUp.map((c, i) => vertical ? (
           <div key={c} data-claim-card={view.claim ? c : undefined} className="relative shrink-0" style={{ width: (REV_W * 7) / 5, height: i === faceUp.length - 1 ? REV_W : 17, zIndex: align === "right" ? faceUp.length - i : i }}>
             <PlayingCard card={c} width={REV_W} style={{ position: "absolute", left: "50%", top: REV_W / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg)` }} />
@@ -1051,7 +1076,7 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
           <CardBack key={i} width={34} team={team}
             style={vertical ? { marginTop: i ? -40 : 0, transform: align === "left" ? "rotate(90deg)" : "rotate(-90deg)" } : { marginLeft: i ? -24 : 0 }} />
         ))}
-      </div>
+      </div>}
       {standIn && (
         <button type="button" onClick={standIn.run}
           className={`max-w-[200px] text-xs text-chalk-faint underline hover:text-chalk ${align === "center" ? "text-center" : align === "left" ? "text-left" : "text-right"} ${standIn.away ? "" : "hidden sm:block sm:opacity-0 group-hover:opacity-100 focus-visible:opacity-100"}`}>
@@ -1072,8 +1097,8 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
  * An opponent on a phone held sideways: name, turn ring and a card count in place of the fanned backs.
  * Hands shown at the end stay face up in a tight overlapping fan.
  */
-function CompactSeat({ seat, className, team, active, name, chip, score, n, faceUp, standIn, align }: {
-  seat: SeatIndex;
+function CompactSeat({ seat, className, team, active, name, chip, score, n, faceUp, standIn, align, setAside }: {
+  seat: SeatIndex; setAside: boolean;
   className: string; team: Team; active: boolean; name: string; chip: React.ReactNode; score: SeatScore; n: number;
   faceUp?: CardId[]; standIn?: { away: boolean; run: () => void }; align: "left" | "center" | "right";
 }) {
@@ -1085,9 +1110,14 @@ function CompactSeat({ seat, className, team, active, name, chip, score, n, face
           style={active ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
           {chip}
           {!faceUp && (
-            <span className="flex items-center gap-1 text-xs tabular-nums text-chalk-faint" role="img" aria-label={`${n} cards`}>
-              <CardBack width={12} team={team} />{n}
-            </span>
+            setAside
+              // The count keeps its room, so the chip holds its size; the small back alone marks the hand set aside.
+              ? <span className="flex items-center gap-1 text-xs tabular-nums text-chalk-faint" role="img" aria-label={`${name} sits this hand out; cards set aside`}>
+                <CardBack width={12} team={team} style={{ opacity: 0.6, transform: "rotate(-4deg)" }} /><span aria-hidden className="invisible">{n}</span>
+              </span>
+              : <span className="flex items-center gap-1 text-xs tabular-nums text-chalk-faint" role="img" aria-label={`${n} cards`}>
+                <CardBack width={12} team={team} />{n}
+              </span>
           )}
         </div>
         <div className={across ? "absolute left-full top-1/2 ml-1 -translate-y-1/2 whitespace-nowrap" : "flex h-7 items-center"}>
@@ -1215,7 +1245,7 @@ function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact, busy, 
   const done = !peek.last && !!trick && trick.winner !== null;
   const took = done && view.sittingOut == null ? countersIn(trick, view.rules) : 0;
   const shootStatus = view.sittingOut == null ? null : view.seat === view.sittingOut
-    ? "You are sitting out; your cards stay face down."
+    ? "Your partner is shooting the moon. You sit this hand out."
     : view.seat === view.bidder ? "Shooting alone; take every trick."
     : `${nameOf(view.bidder!)} is shooting alone; win one trick to win the game.`;
   const detail = peek.last ? null
