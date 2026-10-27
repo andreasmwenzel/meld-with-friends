@@ -227,3 +227,22 @@ body {
 /* Table talk's popover grows out of its button in the corner. */
 @keyframes chat-pop { from { opacity: 0; transform: translateY(6px) scale(.97); } to { opacity: 1; transform: none; } }
 .chat-pop:not([hidden]) { animation: chat-pop 140ms cubic-bezier(.2,.8,.25,1) both; transform-origin: 100% 100%; }
+
+/* A shoot sets the partner's hand aside: the fan gathers into a squared stack, which then settles small and quiet.
+   The end state is the element's own style, so a reload, motion off or reduced motion show it with no animation. */
+@keyframes sit-out-gather {
+  from { transform: translate(var(--gx), var(--gy)) rotate(var(--gr)); }
+  to { transform: translate(var(--sx), var(--sy)) rotate(var(--gr)); }
+}
+@keyframes sit-out-settle {
+  from { transform: none; opacity: 1; }
+  to { transform: scale(var(--fold-s)) rotate(-4deg); opacity: .6; }
+}
+.sit-out-fold .sit-out-card { animation: sit-out-gather 360ms cubic-bezier(.3,.7,.2,1) both; }
+.sit-out-fold .sit-out-stack { animation: sit-out-settle 260ms cubic-bezier(.4,0,.2,1) 340ms both; }
+[data-motion="quick"] .sit-out-fold .sit-out-card { animation-duration: 200ms; }
+[data-motion="quick"] .sit-out-fold .sit-out-stack { animation-duration: 150ms; animation-delay: 190ms; }
+[data-motion="off"] .sit-out-fold .sit-out-card, [data-motion="off"] .sit-out-fold .sit-out-stack { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .sit-out-fold .sit-out-card, .sit-out-fold .sit-out-stack { animation: none; }
+}
