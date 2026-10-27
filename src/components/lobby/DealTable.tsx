@@ -27,6 +27,7 @@ function InviteGroup({ groups, value, onChange }: { groups: Group[]; value: stri
           );
         })}
       </div>
+      {value && <p className="mt-2 text-sm text-ink-soft">You take the South chair; they find the invitation in their lobby.</p>}
     </fieldset>
   );
 }
@@ -42,8 +43,9 @@ export function DealTable({ autoOpen = false, defaults = null, saved = false }: 
   const shared = useGroups(open && saved).groups;
   const groups = saved && shared ? shared : [];
   const [picked, setPicked] = useState<string | null>(null);
-  // A pick whose group was deleted or emptied since is dropped, never sent.
+  // A pick whose group was deleted or emptied since (say, its last member unfriended) is cleared, never sent.
   const groupId = groups.some((g) => g.id === picked && g.members.length > 0) ? picked : null;
+  if (picked !== null && shared && groupId === null) setPicked(null);
 
   async function deal() {
     setBusy(true); setError(null);

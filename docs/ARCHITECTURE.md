@@ -148,7 +148,10 @@ trigger reads the friendship row `for share`; ending a friendship (delete, or a 
 `accepted`) updates or deletes that row, so the two serialize. If the insert locks first, the unfriend
 waits and its trigger then deletes the new membership; if the unfriend locks first, the insert re-reads
 the changed row and is refused. The same trigger withdraws any invitation either person left the other.
-`scripts/test-groups-db.sh` races both orders in a throwaway local PostgreSQL container.
+Invitations hold the same invariant: `invite_group` share-locks the host's accepted friendships with the
+group's members, in friendship id order, before inserting. An unfriend after that waits for the deal to
+commit and then withdraws the invitation; one before it leaves no friendship for the insert to see.
+`scripts/test-groups-db.sh` races both orders of each pair in a throwaway local PostgreSQL container.
 
 `GET /api/groups` returns `[{ id, name, members: [{ userId, handle, displayName, avatarSeed }] }]`,
 read under the owner's RLS. `POST /api/groups` takes `{ name, members? }` and returns 201; the
@@ -167,8 +170,9 @@ each invitee's `invites:{userId}` channel. Without a group, the host picks a cha
 The lobby lists invitations from `my_invites`: open tables only, ones the player is not seated at,
 newest ten, with the host's name and how many chairs are taken. `GET /api/invites` returns the same
 list. The lobby refetches it when nudged on `invites:{userId}`, when a shown table's channel reports
-`seats` or `game`, on (re)subscribing, and when the tab regains focus, at most every 15 seconds; there
-is no polling. Sitting down hides an invitation; `DELETE /api/invites/[code]` dismisses it. Group names
+`seats` or `game`, whenever any of its channels joins or rejoins (so an event sent before the join is
+not lost), and when the tab regains focus, at most every 15 seconds; there is no polling. Table channels
+are kept by code, so a card arriving or leaving joins or leaves only its own channel. Sitting down hides an invitation; `DELETE /api/invites/[code]` dismisses it. Group names
 never reach invitees.
 
 Hand recap is built by `viewFor` from the current hand's public bids, declared melds,

@@ -3,6 +3,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar } from "@/components/site/Avatar";
 
@@ -58,16 +59,35 @@ function useLiveInvites(userId: string | null, initial: Invitation[]) {
     };
   }, [userId]);
 
+  // One channel per shown table, kept by code: a card arriving or leaving joins or leaves only its own
+  // channel, so the others never rejoin. Each join and rejoin refetches once (debounced together), which
+  // covers a seat taken or a game started between the last fetch and the join.
+  const tables = useRef<{ db: ReturnType<typeof createClient>; byCode: Map<string, RealtimeChannel> } | null>(null);
+  useEffect(() => {
+    if (!userId) return;
+    const live = { db: createClient(), byCode: new Map<string, RealtimeChannel>() };
+    tables.current = live;
+    return () => {
+      for (const channel of live.byCode.values()) void live.db.removeChannel(channel);
+      live.byCode.clear();
+      if (tables.current === live) tables.current = null;
+    };
+  }, [userId]);
   const codes = invites.map((i) => i.code).join(",");
   useEffect(() => {
-    if (!userId || !codes) return;
-    const db = createClient();
-    const channels = codes.split(",").map((code) => {
-      const channel = db.channel(`table:${code}`, { config: { private: false } });
+    const live = tables.current;
+    if (!live) return;
+    const wanted = new Set(codes ? codes.split(",") : []);
+    for (const [code, channel] of live.byCode) {
+      if (!wanted.has(code)) { live.byCode.delete(code); void live.db.removeChannel(channel); }
+    }
+    for (const code of wanted) {
+      if (live.byCode.has(code)) continue;
+      const channel = live.db.channel(`table:${code}`, { config: { private: false } });
       for (const event of ["seats", "game"] as const) channel.on("broadcast", { event }, () => refetch());
-      return channel.subscribe();
-    });
-    return () => { for (const channel of channels) void db.removeChannel(channel); };
+      channel.subscribe((status) => { if (status === "SUBSCRIBED") refetch(); });
+      live.byCode.set(code, channel);
+    }
   }, [userId, codes]);
 
   return [invites, setInvites] as const;

@@ -207,6 +207,8 @@ describe("migration 0018", () => {
     const drop = sql.slice(sql.indexOf("create function public.drop_unfriended_members()"), sql.indexOf("create trigger friendship_ends_group_membership"));
     expect(drop).toContain("delete from public.friend_group_members");
     expect(drop).toContain("delete from public.table_invites");
+    const invite = sql.slice(sql.indexOf("create function public.invite_group("), sql.indexOf("create function public.deal_for_group("));
+    expect(invite).toMatch(/order by f\.id for share of f;[\s\S]*insert into public\.table_invites/);
   });
   it("creates a group with its members, and deals with the host seated before anyone is invited, in one function each", () => {
     const create = sql.slice(sql.indexOf("create function public.create_friend_group("), sql.indexOf("create function public.invite_group("));

@@ -107,6 +107,10 @@ begin
 end $$;
 
 -- Invites the members of the host's group who are still friends and not already seated. Returns who was invited.
+-- Same invariant as membership: an invitation exists only between accepted friends. The friendship rows
+-- are share-locked first, in id order so two deals never lock in opposite orders. An unfriend that comes
+-- later waits for this deal to commit and its trigger then withdraws the invitation; one that came first
+-- has changed the row, so the insert below, a later statement, no longer sees the friendship.
 create function public.invite_group(p_table uuid,p_group uuid,p_user uuid) returns uuid[]
 language plpgsql security definer set search_path='' as $$
 declare invited uuid[];
@@ -117,6 +121,9 @@ begin
  if not exists(select 1 from public.friend_groups where id=p_group and owner=p_user) then
   raise exception 'Group not found' using errcode='P0002';
  end if;
+ perform 1 from public.friendships f join public.friend_group_members m on m.group_id=p_group
+  and ((f.requester=p_user and f.addressee=m.user_id) or (f.addressee=p_user and f.requester=m.user_id))
+  where f.status='accepted' order by f.id for share of f;
  with sent as (
   insert into public.table_invites(table_id,user_id,invited_by)
   select p_table,m.user_id,p_user from public.friend_group_members m
