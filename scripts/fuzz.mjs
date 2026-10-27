@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 const dir = mkdtempSync(join(process.cwd(), '.meld-fuzz-'));
 try {
-  execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', 'src/engine/fuzz.ts', '--outDir', dir, '--module', 'commonjs', '--target', 'es2023', '--skipLibCheck', '--esModuleInterop'], { stdio: 'inherit' });
+  execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', 'src/engine/fuzz.ts', '--ignoreConfig', '--outDir', dir, '--module', 'commonjs', '--target', 'es2023', '--skipLibCheck', '--esModuleInterop'], { stdio: 'inherit' });
   const { fuzz } = createRequire(import.meta.url)(join(dir, 'engine/fuzz.js'));
   const games = Number(process.argv[2] ?? 200), prefix = process.argv[3] ?? 'fuzz';
   const t0 = Date.now();
