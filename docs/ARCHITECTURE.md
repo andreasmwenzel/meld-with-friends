@@ -152,8 +152,8 @@ signed-in player so the board faces them, and timestamps. No user ids are includ
 `/replay/[gameId]` renders it: `walk()` in `src/components/replay/model.ts` expands the steps into
 positions, merges a player's lay-down and confirm into one move, and groups moves into hands with
 their `HandRecord`. The address carries `?m=<frame>` so a copied link opens at that move. The live
-table links to the replay of its current game once a hand is complete; the lobby's past games link to
-theirs. `/dev/replay` (local only) shows the viewer on a game the bots play on the spot.
+table links to the replay of its current game once a hand is complete; each game on the past games page at
+`/history` links to its own. `/dev/replay` (local only) shows the viewer on a game the bots play on the spot.
 
 ## Operational telemetry
 

@@ -129,8 +129,14 @@ The signed-out front door at `/`, without signing out.
 ## Lobby: `/dev/home`
 
 The signed-in lobby at `/` with sample tables. `?tables=N` limits them (`?tables=0` is the
-empty lobby), `?as=guest` shows a guest's lobby and `?new=1` the open deal panel. Friends and past games
-fetch from the API, so without a session they show their loading or error notes.
+empty lobby), `?as=guest` shows a guest's lobby and `?new=1` the open deal panel. Friends fetch from the
+API, so without a session they show their loading or error notes.
+
+## Past games: `/dev/history`
+
+The past games page at `/history` with sample finished games: won and lost, long names, one hand and
+many, one from an earlier year. `?rows=N` limits them (`?rows=0` is the empty list). The real page
+fetches `/api/history`; this one passes the sample rows straight to the list.
 
 ## Groups: `/dev/groups`
 
