@@ -15,7 +15,7 @@ export function KeepAccount() {
     const supabase = createClient();
     const { error } = await supabase.auth.updateUser(
       { email },
-      { emailRedirectTo: `${window.location.origin}/auth/callback?next=/home` },
+      { emailRedirectTo: `${window.location.origin}/auth/callback?next=/` },
     );
     if (error) { setState("error"); setMessage(error.message); } else setState("sent");
   }
@@ -24,7 +24,7 @@ export function KeepAccount() {
     const supabase = createClient();
     const { error } = await supabase.auth.linkIdentity({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback?next=/home` },
+      options: { redirectTo: `${window.location.origin}/auth/callback?next=/` },
     });
     if (error) { setState("error"); setMessage(error.message); }
   }

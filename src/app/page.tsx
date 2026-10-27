@@ -1,40 +1,42 @@
 import { Suspense } from "react";
-import { FrontDoor, Returning, Welcome } from "@/components/site/FrontDoor";
+import { FrontDoor, Welcome } from "@/components/site/FrontDoor";
+import { Lobby, LobbyFrame } from "@/components/lobby/Lobby";
+import { LiveRefresh } from "@/components/lobby/LiveRefresh";
 import { getSessionUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { listMyTables } from "@/server/myTables";
+import { listInvites } from "@/server/groups";
 import type { TableSummary } from "@/lib/tableStatus";
 import type { RulesPatch } from "@/components/rules/rules";
 
 /**
- * The front door, one screen tall on a phone. New players get a name field and a code box;
- * anyone with a session sees their tables first, with whose move it is, then deal and join.
+ * New players get the front door, one screen tall on a phone, with a name field and a code box.
+ * Anyone with a session, guests included, gets the lobby: their tables first, then dealing a new one.
  */
-export default function Landing() {
+export default function Landing({ searchParams }: PageProps<"/">) {
   return (
-    <FrontDoor>
-      <Suspense fallback={<div className="flex-1" />}>
-        <Front />
-      </Suspense>
-    </FrontDoor>
+    <Suspense fallback={<main className="flex-1" />}>
+      <Front searchParams={searchParams} />
+    </Suspense>
   );
 }
 
-async function Front() {
+async function Front({ searchParams }: { searchParams: PageProps<"/">["searchParams"] }) {
   const user = await getSessionUser();
-  if (!user) return <Welcome />;
+  if (!user) return <FrontDoor><Welcome /></FrontDoor>;
+  const sp = await searchParams;
   const supabase = await createClient();
-  const [{ data: profile }, tables] = await Promise.all([
-    supabase.from("profiles").select("display_name, default_rules").eq("id", user.id).maybeSingle(),
+  const [{ data: profile }, tables, invites] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", user.id).single(),
     listMyTables(user.id).catch((error: unknown) => { console.error("listMyTables", error); return [] as TableSummary[]; }),
+    // Only friends are invited, and guests have none. Invitations never keep the lobby from loading.
+    user.is_anonymous ? [] : listInvites(user.id).catch((error: unknown) => { console.error("my_invites", error); return []; }),
   ]);
   return (
-    <Returning
-      name={profile?.display_name?.split(" ")[0] ?? null}
-      fullName={profile?.display_name ?? null}
-      guest={!!user.is_anonymous}
-      tables={tables}
-      defaults={(profile?.default_rules as RulesPatch | null) ?? null}
-    />
+    <LobbyFrame>
+      <Lobby userId={user.id} profile={profile} guest={!!user.is_anonymous} tables={tables} invites={invites}
+        autoDeal={sp.new === "1"} defaults={(profile?.default_rules as RulesPatch | null) ?? null} />
+      <LiveRefresh />
+    </LobbyFrame>
   );
 }

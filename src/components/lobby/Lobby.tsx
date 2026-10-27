@@ -1,14 +1,35 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import type { Profile } from "@/lib/api";
 import type { RulesPatch } from "@/components/rules/rules";
 import type { TableSummary } from "@/lib/tableStatus";
+import { GitHubLink } from "@/components/site/GitHubLink";
 import { KeepAccount } from "@/components/site/KeepAccount";
+import { SignOut } from "@/components/site/SignOut";
+import { Wordmark } from "@/components/site/Wordmark";
 import { DealTable } from "./DealTable";
 import { Friends } from "./Friends";
 import { History } from "./History";
 import { Invitations, type Invitation } from "./Invitations";
 import { ProfileEditor } from "./ProfileEditor";
 import { TableList } from "./TableList";
+
+/** The lobby's page: the wordmark with join, sign out and source links across the top. */
+export function LobbyFrame({ children }: { children: ReactNode }) {
+  return (
+    <main className="flex-1">
+      <header className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-6 py-5 sm:py-6">
+        <Wordmark size={30} />
+        <nav className="flex items-center gap-2">
+          <Link href="/join" className="btn btn-ghost btn-compact">Join with a code</Link>
+          <SignOut />
+          <GitHubLink />
+        </nav>
+      </header>
+      {children}
+    </main>
+  );
+}
 
 /**
  * The lobby: tables you sit at and tables you are invited to come first, then dealing a new one,

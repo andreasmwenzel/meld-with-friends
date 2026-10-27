@@ -33,7 +33,7 @@ export function ReplayLoader({ id }: { id: string }) {
       <section className="mx-auto max-w-md px-6 py-16">
         <h1 className="display" style={{ fontSize: 40 }}>Nothing to replay here.</h1>
         <p className="mt-3 text-chalk-faint">{error}</p>
-        <Link href="/home" className="btn btn-chalk mt-6">Back to your tables</Link>
+        <Link href="/" className="btn btn-chalk mt-6">Back to your tables</Link>
       </section>
     );
   }
@@ -143,7 +143,7 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
       <section className="mx-auto max-w-md px-6 py-16">
         <h1 className="display" style={{ fontSize: 40 }}>This game will not replay.</h1>
         <p className="mt-3 text-chalk-faint">The rules have changed since it was played, so its moves no longer line up. {game.error}</p>
-        <Link href="/home" className="btn btn-chalk mt-6">Back to your tables</Link>
+        <Link href="/" className="btn btn-chalk mt-6">Back to your tables</Link>
       </section>
     );
   }
@@ -206,7 +206,7 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-3 text-sm">
           <button type="button" onClick={share} className="btn btn-ghost btn-compact">{copied ? "Link copied" : "Share this replay"}</button>
-          <Link href="/home" className="tap-link text-chalk-faint underline underline-offset-4 hover:text-chalk">Your tables</Link>
+          <Link href="/" className="tap-link text-chalk-faint underline underline-offset-4 hover:text-chalk">Your tables</Link>
         </div>
         {!payload.finished && <p className="px-4 pt-1 text-xs text-chalk-faint">Others can open the link once the game is over.</p>}
         <p className="px-4 pt-3 text-xs text-chalk-faint">Arrow keys step, Shift and an arrow jumps a hand. Tap a player to see the table from their seat. Tap a score for its breakdown.</p>

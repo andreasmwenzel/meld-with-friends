@@ -423,7 +423,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     setError(null);
     try {
       await mutate(() => api(`/api/tables/${code}/seat`, { method: "DELETE" }));
-      router.push("/home");
+      router.push("/");
     } catch (e) { setError((e as Error).message); }
   }
 
@@ -607,7 +607,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     return (
       <div className="flex-1 px-6 py-6 text-chalk-faint">
         <p>{error ?? "Dealing."}</p>
-        {!local && <Link href="/home" className="tap-link mt-2 inline-flex underline underline-offset-4 hover:text-chalk">Back to your tables</Link>}
+        {!local && <Link href="/" className="tap-link mt-2 inline-flex underline underline-offset-4 hover:text-chalk">Back to your tables</Link>}
       </div>
     );
   }
@@ -940,7 +940,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
                 {replayHref && <Link href={replayHref} className={linkCls}>Review the game</Link>}
                 {view.phase !== "game_over" && snap.mySeat !== null && !paused && <button type="button" onClick={() => { setMenu(false); void pauseTable(); }} className={linkCls}>Pause the table</button>}
                 {view.phase === "playing" && snap.mySeat !== null && <button type="button" onClick={leave} className={linkCls}>Leave the game</button>}
-                {!local && <Link href="/home" className={linkCls}>Your tables</Link>}
+                {!local && <Link href="/" className={linkCls}>Your tables</Link>}
               </div>
               <div className="panel flex flex-col gap-2.5 p-3 text-left">
                 <p className="text-sm font-semibold text-ink">Cards</p>
