@@ -43,18 +43,10 @@ export async function getGroups(userId: string): Promise<Group[]> {
 export async function createGroup(name: string, members: string[], user: { id: string; is_anonymous?: boolean }) {
   const clean = groupNameSchema.parse(name), ids = groupMembersSchema.parse(members);
   await writable(user);
-  const db = createAdminClient();
-  const { data, error } = await db.from("friend_groups").insert({ owner: user.id, name: clean }).select("id").single();
+  // One transaction: a refused member or a taken name leaves no group behind.
+  const { data, error } = await createAdminClient().rpc("create_friend_group", { p_user: user.id, p_name: clean, p_members: ids });
   named(error);
-  if (ids.length) {
-    const set = await db.rpc("set_friend_group_members", { p_group: data!.id, p_user: user.id, p_members: ids });
-    if (set.error) {
-      // Keep create all-or-nothing: a group whose members were refused is removed again.
-      await db.from("friend_groups").delete().eq("id", data!.id).eq("owner", user.id);
-      checkDb(set.error);
-    }
-  }
-  return findGroup(data!.id, user.id);
+  return findGroup(data as string, user.id);
 }
 
 export async function renameGroup(id: string, name: string, user: { id: string; is_anonymous?: boolean }) {
@@ -87,20 +79,6 @@ async function findGroup(id: string, userId: string) {
   const group = (await getGroups(userId)).find(g => g.id === id);
   if (!group) throw new ApiError(404, "Group not found");
   return group;
-}
-
-/** Fails before a table is dealt if the group is not the host's. */
-export async function assertOwnGroup(id: string, userId: string) {
-  const { data, error } = await createAdminClient().from("friend_groups").select("id").eq("id", idSchema.parse(id)).eq("owner", userId).maybeSingle();
-  checkDb(error);
-  if (!data) throw new ApiError(404, "Group not found");
-}
-
-/** Leaves an invitation for each member who is still a friend. Returns how many were invited. */
-export async function inviteGroup(tableId: string, groupId: string, userId: string): Promise<number> {
-  const { data, error } = await createAdminClient().rpc("invite_group", { p_table: tableId, p_group: groupId, p_user: userId });
-  checkDb(error);
-  return (data as number | null) ?? 0;
 }
 
 export async function listInvites(userId: string): Promise<Invite[]> {

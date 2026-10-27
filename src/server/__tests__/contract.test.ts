@@ -22,6 +22,7 @@ import * as friends from "@/app/api/friends/route";
 import * as friend from "@/app/api/friends/[id]/route";
 import * as groups from "@/app/api/groups/route";
 import * as group from "@/app/api/groups/[id]/route";
+import * as invites from "@/app/api/invites/route";
 import * as invite from "@/app/api/invites/[code]/route";
 import * as tables from "@/app/api/tables/route";
 import * as table from "@/app/api/tables/[code]/route";
@@ -59,6 +60,7 @@ const contracts: [string, object, string[]][] = [
   ["/api/friends/[id]", friend, ["POST", "DELETE"]],
   ["/api/groups", groups, ["GET", "POST"]],
   ["/api/groups/[id]", group, ["PATCH", "DELETE"]],
+  ["/api/invites", invites, ["GET"]],
   ["/api/invites/[code]", invite, ["DELETE"]],
   ["/api/tables", tables, ["POST"]],
   ["/api/tables/[code]", table, ["GET", "PATCH"]],

@@ -1,18 +1,19 @@
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
-const mocks = vi.hoisted(() => ({ rpc: vi.fn(), from: vi.fn(), userFrom: vi.fn(), enforce: vi.fn(), user: vi.fn(), createTable: vi.fn() }));
+const mocks = vi.hoisted(() => ({ rpc: vi.fn(), from: vi.fn(), userFrom: vi.fn(), enforce: vi.fn(), user: vi.fn(), notify: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: mocks.rpc, from: mocks.from }) }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: mocks.userFrom }) }));
 vi.mock("@/server/settings", () => ({ getSettings: async () => DEFAULT_SETTINGS }));
 vi.mock("@/server/limits", () => ({ enforce: mocks.enforce }));
-vi.mock("@/server/tables", () => ({ createTable: mocks.createTable }));
+vi.mock("@/server/realtime", () => ({ notifyInvited: mocks.notify, broadcastTable: vi.fn() }));
 vi.mock("@/server/http", async original => ({ ...await original<typeof import("@/server/http")>(), requireUser: mocks.user }));
 import { createGroup, deleteGroup, dismissInvite, getGroups, renameGroup, setGroupMembers } from "../groups";
 import { groupMembersSchema, groupNameSchema } from "../validation";
 import { POST as postGroup } from "@/app/api/groups/route";
 import { PATCH as patchGroup } from "@/app/api/groups/[id]/route";
 import { POST as postTable } from "@/app/api/tables/route";
+import { GET as getInvites } from "@/app/api/invites/route";
 
 const userId = "e339e7a7-7886-4fa7-9122-31e204010f7d";
 const groupId = "0b9b8f0e-3c55-4c1e-9a43-6c1a1c0e9d11";
@@ -80,22 +81,20 @@ describe("group operations", () => {
     expect(mocks.from).not.toHaveBeenCalled();
   });
 
-  it("creates a group with its members under the group quota", async () => {
-    const insert = chain({ data: { id: groupId }, error: null });
-    mocks.from.mockReturnValue(insert);
+  it("creates a group with its members in one database call under the group quota", async () => {
+    mocks.rpc.mockResolvedValue({ data: groupId, error: null });
     const group = await createGroup(" Tuesday ", [friendA, friendB], saved);
     expect(group.name).toBe("Tuesday");
-    expect(insert.calls[0]).toEqual(["insert", { owner: userId, name: "Tuesday" }]);
     expect(mocks.enforce).toHaveBeenCalledWith(`groups:${userId}`, 60, 3600);
-    expect(mocks.rpc).toHaveBeenCalledWith("set_friend_group_members", { p_group: groupId, p_user: userId, p_members: [friendA, friendB] });
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+    expect(mocks.rpc).toHaveBeenCalledWith("create_friend_group", { p_user: userId, p_name: "Tuesday", p_members: [friendA, friendB] });
+    expect(mocks.from).not.toHaveBeenCalled();
   });
 
-  it("removes a new group again when a member is refused", async () => {
-    const insert = chain({ data: { id: groupId }, error: null });
-    mocks.from.mockReturnValue(insert);
+  it("leaves nothing to clean up when a member is refused", async () => {
     mocks.rpc.mockResolvedValue({ data: null, error: { code: "23514", message: "Only friends can be in a group" } });
     await expect(createGroup("Tuesday", [friendA], saved)).rejects.toMatchObject({ status: 400, message: "Only friends can be in a group" });
-    expect(insert.calls.map(c => c[0])).toContain("delete");
+    expect(mocks.from).not.toHaveBeenCalled();
   });
 
   it("validates before spending quota and keeps guests out", async () => {
@@ -107,7 +106,7 @@ describe("group operations", () => {
   });
 
   it("names a duplicate as a conflict and a missing group as not found", async () => {
-    mocks.from.mockReturnValue(chain({ data: null, error: { code: "23505", message: "duplicate key value" } }));
+    mocks.rpc.mockResolvedValueOnce({ data: null, error: { code: "23505", message: "duplicate key value" } });
     await expect(createGroup("Tuesday", [], saved)).rejects.toMatchObject({ status: 409, message: "You already have a group with that name" });
     mocks.from.mockReturnValue(chain({ data: null, error: null }));
     await expect(renameGroup(groupId, "Friday", saved)).rejects.toMatchObject({ status: 404 });
@@ -128,7 +127,7 @@ describe("group operations", () => {
 
 describe("routes", () => {
   it("creates with 201 and rejects unknown fields", async () => {
-    mocks.from.mockReturnValue(chain({ data: { id: groupId }, error: null }));
+    mocks.rpc.mockResolvedValue({ data: groupId, error: null });
     expect((await postGroup(json("POST", { name: "Tuesday" }))).status).toBe(201);
     expect((await postGroup(json("POST", { name: "Tuesday", owner: friendA }))).status).toBe(400);
   });
@@ -139,31 +138,50 @@ describe("routes", () => {
     expect((await patchGroup(json("PATCH", { name: "Friday", members: [] }), idContext)).status).toBe(400);
     expect((await patchGroup(json("PATCH", { name: "x" }), { params: Promise.resolve({ id: "nope" }) })).status).toBe(400);
   });
-  it("deals for a group: checks the group first, then invites its members", async () => {
-    mocks.from.mockReturnValue(chain({ data: { id: groupId }, error: null }));
-    mocks.createTable.mockResolvedValue({ id: "t1", code: "BCDFGH" });
-    mocks.rpc.mockResolvedValue({ data: 3, error: null });
+  const table = { id: "t1", code: "BCDFGH", host: userId, status: "open" };
+  it("deals for a group in one transaction, then nudges each invited lobby", async () => {
+    mocks.from.mockReturnValue(chain({ data: null, error: null }));
+    mocks.rpc.mockResolvedValue({ data: { table, invited: [friendA, friendB] }, error: null });
     const res = await postTable(json("POST", { rules: {}, groupId }));
     expect(res.status).toBe(201);
-    expect(await res.json()).toEqual({ id: "t1", code: "BCDFGH", invited: 3 });
-    expect(mocks.rpc).toHaveBeenCalledWith("invite_group", { p_table: "t1", p_group: groupId, p_user: userId });
+    expect(await res.json()).toEqual({ ...table, invited: 2 });
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+    expect(mocks.rpc).toHaveBeenCalledWith("deal_for_group", expect.objectContaining({ p_user: userId, p_group: groupId, p_kind: "pinochle" }));
+    expect(mocks.notify).toHaveBeenCalledWith([friendA, friendB]);
   });
-  it("does not deal for someone else's group, and still returns the table if inviting fails", async () => {
+  it("deals nothing for someone else's group, and reports a failed invitation instead of a silent table", async () => {
     mocks.from.mockReturnValue(chain({ data: null, error: null }));
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: "P0002", message: "Group not found" } });
     expect((await postTable(json("POST", { groupId }))).status).toBe(404);
-    expect(mocks.createTable).not.toHaveBeenCalled();
-    mocks.from.mockReturnValue(chain({ data: { id: groupId }, error: null }));
-    mocks.createTable.mockResolvedValue({ id: "t1", code: "BCDFGH" });
     mocks.rpc.mockResolvedValue({ data: null, error: { code: "XX000", message: "boom" } });
     vi.spyOn(console, "error").mockImplementation(() => {});
     const res = await postTable(json("POST", { groupId }));
-    expect(res.status).toBe(201);
-    expect(await res.json()).toMatchObject({ code: "BCDFGH", invited: null });
+    expect(res.status).toBe(500);
+    expect(await res.json()).not.toHaveProperty("code");
+    expect(mocks.notify).not.toHaveBeenCalled();
+  });
+  it("retries a taken table code with the group still attached", async () => {
+    mocks.from.mockReturnValue(chain({ data: null, error: null }));
+    mocks.rpc.mockResolvedValueOnce({ data: null, error: { code: "23505", message: "duplicate key" } })
+      .mockResolvedValueOnce({ data: { table, invited: [] }, error: null });
+    expect(await (await postTable(json("POST", { groupId }))).json()).toEqual({ ...table, invited: 0 });
+    expect(mocks.rpc.mock.calls.map(c => [c[0], (c[1] as { p_group: string }).p_group])).toEqual([["deal_for_group", groupId], ["deal_for_group", groupId]]);
+  });
+  it("lists the player's invitations for the lobby to refetch; guests have none", async () => {
+    mocks.rpc.mockResolvedValue({ data: [{ code: "BCDFGH", seated: 2 }], error: null });
+    expect(await (await getInvites()).json()).toEqual([{ code: "BCDFGH", seated: 2 }]);
+    expect(mocks.rpc).toHaveBeenCalledWith("my_invites", { p_user: userId });
+    mocks.user.mockResolvedValue({ user: { id: userId, is_anonymous: true } });
+    mocks.rpc.mockClear();
+    expect(await (await getInvites()).json()).toEqual([]);
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
   it("deals without a group exactly as before", async () => {
-    mocks.createTable.mockResolvedValue({ id: "t1", code: "BCDFGH" });
-    expect(await (await postTable(json("POST", {}))).json()).toEqual({ id: "t1", code: "BCDFGH" });
-    expect(mocks.rpc).not.toHaveBeenCalled();
+    mocks.from.mockReturnValue(chain({ data: null, error: null }));
+    mocks.rpc.mockResolvedValue({ data: table, error: null });
+    expect(await (await postTable(json("POST", {}))).json()).toEqual(table);
+    expect(mocks.rpc).toHaveBeenCalledWith("create_table", expect.not.objectContaining({ p_group: expect.anything() }));
+    expect(mocks.notify).not.toHaveBeenCalled();
   });
 });
 
@@ -183,10 +201,30 @@ describe("migration 0018", () => {
     expect(sql).toContain("'Only friends can be in a group'");
     expect(sql).toContain("after update or delete on public.friendships");
   });
-  it("exposes its functions to the service role only", () => {
-    for (const fn of ["set_friend_group_members(uuid,uuid,uuid[])", "invite_group(uuid,uuid,uuid)", "my_invites(uuid)"]) {
+  it("serializes adding a member with ending the friendship", () => {
+    const check = sql.slice(sql.indexOf("create function public.check_friend_group_member()"), sql.indexOf("create trigger friend_group_member_check"));
+    expect(check).toMatch(/from public\.friendships f where f\.status='accepted'[\s\S]*for share;\s*if not found then/);
+    const drop = sql.slice(sql.indexOf("create function public.drop_unfriended_members()"), sql.indexOf("create trigger friendship_ends_group_membership"));
+    expect(drop).toContain("delete from public.friend_group_members");
+    expect(drop).toContain("delete from public.table_invites");
+  });
+  it("creates a group with its members, and deals with the host seated before anyone is invited, in one function each", () => {
+    const create = sql.slice(sql.indexOf("create function public.create_friend_group("), sql.indexOf("create function public.invite_group("));
+    expect(create).toMatch(/insert into public\.friend_groups[\s\S]*perform public\.set_friend_group_members\(g,p_user,p_members\)/);
+    const deal = sql.slice(sql.indexOf("create function public.deal_for_group("), sql.indexOf("-- Open tables the player was invited to"));
+    const [made, seated, invited] = ["public.create_table(", "update public.seats set user_id=p_user where table_id=t.id and seat=0", "public.invite_group(t.id"].map(s => deal.indexOf(s));
+    expect(made).toBeGreaterThan(0);
+    expect(seated).toBeGreaterThan(made);
+    expect(invited).toBeGreaterThan(seated);
+  });
+  it("exposes its entry points to the service role only", () => {
+    for (const fn of ["set_friend_group_members(uuid,uuid,uuid[])", "create_friend_group(uuid,text,uuid[])", "invite_group(uuid,uuid,uuid)", "deal_for_group(text,uuid,text,jsonb,uuid)", "my_invites(uuid)"]) {
       expect(sql).toContain(`public.${fn}`);
     }
-    expect(sql).toMatch(/grant execute on function public\.set_friend_group_members\(uuid,uuid,uuid\[\]\),public\.invite_group\(uuid,uuid,uuid\),public\.my_invites\(uuid\) to service_role;/);
+    const grant = sql.slice(sql.indexOf("grant execute on function"));
+    expect(grant).toContain("public.deal_for_group(text,uuid,text,jsonb,uuid)");
+    // Inviting is only reachable through a deal, so the host is always seated first.
+    expect(grant).not.toContain("invite_group");
+    expect(grant).toMatch(/to service_role;/);
   });
 });

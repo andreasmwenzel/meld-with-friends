@@ -1,5 +1,6 @@
 "use client";
 
+import { useLayoutEffect } from "react";
 import { notFound } from "next/navigation";
 import { DealTable } from "@/components/lobby/DealTable";
 import { Groups } from "@/components/lobby/Groups";
@@ -15,24 +16,32 @@ let groups: Group[] = [
   { id: "g2", name: "Cousins", members: [FRIENDS[3], FRIENDS[4], FRIENDS[5], FRIENDS[1]].map(member) },
 ];
 
-// The groups API, in memory, so the editor and the deal picker work without a session.
-if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
-  const real = window.fetch.bind(window);
-  window.fetch = async (input, init) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    if (!url.startsWith("/api/groups")) return real(input, init);
-    const body = init?.body ? JSON.parse(init.body as string) : {};
-    const id = url.split("/")[3];
-    const members = (ids: string[]) => FRIENDS.filter((f) => ids.includes(f.id)).map(member);
-    if (init?.method === "POST") groups = [...groups, { id: `g${Date.now()}`, name: body.name, members: members(body.members ?? []) }];
-    if (init?.method === "PATCH") groups = groups.map((g) => g.id !== id ? g : "name" in body ? { ...g, name: body.name } : { ...g, members: members(body.members) });
-    if (init?.method === "DELETE") groups = groups.filter((g) => g.id !== id);
-    return Response.json(id ? groups.find((g) => g.id === id) ?? { ok: true } : groups);
-  };
+/**
+ * The groups API, in memory, so the editor and the deal picker work without a session. Installed for
+ * as long as the preview is mounted: a layout effect runs before the children's data effects, and
+ * its cleanup hands `fetch` back before the next page loads anything.
+ */
+function usePreviewGroupsApi() {
+  useLayoutEffect(() => {
+    const real = window.fetch;
+    window.fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (!url.startsWith("/api/groups")) return real(input, init);
+      const body = init?.body ? JSON.parse(init.body as string) : {};
+      const id = url.split("/")[3];
+      const members = (ids: string[]) => FRIENDS.filter((f) => ids.includes(f.id)).map(member);
+      if (init?.method === "POST") groups = [...groups, { id: `g${Date.now()}`, name: body.name, members: members(body.members ?? []) }];
+      if (init?.method === "PATCH") groups = groups.map((g) => g.id !== id ? g : "name" in body ? { ...g, name: body.name } : { ...g, members: members(body.members) });
+      if (init?.method === "DELETE") groups = groups.filter((g) => g.id !== id);
+      return Response.json(id ? groups.find((g) => g.id === id) ?? { ok: true } : groups);
+    };
+    return () => { window.fetch = real; };
+  }, []);
 }
 
 /** Local-only preview of groups: an invitation, the deal panel's group picker, and the groups list and editor. */
 export default function DevGroupsPage() {
+  usePreviewGroupsApi();
   if (process.env.NODE_ENV === "production") notFound();
   return (
     <main className="mx-auto max-w-6xl px-6 pb-16 pt-6">

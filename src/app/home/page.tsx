@@ -59,7 +59,7 @@ async function Lobby({ searchParams }: { searchParams: PageProps<"/home">["searc
           <DealTable autoOpen={sp.new === "1"} defaults={(profile?.default_rules as RulesPatch | null) ?? null} saved={!user.is_anonymous} />
           <Link href="/practice" className="tap text-sm text-chalk-faint underline-offset-4 hover:text-chalk hover:underline">Practice hand</Link>
         </div>
-        <Invitations invites={invites} />
+        <Invitations invites={invites} userId={user.is_anonymous ? null : user.id} />
         <HouseRules initial={(profile?.default_rules as RulesPatch | null) ?? null} />
         <h2 className="display mt-12" style={{ fontSize: 34 }}>Your tables</h2>
         {tables.length === 0 ? (

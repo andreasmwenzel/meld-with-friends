@@ -34,6 +34,7 @@ Logical conflicts in SQL functions (a stale revision, a table that changed, a pa
 
 - `table:{code}` — broadcast events: `seats` (seat map changed), `trade` (offer created/answered), `game` ({ rev }), `chat`.
 - `presence:lobby` — presence keyed by user id with `{ handle, tableCode | null }`.
+- `invites:{userId}` — broadcast event `invites` with an empty payload when a friend deals that player in; the lobby refetches `GET /api/invites` under its own session. Public like the table channels, so it carries nothing beyond the fact of a nudge.
 
 ## Auth
 
@@ -129,22 +130,35 @@ Storage is bounded at roughly 31 days times 12 keys, or 372 rows after cleanup. 
 ## Groups and table invitations
 
 A saved account keeps up to 20 named groups of up to 12 members (migration 0018). Names are 1 to 40
-characters after trimming and unique per owner, case-insensitively. Members must be accepted friends:
-an insert trigger checks the friendship and the caps under a lock, and ending a friendship (delete, or
-a status change away from `accepted`) removes each person from the other's groups. Guests get 403.
+characters after trimming and unique per owner, case-insensitively. Guests get 403.
+
+Invariant: every member is an accepted friend of the group's owner at every commit. The member insert
+trigger reads the friendship row `for share`; ending a friendship (delete, or a status change away from
+`accepted`) updates or deletes that row, so the two serialize. If the insert locks first, the unfriend
+waits and its trigger then deletes the new membership; if the unfriend locks first, the insert re-reads
+the changed row and is refused. The same trigger withdraws any invitation either person left the other.
+`scripts/test-groups-db.sh` races both orders in a throwaway local PostgreSQL container.
 
 `GET /api/groups` returns `[{ id, name, members: [{ userId, handle, displayName, avatarSeed }] }]`,
-read under the owner's RLS. `POST /api/groups` takes `{ name, members? }` and returns 201. `PATCH
-/api/groups/[id]` takes exactly one of `{ name }` or `{ members }` (the full list; the service-only
-`set_friend_group_members` replaces it in one transaction). `DELETE /api/groups/[id]` removes the
-group. Writes share the `groupEditsPerHour` quota; a duplicate name is 409.
+read under the owner's RLS. `POST /api/groups` takes `{ name, members? }` and returns 201; the
+service-only `create_friend_group` makes the group and its members in one transaction, so a refused
+member or a taken name (409) leaves nothing behind. `PATCH /api/groups/[id]` takes exactly one of
+`{ name }` or `{ members }` (the full list; `set_friend_group_members` replaces it in one transaction).
+`DELETE /api/groups/[id]` removes the group. Writes share the `groupEditsPerHour` quota.
 
-`POST /api/tables` accepts an optional `groupId`. The group must be the host's (404 before any table is
-dealt). After the deal, the service-only `invite_group` leaves a `table_invites` row for each member who
-is still a friend and not seated, and the response adds `invited` (a count, or null if inviting failed;
-the table is dealt either way). The lobby lists invitations from `my_invites`: open tables only, ones the
-player is not seated at, newest ten, with the host's name and how many chairs are taken. Sitting down
-hides an invitation; `DELETE /api/invites/[code]` dismisses it. Group names never reach invitees.
+`POST /api/tables` accepts an optional `groupId`. With one, the service-only `deal_for_group` creates the
+table, seats the host in chair 0, then leaves a `table_invites` row for each member who is still a
+friend and not seated, all in one transaction: invited friends cannot fill the chairs before the host
+sits, and a failed invitation (or someone else's group, 404) deals no table and reaches the host as an
+error. The response adds `invited`, a count. The server then broadcasts an empty `invites` event on
+each invitee's `invites:{userId}` channel. Without a group, the host picks a chair as before.
+
+The lobby lists invitations from `my_invites`: open tables only, ones the player is not seated at,
+newest ten, with the host's name and how many chairs are taken. `GET /api/invites` returns the same
+list. The lobby refetches it when nudged on `invites:{userId}`, when a shown table's channel reports
+`seats` or `game`, on (re)subscribing, and when the tab regains focus, at most every 15 seconds; there
+is no polling. Sitting down hides an invitation; `DELETE /api/invites/[code]` dismisses it. Group names
+never reach invitees.
 
 Hand recap is built by `viewFor` from the current hand's public bids, declared melds,
 completed tricks and current trick. Private JSON state keeps completed trick winners

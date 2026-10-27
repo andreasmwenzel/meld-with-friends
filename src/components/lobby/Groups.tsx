@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { api, type Group, type Profile } from "@/lib/api";
 import { Avatar } from "@/components/site/Avatar";
+import { reloadGroups, useGroups } from "./groupsStore";
 
 export const MAX_GROUP_MEMBERS = 12;
 const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
@@ -50,7 +51,10 @@ function GroupEditor({ group, friends, onSaved, onClose }: {
         }
       }
       onSaved();
-    } catch (err) { setNote((err as Error).message); setBusy(false); }
+    } catch (err) {
+      // A rename can land before a refused member change; show whatever the server kept.
+      setNote((err as Error).message); setBusy(false); void reloadGroups();
+    }
   }
   async function remove() {
     if (!group || !window.confirm(`Delete the group ${group.name}? Your friends stay your friends.`)) return;
@@ -107,16 +111,9 @@ function GroupEditor({ group, friends, onSaved, onClose }: {
 
 /** Named groups of friends. A group can be invited in one go when dealing a table. */
 export function Groups({ friends }: { friends: Profile[] }) {
-  const [groups, setGroups] = useState<Group[] | null>(null);
+  const { groups, error: note } = useGroups();
   const [editing, setEditing] = useState<string | "new" | null>(null);
-  const [note, setNote] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try { setGroups(await api<Group[]>("/api/groups")); } catch (e) { setNote((e as Error).message); }
-  }, []);
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch, state is set after await
-  useEffect(() => { void load(); }, [load]);
-  const saved = () => { setEditing(null); void load(); };
+  const saved = () => { setEditing(null); void reloadGroups(); };
 
   return (
     <div className="mt-10">

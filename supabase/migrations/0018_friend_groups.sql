@@ -39,6 +39,10 @@ begin
 end $$;
 create trigger friend_group_cap after insert on public.friend_groups for each row execute function public.check_friend_group();
 
+-- Invariant: every member is an accepted friend of the group's owner, at every commit. Adding a member
+-- takes a share lock on the friendship row, and ending a friendship updates or deletes that row, so the
+-- two serialize: either the unfriend waits and its trigger below then deletes the new membership, or
+-- the insert waits, re-reads the changed row and is refused.
 create function public.check_friend_group_member() returns trigger language plpgsql security definer set search_path='' as $$
 declare o uuid;
 begin
@@ -46,20 +50,25 @@ begin
  if (select count(*) from public.friend_group_members where group_id=new.group_id)>12 then
   raise exception 'A group can have up to 12 members' using errcode='23514';
  end if;
- if not exists(select 1 from public.friendships f where f.status='accepted'
-   and ((f.requester=o and f.addressee=new.user_id) or (f.addressee=o and f.requester=new.user_id))) then
+ perform 1 from public.friendships f where f.status='accepted'
+  and ((f.requester=o and f.addressee=new.user_id) or (f.addressee=o and f.requester=new.user_id))
+  for share;
+ if not found then
   raise exception 'Only friends can be in a group' using errcode='23514';
  end if;
  return null;
 end $$;
 create trigger friend_group_member_check after insert on public.friend_group_members for each row execute function public.check_friend_group_member();
 
--- Ending a friendship takes each person out of the other's groups.
+-- Ending a friendship, in the same transaction, takes each person out of the other's groups and
+-- withdraws invitations either has left the other.
 create function public.drop_unfriended_members() returns trigger language plpgsql security definer set search_path='' as $$
 begin
  if old.status='accepted' and (tg_op='DELETE' or new.status<>'accepted') then
   delete from public.friend_group_members m using public.friend_groups g
   where g.id=m.group_id and ((g.owner=old.requester and m.user_id=old.addressee) or (g.owner=old.addressee and m.user_id=old.requester));
+  delete from public.table_invites i
+  where (i.invited_by=old.requester and i.user_id=old.addressee) or (i.invited_by=old.addressee and i.user_id=old.requester);
  end if;
  return null;
 end $$;
@@ -87,10 +96,20 @@ begin
  insert into public.friend_group_members(group_id,user_id) select p_group,m from unnest(p_members) m on conflict do nothing;
 end $$;
 
--- Invites the members of the host's group who are still friends and not already seated. Returns how many.
-create function public.invite_group(p_table uuid,p_group uuid,p_user uuid) returns int
+-- Creates a group with its first members in one transaction: a refused member or a taken name leaves nothing behind.
+create function public.create_friend_group(p_user uuid,p_name text,p_members uuid[]) returns uuid
 language plpgsql security definer set search_path='' as $$
-declare n int;
+declare g uuid;
+begin
+ insert into public.friend_groups(owner,name) values(p_user,p_name) returning id into g;
+ perform public.set_friend_group_members(g,p_user,p_members);
+ return g;
+end $$;
+
+-- Invites the members of the host's group who are still friends and not already seated. Returns who was invited.
+create function public.invite_group(p_table uuid,p_group uuid,p_user uuid) returns uuid[]
+language plpgsql security definer set search_path='' as $$
+declare invited uuid[];
 begin
  if not exists(select 1 from public.tables where id=p_table and host=p_user and status='open') then
   raise exception 'Only the host of an open table can invite' using errcode='42501';
@@ -98,15 +117,32 @@ begin
  if not exists(select 1 from public.friend_groups where id=p_group and owner=p_user) then
   raise exception 'Group not found' using errcode='P0002';
  end if;
- insert into public.table_invites(table_id,user_id,invited_by)
- select p_table,m.user_id,p_user from public.friend_group_members m
- where m.group_id=p_group
-  and not exists(select 1 from public.seats s where s.table_id=p_table and s.user_id=m.user_id)
-  and exists(select 1 from public.friendships f where f.status='accepted'
-   and ((f.requester=p_user and f.addressee=m.user_id) or (f.addressee=p_user and f.requester=m.user_id)))
- on conflict do nothing;
- get diagnostics n=row_count;
- return n;
+ with sent as (
+  insert into public.table_invites(table_id,user_id,invited_by)
+  select p_table,m.user_id,p_user from public.friend_group_members m
+  where m.group_id=p_group
+   and not exists(select 1 from public.seats s where s.table_id=p_table and s.user_id=m.user_id)
+   and exists(select 1 from public.friendships f where f.status='accepted'
+    and ((f.requester=p_user and f.addressee=m.user_id) or (f.addressee=p_user and f.requester=m.user_id)))
+  on conflict do nothing returning user_id)
+ select coalesce(array_agg(user_id),'{}') into invited from sent;
+ return invited;
+end $$;
+
+-- Deals a table for a group in one transaction: the table, the host in the first chair, then the
+-- invitations. Invited friends can never fill the chairs before the host sits, and a failed
+-- invitation rolls the whole deal back, so the host never gets a table nobody was asked to.
+create function public.deal_for_group(p_code text,p_user uuid,p_kind text,p_rules jsonb,p_group uuid) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare t public.tables; invited uuid[];
+begin
+ if not exists(select 1 from public.friend_groups where id=p_group and owner=p_user) then
+  raise exception 'Group not found' using errcode='P0002';
+ end if;
+ t := public.create_table(p_code,p_user,p_kind,p_rules);
+ update public.seats set user_id=p_user where table_id=t.id and seat=0;
+ invited := public.invite_group(t.id,p_group,p_user);
+ return jsonb_build_object('table',to_jsonb(t),'invited',to_jsonb(invited));
 end $$;
 
 -- Open tables the player was invited to and has not sat down at, newest first.
@@ -123,6 +159,8 @@ language sql stable security definer set search_path='' as $$
 $$;
 
 revoke all on function public.check_friend_group(),public.check_friend_group_member(),public.drop_unfriended_members(),
- public.set_friend_group_members(uuid,uuid,uuid[]),public.invite_group(uuid,uuid,uuid),public.my_invites(uuid) from public,anon,authenticated;
-grant execute on function public.set_friend_group_members(uuid,uuid,uuid[]),public.invite_group(uuid,uuid,uuid),public.my_invites(uuid) to service_role;
+ public.set_friend_group_members(uuid,uuid,uuid[]),public.create_friend_group(uuid,text,uuid[]),public.invite_group(uuid,uuid,uuid),
+ public.deal_for_group(text,uuid,text,jsonb,uuid),public.my_invites(uuid) from public,anon,authenticated;
+grant execute on function public.set_friend_group_members(uuid,uuid,uuid[]),public.create_friend_group(uuid,text,uuid[]),
+ public.deal_for_group(text,uuid,text,jsonb,uuid),public.my_invites(uuid) to service_role;
 commit;

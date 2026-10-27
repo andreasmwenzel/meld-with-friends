@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type Group } from "@/lib/api";
+import { useGroups } from "./groupsStore";
 import { RulesForm } from "@/components/rules/RulesForm";
 import type { RulesPatch } from "@/components/rules/rules";
 import { useRulesPref } from "@/components/rules/useRulesPref";
@@ -36,15 +37,13 @@ export function DealTable({ autoOpen = false, defaults = null, saved = false }: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { rules, setRules, remember } = useRulesPref(defaults);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [groupId, setGroupId] = useState<string | null>(null);
-  // Groups are a saved-account feature; guests deal without the picker.
-  useEffect(() => {
-    if (!open || !saved) return;
-    let active = true;
-    api<Group[]>("/api/groups").then((list) => { if (active) setGroups(list); }).catch(() => {});
-    return () => { active = false; };
-  }, [open, saved]);
+  // Groups are a saved-account feature; guests deal without the picker. The list is shared with the
+  // groups editor, so a group made or deleted while this panel is open shows up or goes away here too.
+  const shared = useGroups(open && saved).groups;
+  const groups = saved && shared ? shared : [];
+  const [picked, setPicked] = useState<string | null>(null);
+  // A pick whose group was deleted or emptied since is dropped, never sent.
+  const groupId = groups.some((g) => g.id === picked && g.members.length > 0) ? picked : null;
 
   async function deal() {
     setBusy(true); setError(null);
@@ -63,7 +62,7 @@ export function DealTable({ autoOpen = false, defaults = null, saved = false }: 
       <p className="display" style={{ fontSize: 26 }}>Deal a table</p>
       <p className="mt-1 text-ink-soft">Four-hand partnership pinochle. Set the house rules; you can still change them at the table before the first deal.</p>
       <div className="mt-4"><RulesForm value={rules} onChange={setRules} /></div>
-      {groups.length > 0 && <InviteGroup groups={groups} value={groupId} onChange={setGroupId} />}
+      {groups.length > 0 && <InviteGroup groups={groups} value={groupId} onChange={setPicked} />}
       {error && <p className="mt-3 text-sm text-pip-red">{error}</p>}
       <div className="mt-4 flex flex-wrap gap-2">
         <button className="btn btn-ink" onClick={deal} disabled={busy}>{busy ? "Dealing" : "Deal"}</button>
