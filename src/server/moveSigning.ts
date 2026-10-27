@@ -3,6 +3,7 @@ import { createHash, createPrivateKey, createPublicKey, sign, type KeyObject } f
 import { getServerEnv } from "@/lib/env";
 import type { PublicMove } from "@/engine/publicMove";
 import { moveMessage } from "@/lib/moveAuth";
+import { chatMessage, type ChatMessage, type SignedChat } from "@/lib/chatAuth";
 import { BUILD_ID } from "@/lib/staleClient";
 
 // Ed25519 PKCS#8 header for a raw 32-byte seed.
@@ -32,4 +33,10 @@ export const movePublicKey = () => moveKeys().publicKey;
 export function signMove(gameId: string, move: PublicMove): { move: string; sig: string } {
   const message = moveMessage(gameId, move, BUILD_ID);
   return { move: message, sig: sign(null, Buffer.from(message), moveKeys().privateKey).toString("base64url") };
+}
+
+/** The signed form of table talk, using the same server key as moves. */
+export function signChat(code: string, chat: ChatMessage): SignedChat {
+  const message = chatMessage(code, chat);
+  return { message, sig: sign(null, Buffer.from(message), moveKeys().privateKey).toString("base64url") };
 }

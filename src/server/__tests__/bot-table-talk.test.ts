@@ -2,6 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { buildScenario } from "@/engine/scenario";
 import { PRESETS } from "@/engine/scenarios";
 import { applyAction, viewFor } from "@/engine/game";
+import { openChat } from "@/lib/chatAuth";
+import { movePublicKey } from "../moveSigning";
 import { talkDue } from "@/lib/bots/tableTalk";
 import type { Action, GameState } from "@/engine/types";
 
@@ -54,7 +56,9 @@ it("only the winning scoring commit schedules one chat despite concurrent ticks"
   expect(mocks.chat).not.toHaveBeenCalled();
   await flush();
   expect(mocks.chat).toHaveBeenCalledTimes(1);
-  expect(mocks.chat).toHaveBeenCalledWith("ABC234", {
+  expect(mocks.chat.mock.calls[0][0]).toBe("ABC234");
+  const signed = mocks.chat.mock.calls[0][1];
+  expect(await openChat(movePublicKey(), "ABC234", signed.message, signed.sig)).toEqual({
     id: `bot:game-id:hand:${state.handNumber}`, from: "bot:table-id:1", name: "Otto", text: expect.any(String), at: expect.any(Number),
   });
 });

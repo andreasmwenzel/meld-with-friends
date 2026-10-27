@@ -1,4 +1,5 @@
 import "server-only";
+import { movePublicKey } from "./moveSigning";
 import { bump } from "./metrics";
 import { getSettings } from "./settings";
 import { enforce } from "./limits";
@@ -151,7 +152,7 @@ export async function getTableSnapshot(code: string, userId: string) {
     checkDb(visit.error);
     lastSeenRev = visit.data?.last_rev ?? null;
   }
-  return { table, seats, offers, mySeat, ready, paused, lastSeenRev };
+  return { table, seats, offers, mySeat, ready, paused, lastSeenRev, moveKey: movePublicKey() };
 }
 
 async function manageBots(code: string, userId: string, mode: "add" | "remove" | "fill", seat?: SeatIndex) {

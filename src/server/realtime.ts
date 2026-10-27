@@ -1,4 +1,5 @@
 import "server-only";
+import type { SignedChat } from "@/lib/chatAuth";
 import { bump } from "./metrics";
 import { getServerEnv } from "@/lib/env";
 import { normalizeCode } from "@/lib/codes";
@@ -43,7 +44,7 @@ export async function notifyInvited(userIds: string[]) {
   await broadcast(userIds.map(id => ({ topic: `invites:${id}`, event: "invites", payload: { type: "invites" } })), "Invitation", { count: userIds.length });
 }
 
-/** Matches useTableChat's existing transient channel and message shape. */
-export async function broadcastChat(code: string, message: { id: string; from: string; name: string; text: string; at: number }) {
-  await broadcast([{ topic: `chat:${normalizeCode(code)}`, event: "message", payload: message }], "Bot chat", { code });
+/** Table talk is sent through the server and signed, like moves. */
+export async function broadcastChat(code: string, payload: SignedChat) {
+  await broadcast([{ topic: `chat:${normalizeCode(code)}`, event: "chat", payload }], "Table talk", { code });
 }

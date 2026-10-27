@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 
-export interface ChatMessage { id: string; from: string; name: string; text: string; at: number }
+export type { ChatMessage } from "@/lib/chatAuth";
+import { CHAT_MAX_LENGTH, type ChatMessage } from "@/lib/chatAuth";
 
 /** Table talk as the screens see it. `useTableChat` (Chat.tsx) makes the live one; the lab makes a local one. */
 export interface TableChat {
   messages: ChatMessage[];
+  unsupported?: boolean;
   /** messages from others that arrived while the talk was not on screen */
   unread: number;
   /** says whether the talk is on screen; showing it marks everything seen */
@@ -44,13 +46,16 @@ export function ChatBody({ chat, open, text, setText, inputRef, compact = false 
   const send = (e: FormEvent, reaction?: string) => {
     e.preventDefault();
     if (!reaction) setText("");
-    void chat.send(reaction ?? text);
+    void Promise.resolve(chat.send(reaction ?? text)).catch(() => {
+      if (!reaction) setText(text);
+    });
   };
 
   return (
     <>
       <div ref={listRef} role="log" aria-live="polite" aria-label="Table talk messages" className="min-h-0 flex-1 overflow-y-auto px-4 py-2 text-sm">
-        {messages.length === 0 && <p className="text-ink-soft">Say hello. Messages stay at the table and are not saved.</p>}
+        {chat.unsupported && <p>Update your browser to see table talk.</p>}
+        {!chat.unsupported && messages.length === 0 && <p className="text-ink-soft">Say hello. Messages stay at the table and are not saved.</p>}
         {messages.map((m) => (
           <p key={m.id} className="mb-1.5 leading-snug">
             <span className="font-semibold" style={{ color: m.from === chat.me ? "var(--deck-blue)" : "var(--ink)" }}>{m.from === chat.me ? "You" : m.name}</span>{" "}
@@ -69,7 +74,7 @@ export function ChatBody({ chat, open, text, setText, inputRef, compact = false 
       <form onSubmit={send} className="flex shrink-0 gap-2 border-t border-chalk-dim p-2">
         <label htmlFor={inputId} className="sr-only">Message</label>
         <input ref={inputRef} id={inputId} className="field" style={{ height: "2.75rem" }} value={text} onChange={(e) => setText(e.target.value)}
-          placeholder="Message the table" maxLength={300} enterKeyHint="send" autoComplete="off" />
+          placeholder="Message the table" maxLength={CHAT_MAX_LENGTH} enterKeyHint="send" autoComplete="off" />
         <button className="btn btn-ink" style={{ height: "2.75rem", padding: "0 .9rem" }} disabled={!text.trim()}>Send</button>
       </form>
     </>

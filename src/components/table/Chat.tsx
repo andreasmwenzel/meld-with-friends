@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Profile } from "@/lib/api";
+import { api, type Profile } from "@/lib/api";
+import { canVerifyChat, openChat, type SignedChat } from "@/lib/chatAuth";
 import { ChatBody, type ChatMessage, type TableChat } from "./ChatDock";
 
 export type { TableChat } from "./ChatDock";
@@ -12,7 +13,7 @@ export type { TableChat } from "./ChatDock";
  * room holds this for the whole visit: the talk from the seating screen is still there at the board.
  * `setVisible` says whether the talk is on screen; messages from others count as unread while it is not.
  */
-export function useTableChat(code: string, me: Profile, enabled: boolean): TableChat {
+export function useTableChat(code: string, me: Profile, enabled: boolean, publicKey?: string): TableChat {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [unread, setUnread] = useState(0);
   const visibleRef = useRef(false);
@@ -20,32 +21,40 @@ export function useTableChat(code: string, me: Profile, enabled: boolean): Table
     visibleRef.current = visible;
     if (visible) setUnread(0);
   }, []);
-  const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
+  const [unsupported, setUnsupported] = useState(false);
+  const receiver = useRef<((payload: Partial<SignedChat>) => Promise<void>) | null>(null);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !publicKey) return;
+    let active = true;
+    const seen = new Set<string>();
+    const receive = async (payload: Partial<SignedChat>) => {
+      if (!payload || typeof payload !== "object") return;
+      const m = await openChat(publicKey, code, payload.message, payload.sig);
+      if (!active || !m || seen.has(m.id)) return;
+      seen.add(m.id);
+      setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev.slice(-99), m]));
+      if (m.from !== me.id && !visibleRef.current) setUnread((n) => n + 1);
+    };
+    receiver.current = receive;
+    void canVerifyChat(publicKey).then(ok => { if (active) setUnsupported(!ok); });
     const db = createClient();
-    const channel = db.channel(`chat:${code}`);
-    channel
-      .on("broadcast", { event: "message" }, ({ payload }) => {
-        const m = payload as ChatMessage;
-        setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev.slice(-99), m]));
-        if (m.from !== me.id && !visibleRef.current) setUnread((n) => n + 1);
-      })
-      .subscribe();
-    channelRef.current = channel;
-    return () => { void db.removeChannel(channel); channelRef.current = null; };
-  }, [code, me.id, enabled]);
+    // REST broadcasts originate on the server, so the sender receives them too. The signed POST
+    // response also supplies a prompt echo if the subscription is still connecting.
+    const channel = db.channel(`chat:${code}`, { config: { broadcast: { self: true } } });
+    channel.on("broadcast", { event: "chat" }, ({ payload }) => { void receive(payload); }).subscribe();
+    return () => { active = false; receiver.current = null; void db.removeChannel(channel); };
+  }, [code, me.id, enabled, publicKey]);
 
   const send = useCallback(async (text: string) => {
     const t = text.trim();
-    if (!t || !channelRef.current) return;
-    const m: ChatMessage = { id: crypto.randomUUID(), from: me.id, name: me.display_name, text: t.slice(0, 300), at: Date.now() };
-    setMessages((prev) => [...prev.slice(-99), m]);
-    await channelRef.current.send({ type: "broadcast", event: "message", payload: m });
-  }, [me.id, me.display_name]);
+    const receive = receiver.current;
+    if (!t || !enabled || !receive) return;
+    const signed = await api<SignedChat>(`/api/tables/${code}/chat`, { body: { text: t } });
+    await receive(signed);
+  }, [code, enabled]);
 
-  return { messages, unread, setVisible, send, me: me.id };
+  return { messages, unread, setVisible, send, me: me.id, unsupported };
 }
 
 /**

@@ -28,6 +28,7 @@ export type BotConfig = z.infer<typeof botConfigSchema>;
 
 export const limitsSchema = z.object({
   tablesPerHour: z.number().int().min(1).max(1000),
+  chatMessagesPerMinute: z.number().int().min(1).max(1000),
   actionsPerHour: z.number().int().min(10).max(100000),
   ticksPerTablePerHour: z.number().int().min(10).max(100000),
   friendRequestsPerHour: z.number().int().min(1).max(1000),
@@ -55,7 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
     shootMinTrump: 8, pullTrumpMin: 6, smearWillingness: 0.7, tickDelayMs: 900,
   },
   limits: {
-    tablesPerHour: 10, actionsPerHour: 600, ticksPerTablePerHour: 2000, friendRequestsPerHour: 20,
+    tablesPerHour: 10, chatMessagesPerMinute: 20, actionsPerHour: 600, ticksPerTablePerHour: 2000, friendRequestsPerHour: 20,
     profileEditsPerHour: 30, groupEditsPerHour: 60, replaysPerHour: 120, maxOpenTablesPerHost: 3, idleTableHours: 48, leisurelyIdleDays: 60, retainFinishedDays: 30, retainGuestDays: 30,
   },
 };
@@ -81,6 +82,7 @@ export const SETTING_FIELDS: { group: "bots" | "limits"; key: string; label: str
   { group: "bots", key: "smearWillingness", label: "Smear willingness", help: "0 never adds counters to partner's safe tricks, 1 always.", step: 0.05 },
   { group: "bots", key: "tickDelayMs", label: "Move pacing (ms)", help: "Pause before each bot move so people can follow the trick." },
   { group: "limits", key: "tablesPerHour", label: "Tables per user per hour", help: "Dealing budget." },
+  { group: "limits", key: "chatMessagesPerMinute", label: "Table talk messages per minute", help: "Per seated user, across tables." },
   { group: "limits", key: "actionsPerHour", label: "Game actions per user per hour", help: "Bids, plays, melds." },
   { group: "limits", key: "ticksPerTablePerHour", label: "Bot moves per table per hour", help: "Caps bot compute per table." },
   { group: "limits", key: "friendRequestsPerHour", label: "Friend requests per hour", help: "Per user." },

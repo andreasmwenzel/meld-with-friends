@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { movePublicKey } from "../moveSigning";
 import { resolveRules } from "@/engine/scoring";
 import { updateTableRules } from "@/server/tables";
 
@@ -16,7 +17,14 @@ function query(result: unknown) {
   };
 }
 
-beforeEach(() => vi.resetAllMocks());
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "test-only");
+  vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-only");
+  vi.stubEnv("CRON_SECRET", "test-only");
+});
+afterEach(() => vi.unstubAllEnvs());
 
 describe("updating table rules", () => {
   it("replaces the partial rules and returns a refreshed snapshot after broadcasting", async () => {
@@ -32,7 +40,7 @@ describe("updating table rules", () => {
     expect(update.update).toHaveBeenCalledWith({ rules: resolveRules({ counting: "classic" }) });
     expect(update.eq.mock.calls).toEqual([["id", table.id], ["host", "host"], ["status", "open"]]);
     expect(mocks.broadcast).toHaveBeenCalledWith(table.code, { type: "seats" });
-    expect(snapshot).toEqual({ table: { ...refreshed, rules: resolveRules(refreshed.rules) }, seats: [], offers: [], mySeat: null, ready: [], paused: null, lastSeenRev: null });
+    expect(snapshot).toEqual({ table: { ...refreshed, rules: resolveRules(refreshed.rules) }, seats: [], offers: [], mySeat: null, ready: [], paused: null, lastSeenRev: null, moveKey: movePublicKey() });
   });
 
   it.each([
@@ -88,4 +96,13 @@ it.each(['game', 'points'])('normalizes stored %s shooting rules before a table 
   const read = await tableByCode(table.code);
   expect(read.rules.shoot).toBe('on');
   expect(read.rules).not.toHaveProperty('shootPoints');
+});
+
+it("includes the verification key on the seating snapshot before any game exists", async () => {
+  mocks.from.mockImplementation((name: string) => query({ data: name === "tables" ? table : name === "seats" ? [{ seat: 0, user_id: "host" }] : [], error: null }));
+  const { getTableSnapshot } = await import("../tables");
+  const snapshot = await getTableSnapshot(table.code, "host");
+  expect(snapshot.mySeat).toBe(0);
+  expect(snapshot.moveKey).toBe(movePublicKey());
+  expect(snapshot.table.current_game_id).toBeUndefined();
 });

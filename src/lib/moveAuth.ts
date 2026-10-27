@@ -5,11 +5,11 @@
 import type { PublicMove } from "@/engine/publicMove";
 
 /** The exact text signed: the move bound to its game and the build whose rules produced it. */
-export const moveMessage = (gameId: string, move: PublicMove, build: string) => JSON.stringify({ game: gameId, build, move });
+export const moveMessage = (gameId: string, move: PublicMove, build: string) => JSON.stringify({ kind: "meld-move:v1", game: gameId, build, move });
 
 export type VerifiedMove = { move: PublicMove; build: string };
 
-function fromBase64Url(value: string): Uint8Array<ArrayBuffer> {
+export function fromBase64Url(value: string): Uint8Array<ArrayBuffer> {
   const text = atob(value.replace(/-/g, "+").replace(/_/g, "/"));
   const bytes = new Uint8Array(new ArrayBuffer(text.length));
   for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i);
@@ -17,7 +17,7 @@ function fromBase64Url(value: string): Uint8Array<ArrayBuffer> {
 }
 
 const imported = new Map<string, Promise<CryptoKey>>();
-function verifyKey(publicKey: string): Promise<CryptoKey> {
+export function verifyKey(publicKey: string): Promise<CryptoKey> {
   let key = imported.get(publicKey);
   if (!key) {
     key = crypto.subtle.importKey("raw", fromBase64Url(publicKey), { name: "Ed25519" }, false, ["verify"]);
@@ -35,8 +35,8 @@ export async function openMove(publicKey: string, gameId: string, message: unkno
   try {
     const ok = await crypto.subtle.verify({ name: "Ed25519" }, await verifyKey(publicKey), fromBase64Url(sig), new TextEncoder().encode(message));
     if (!ok) return null;
-    const parsed = JSON.parse(message) as { game?: unknown; build?: unknown; move?: PublicMove };
-    return parsed.game === gameId && parsed.move && typeof parsed.build === "string" && parsed.build
+    const parsed = JSON.parse(message) as { kind?: unknown; game?: unknown; build?: unknown; move?: PublicMove };
+    return (parsed.kind === undefined || parsed.kind === "meld-move:v1") && parsed.game === gameId && parsed.move && typeof parsed.build === "string" && parsed.build
       ? { move: parsed.move, build: parsed.build } : null;
   } catch { return null; }
 }

@@ -55,7 +55,8 @@ Logical conflicts in SQL functions (a stale revision, a table that changed, a pa
 
 ## Realtime channels
 
-- `table:{code}` — broadcast events: `seats` (seat map changed), `trade` (offer created/answered), `game` ({ rev, move?, sig? }), `chat`.
+- `table:{code}` — broadcast events: `seats` (seat map changed), `trade` (offer created/answered), `game` ({ rev, move?, sig? }).
+- `chat:{code}` — transient `chat` events carry `{ message, sig }`.
 
 The table channel is public to anyone with the code, so a `game` event never carries hidden cards.
 `publicMove` (`src/engine/publicMove.ts`) describes a move only when no seat's private view changes
@@ -67,6 +68,16 @@ The server signs it with an Ed25519 key derived from its service-role secret
 A client applies a move only if the signature checks, it names the current game, and its revision is
 exactly one past the client's; anything else (a gap, out of order, no Ed25519 in the browser) fetches
 `/view`. The acting client takes its own move from the POST response.
+
+Table talk is sent through the server and signed, like moves. `POST /api/tables/[code]/chat`
+requires a seated user and accepts only trimmed text, from 1 to 300 characters. The server stamps
+the sender id, profile display name, message id and time. Bot lines use the same signed format.
+The table snapshot includes `moveKey`, so the seating screen can verify talk before a game starts.
+Chat signatures include a `meld-chat:v1` tag and table code; new move signatures use `meld-move:v1`.
+Clients still accept the previous move format. Clients drop unsigned or invalid talk and messages for
+another table. Browsers without Ed25519 show a short browser-update message in the chat body.
+The sender verifies the signed POST response too, for a prompt echo, and deduplicates its broadcast.
+
 Every table view, fetched or returned by an action, also carries the deploy that answered (`build`, the
 Vercel commit set as `NEXT_PUBLIC_BUILD_ID` in `next.config.ts`, "dev" elsewhere). A board whose own
 bundle is from another build applies the view, shows "Updating the table…" and reloads once per build
@@ -96,6 +107,7 @@ Supabase Auth with magic link email and Google. `profiles` row is created by a t
 | --- | --- | --- |
 | `tablesPerHour` | 10 per user | `createTable` before allocation |
 | `maxOpenTablesPerHost` | 3 unfinished tables | `createTable` count plus serialized `create_table` database check |
+| `chatMessagesPerMinute` | 20 per user | Chat route, across tables, in 60-second windows |
 | `actionsPerHour` | 600 per user | `act` before engine application and audit commit |
 | `ticksPerTablePerHour` | 2000 per table | Bot worker before database reads and decisions, including automatic melding |
 | `friendRequestsPerHour` | 20 per user | `requestFriend` before lookup and insertion |
@@ -106,7 +118,7 @@ Supabase Auth with magic link email and Google. `profiles` row is created by a t
 | `retainFinishedDays` | 30 days | Daily cron deletes finished tables whose last activity predates retention |
 | `retainGuestDays` | 30 days | Daily cron deletes anonymous auth users inactive for this long who occupy no seats and host no tables |
 
-`src/server/limits.ts` calls the service-role-only `consume_rate` function. An atomic upsert counts attempts in fixed UTC-aligned hourly windows shared by all function instances. Over-limit requests return 429 with a `Slow down:` message. Failed attempts can consume allowance. Direct authenticated profile edits and friend-request inserts are revoked so callers cannot bypass these API limits. Friend reads, responses, and removal retain their existing policies. Guests receive 403 when adding or filling computer players, enforced in HTTP and SQL.
+`src/server/limits.ts` calls the service-role-only `consume_rate` function. An atomic upsert counts attempts in fixed UTC-aligned windows shared by all function instances. Windows are hourly except for table talk's minute windows. Over-limit requests return 429 with a `Slow down:` message. Failed attempts can consume allowance. Direct authenticated profile edits and friend-request inserts are revoked so callers cannot bypass these API limits. Friend reads, responses, and removal retain their existing policies. Guests receive 403 when adding or filling computer players, enforced in HTTP and SQL.
 
 The existing `0 9 * * *` Vercel schedule calls `/api/cron/keepalive` daily at 09:00 UTC with `CRON_SECRET`. It finishes idle tables, deletes expired finished tables, prunes rate counter windows older than two hours, then prunes unused guests. A guest is pruned only when they sit at no seat, host no table, are not banned, and have been inactive for `retainGuestDays`. Activity is the newest of account creation, last sign-in, the last auth user update, and the newest refresh of any of their Supabase Auth sessions or refresh tokens. An open tab refreshes its session about hourly, so a guest who keeps playing is kept even while between tables, and Meld needs no last-seen column of its own. Table age is the latest of `tables.created_at` and `games.updated_at`, including for finished-table retention. Foreign keys cascade table deletion through games, action logs, seats, and trade offers. Profiles cascade from deleted auth users; historical trade offers also cascade to avoid blocking guest removal. The response reports `tablesFinished`, `tablesDeleted`, `rateLimitsDeleted`, and `guestsDeleted`. Database work also keeps the project active.
 
