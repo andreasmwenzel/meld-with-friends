@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { webcrypto, generateKeyPairSync, sign } from "node:crypto";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -90,9 +90,29 @@ it("does not subscribe or post for an unseated visitor", async () => {
   expect(mocks.api).not.toHaveBeenCalled();
 });
 
+function DraftHarness({ send, shown }: { send: TableChat["send"]; shown: boolean }) {
+  const [text, setText] = useState("Try again");
+  return <>
+    <output data-testid="draft">{text}</output>
+    {shown && <ChatBody chat={{ messages: [], unread: 0, me: "me", setVisible: () => {}, send }} open text={text} setText={setText} />}
+  </>;
+}
+
 it("restores the draft if the server declines a send", async () => {
-  const setText = vi.fn();
-  render(<ChatBody chat={{ messages: [], unread: 0, me: "me", setVisible: () => {}, send: () => Promise.reject(new Error("Slow down")) }} open text="Try again" setText={setText} />);
+  render(<DraftHarness send={() => Promise.reject(new Error("Slow down"))} shown />);
   fireEvent.submit(screen.getByRole("textbox").closest("form")!);
-  await vi.waitFor(() => expect(setText.mock.calls).toEqual([[""], ["Try again"]]));
+  await vi.waitFor(() => expect(screen.getByTestId("draft").textContent).toBe("Try again"));
+});
+
+it("keeps a newer draft when an earlier send fails after the chat was closed and reopened", async () => {
+  let fail!: (e: Error) => void;
+  const send = () => new Promise<void>((_, reject) => { fail = reject; });
+  const view = render(<DraftHarness send={send} shown />);
+  fireEvent.submit(screen.getByRole("textbox").closest("form")!);
+  expect(screen.getByTestId("draft").textContent).toBe("");
+  view.rerender(<DraftHarness send={send} shown={false} />);
+  view.rerender(<DraftHarness send={send} shown />);
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "Something new" } });
+  await act(async () => { fail(new Error("Slow down")); });
+  expect(screen.getByTestId("draft").textContent).toBe("Something new");
 });

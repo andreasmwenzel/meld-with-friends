@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type RefObject } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type Dispatch, type FormEvent, type RefObject, type SetStateAction } from "react";
 
 export type { ChatMessage } from "@/lib/chatAuth";
 import { CHAT_MAX_LENGTH, type ChatMessage } from "@/lib/chatAuth";
@@ -31,7 +31,7 @@ export function unreadLabel(unread: number): string {
 
 /** The talk itself: messages, quick reactions and the message field. The caller owns the draft. */
 export function ChatBody({ chat, open, text, setText, inputRef, compact = false }: {
-  chat: TableChat; open: boolean; text: string; setText: (text: string) => void; inputRef?: RefObject<HTMLInputElement | null>;
+  chat: TableChat; open: boolean; text: string; setText: Dispatch<SetStateAction<string>>; inputRef?: RefObject<HTMLInputElement | null>;
   /** short on room (a phone keyboard is up): drop the reactions so the messages keep some space */
   compact?: boolean;
 }) {
@@ -43,17 +43,14 @@ export function ChatBody({ chat, open, text, setText, inputRef, compact = false 
     if (open && list) list.scrollTop = list.scrollHeight;
   }, [open, messages.length]);
 
-  // The latest draft, for a send that fails after the player has started typing again.
-  const draft = useRef(text);
-  useEffect(() => { draft.current = text; }, [text]);
-
   const send = (e: FormEvent, reaction?: string) => {
     e.preventDefault();
     if (!reaction) setText("");
     const sent = text;
     void Promise.resolve(chat.send(reaction ?? sent)).catch(() => {
       // Put the message back only if nothing new was typed while it was on its way.
-      if (!reaction && (draft.current === "" || draft.current === sent)) setText(sent);
+      // Read the draft from its owner: this body may have unmounted (chat closed) while the send was out.
+      if (!reaction) setText((current) => (current === "" || current === sent ? sent : current));
     });
   };
 
@@ -140,7 +137,7 @@ function placeNear(button: HTMLElement): Place {
  * The board owns `open` and the draft, so both survive the button moving (onto the result sheet at hand end).
  */
 export function ChatDock({ chat, open, setOpen, text, setText }: {
-  chat: TableChat; open: boolean; setOpen: (open: boolean) => void; text: string; setText: (text: string) => void;
+  chat: TableChat; open: boolean; setOpen: (open: boolean) => void; text: string; setText: Dispatch<SetStateAction<string>>;
 }) {
   const { unread, setVisible } = chat;
   const button = useRef<HTMLButtonElement>(null);
