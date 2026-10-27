@@ -113,6 +113,11 @@ The landing page with sample tables, so the returning-player view can be checked
 `?tables=N` shows the first N sample tables (`?tables=0` is the empty lobby), `?as=guest` shows a guest's
 footer, and `?as=new` shows the signed-out welcome.
 
+## Groups: `/dev/groups`
+
+A friend's table invitation, the deal panel's group picker and the groups list with its editor, on an
+in-memory groups API, so groups can be checked without a session or a database.
+
 ## Older boards
 
 `/dev/game` (`?play`, `?meld`, `?end=1`, `?return`, `?shoot=`, `?redeal`, `?ready`) and `/dev/seating`

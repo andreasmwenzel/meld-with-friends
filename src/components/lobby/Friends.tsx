@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api, type FriendsPayload, type Profile } from "@/lib/api";
 import { usePresence } from "@/lib/realtime/usePresence";
 import { Avatar } from "@/components/site/Avatar";
+import { Groups } from "./Groups";
 
 export function Friends({ me }: { me: Profile }) {
   const [friends, setFriends] = useState<FriendsPayload | null>(null);
@@ -106,6 +107,8 @@ export function Friends({ me }: { me: Profile }) {
           </li>
         ))}
       </ul>
+
+      {friends && <Groups friends={friends.accepted.map(other)} />}
     </section>
   );
 }

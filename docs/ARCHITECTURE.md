@@ -17,6 +17,8 @@ The engine is game-agnostic at the storage layer (`games.state` is jsonb keyed b
 
 - `profiles` (id = auth.users.id, handle unique, display_name, avatar_seed, created_at)
 - `friendships` (requester, addressee, status: pending|accepted|blocked, created_at)
+- `friend_groups` (id, owner, name, created_at) and `friend_group_members` (group_id, user_id): named groups of the owner's friends. Owner-only RLS reads; writes go through the API.
+- `table_invites` (table_id, user_id, invited_by, created_at): service role only, cascades with the table
 - `tables` (id, code char(6) unique — Crockford base32 without vowels, host, game_kind, status: open|playing|finished, rules jsonb, created_at)
 - `seats` (table_id, seat int 0..3, user_id null, pk (table_id, seat)) — null user = empty chair
 - `seat_trade_offers` (id, table_id, from_user, to_user, from_seat, to_seat, status: pending|accepted|declined|cancelled, created_at)
@@ -53,6 +55,7 @@ Supabase Auth with magic link email and Google. `profiles` row is created by a t
 | `ticksPerTablePerHour` | 2000 per table | Bot worker before database reads and decisions, including automatic melding |
 | `friendRequestsPerHour` | 20 per user | `requestFriend` before lookup and insertion |
 | `profileEditsPerHour` | 30 per user | `PATCH /api/me` after body validation |
+| `groupEditsPerHour` | 60 per user | Group create, rename, delete and member changes, after body validation |
 | `replaysPerHour` | 120 per client address | `GET /api/replay/[id]` before any database read |
 | `idleTableHours` | 48 hours | Daily cron finishes open or playing tables with no recent game activity |
 | `retainFinishedDays` | 30 days | Daily cron deletes finished tables whose last activity predates retention |
@@ -122,6 +125,26 @@ Storage is bounded at roughly 31 days times 12 keys, or 372 rows after cleanup. 
 `GET /api/tables/[code]/tablemates` requires a seated human, including a seated guest. It returns the other seated humans as `[{ userId, handle, displayName, status }]`, ordered by seat. Status is `friend`, `pending_out`, `pending_in`, `none`, or `guest`. Bots and empty seats are excluded. A service-only SQL function checks seating and joins Auth's anonymous flag without exposing other Auth fields.
 
 `POST /api/friends` accepts exactly one of `{ handle }` or `{ userId }`. The latter requires a UUID. Both paths consume the same friend-request quota, resolve an existing profile, reject self requests, and require the target to have a saved account. Guests can save their account before receiving friend requests.
+
+## Groups and table invitations
+
+A saved account keeps up to 20 named groups of up to 12 members (migration 0018). Names are 1 to 40
+characters after trimming and unique per owner, case-insensitively. Members must be accepted friends:
+an insert trigger checks the friendship and the caps under a lock, and ending a friendship (delete, or
+a status change away from `accepted`) removes each person from the other's groups. Guests get 403.
+
+`GET /api/groups` returns `[{ id, name, members: [{ userId, handle, displayName, avatarSeed }] }]`,
+read under the owner's RLS. `POST /api/groups` takes `{ name, members? }` and returns 201. `PATCH
+/api/groups/[id]` takes exactly one of `{ name }` or `{ members }` (the full list; the service-only
+`set_friend_group_members` replaces it in one transaction). `DELETE /api/groups/[id]` removes the
+group. Writes share the `groupEditsPerHour` quota; a duplicate name is 409.
+
+`POST /api/tables` accepts an optional `groupId`. The group must be the host's (404 before any table is
+dealt). After the deal, the service-only `invite_group` leaves a `table_invites` row for each member who
+is still a friend and not seated, and the response adds `invited` (a count, or null if inviting failed;
+the table is dealt either way). The lobby lists invitations from `my_invites`: open tables only, ones the
+player is not seated at, newest ten, with the host's name and how many chairs are taken. Sitting down
+hides an invitation; `DELETE /api/invites/[code]` dismisses it. Group names never reach invitees.
 
 Hand recap is built by `viewFor` from the current hand's public bids, declared melds,
 completed tricks and current trick. Private JSON state keeps completed trick winners

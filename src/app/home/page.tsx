@@ -14,6 +14,8 @@ import { SignOut } from "@/components/site/SignOut";
 import { getSessionUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { listMyTables } from "@/server/myTables";
+import { listInvites } from "@/server/groups";
+import { Invitations } from "@/components/lobby/Invitations";
 import { TableList } from "@/components/lobby/TableList";
 
 export default function HomePage({ searchParams }: PageProps<"/home">) {
@@ -39,9 +41,11 @@ async function Lobby({ searchParams }: { searchParams: PageProps<"/home">["searc
   if (!user) redirect("/?next=/home");
   const sp = await searchParams;
   const supabase = await createClient();
-  const [{ data: profile }, tables] = await Promise.all([
+  const [{ data: profile }, tables, invites] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", user.id).single(),
     listMyTables(user.id),
+    // Only friends are invited, and guests have none. Invitations never keep the lobby from loading.
+    user.is_anonymous ? [] : listInvites(user.id).catch((error: unknown) => { console.error("my_invites", error); return []; }),
   ]);
 
   return (
@@ -52,9 +56,10 @@ async function Lobby({ searchParams }: { searchParams: PageProps<"/home">["searc
         </h1>
         {profile && <div className="mt-3"><ProfileEditor me={profile} /></div>}
         <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3">
-          <DealTable autoOpen={sp.new === "1"} defaults={(profile?.default_rules as RulesPatch | null) ?? null} />
+          <DealTable autoOpen={sp.new === "1"} defaults={(profile?.default_rules as RulesPatch | null) ?? null} saved={!user.is_anonymous} />
           <Link href="/practice" className="tap text-sm text-chalk-faint underline-offset-4 hover:text-chalk hover:underline">Practice hand</Link>
         </div>
+        <Invitations invites={invites} />
         <HouseRules initial={(profile?.default_rules as RulesPatch | null) ?? null} />
         <h2 className="display mt-12" style={{ fontSize: 34 }}>Your tables</h2>
         {tables.length === 0 ? (

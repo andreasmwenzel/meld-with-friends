@@ -32,6 +32,7 @@ export const limitsSchema = z.object({
   ticksPerTablePerHour: z.number().int().min(10).max(100000),
   friendRequestsPerHour: z.number().int().min(1).max(1000),
   profileEditsPerHour: z.number().int().min(1).max(1000),
+  groupEditsPerHour: z.number().int().min(1).max(1000),
   /** public replay reads per client address */
   replaysPerHour: z.number().int().min(1).max(100000),
   maxOpenTablesPerHost: z.number().int().min(1).max(50),
@@ -55,7 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   limits: {
     tablesPerHour: 10, actionsPerHour: 600, ticksPerTablePerHour: 2000, friendRequestsPerHour: 20,
-    profileEditsPerHour: 30, replaysPerHour: 120, maxOpenTablesPerHost: 3, idleTableHours: 48, leisurelyIdleDays: 60, retainFinishedDays: 30, retainGuestDays: 30,
+    profileEditsPerHour: 30, groupEditsPerHour: 60, replaysPerHour: 120, maxOpenTablesPerHost: 3, idleTableHours: 48, leisurelyIdleDays: 60, retainFinishedDays: 30, retainGuestDays: 30,
   },
 };
 
@@ -84,6 +85,7 @@ export const SETTING_FIELDS: { group: "bots" | "limits"; key: string; label: str
   { group: "limits", key: "ticksPerTablePerHour", label: "Bot moves per table per hour", help: "Caps bot compute per table." },
   { group: "limits", key: "friendRequestsPerHour", label: "Friend requests per hour", help: "Per user." },
   { group: "limits", key: "profileEditsPerHour", label: "Profile edits per hour", help: "Per user." },
+  { group: "limits", key: "groupEditsPerHour", label: "Group edits per hour", help: "Creating, renaming, removing groups and changing members, per user." },
   { group: "limits", key: "maxOpenTablesPerHost", label: "Open tables per host", help: "Unfinished tables one person may host." },
   { group: "limits", key: "idleTableHours", label: "Idle table timeout (hours)", help: "Tables with no activity for this long are finished by the daily cron." },
   { group: "limits", key: "leisurelyIdleDays", label: "Leisurely idle timeout (days)", help: "Tables at a leisurely pace are finished after this long without a move." },
