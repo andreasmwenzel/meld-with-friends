@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type Group } from "@/lib/api";
 import { useGroups } from "./groupsStore";
@@ -42,6 +42,9 @@ export function DealTable({ autoOpen = false, defaults = null, saved = false }: 
   // groups editor, so a group made or deleted while this panel is open shows up or goes away here too.
   const shared = useGroups(open && saved).groups;
   const groups = saved && shared ? shared : [];
+  // The panel sits below the player's tables, so one opened from a link (`/home?new=1`) is brought into view.
+  const panel = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (autoOpen) panel.current?.scrollIntoView?.({ block: "start" }); }, [autoOpen]);
   const [picked, setPicked] = useState<string | null>(null);
   // A pick whose group was deleted or emptied since (say, its last member unfriended) is cleared, never sent.
   const groupId = groups.some((g) => g.id === picked && g.members.length > 0) ? picked : null;
@@ -60,7 +63,7 @@ export function DealTable({ autoOpen = false, defaults = null, saved = false }: 
     return <button className="btn btn-chalk" onClick={() => setOpen(true)}>Deal a new table</button>;
   }
   return (
-    <div className="panel max-w-2xl p-4 sm:p-5">
+    <div ref={panel} className="panel max-w-2xl scroll-mt-4 p-4 sm:p-5">
       <p className="display" style={{ fontSize: 26 }}>Deal a table</p>
       <p className="mt-1 text-ink-soft">Four-hand partnership pinochle. Set the house rules; you can still change them at the table before the first deal.</p>
       <div className="mt-4"><RulesForm value={rules} onChange={setRules} /></div>

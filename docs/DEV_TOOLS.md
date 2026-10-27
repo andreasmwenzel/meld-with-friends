@@ -121,6 +121,12 @@ The landing page with sample tables, so the returning-player view can be checked
 `?tables=N` shows the first N sample tables (`?tables=0` is the empty lobby), `?as=guest` shows a guest's
 footer, and `?as=new` shows the signed-out welcome.
 
+## Lobby: `/dev/home`
+
+The signed-in lobby at `/home` with the same sample tables. `?tables=N` limits them (`?tables=0` is the
+empty lobby), `?as=guest` shows a guest's lobby and `?new=1` the open deal panel. Friends and past games
+fetch from the API, so without a session they show their loading or error notes.
+
 ## Groups: `/dev/groups`
 
 A friend's table invitation, the deal panel's group picker and the groups list with its editor, on an

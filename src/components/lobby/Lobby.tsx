@@ -1,0 +1,59 @@
+import Link from "next/link";
+import type { Profile } from "@/lib/api";
+import type { RulesPatch } from "@/components/rules/rules";
+import type { TableSummary } from "@/lib/tableStatus";
+import { KeepAccount } from "@/components/site/KeepAccount";
+import { DealTable } from "./DealTable";
+import { Friends } from "./Friends";
+import { History } from "./History";
+import { Invitations, type Invitation } from "./Invitations";
+import { ProfileEditor } from "./ProfileEditor";
+import { TableList } from "./TableList";
+
+/**
+ * The lobby: tables you sit at and tables you are invited to come first, then dealing a new one,
+ * then finished games. House rules are set in the deal panel, which remembers the last ones dealt.
+ */
+export function Lobby({ profile, guest, tables, invites, autoDeal, defaults }: {
+  profile: (Profile & { default_rules?: unknown }) | null; guest: boolean; tables: TableSummary[]; invites: Invitation[];
+  autoDeal: boolean; defaults: RulesPatch | null;
+}) {
+  const waiting = tables.filter((t) => t.yours).length;
+  return (
+    <div className="mx-auto grid max-w-6xl gap-14 px-6 pb-16 pt-4 sm:pb-20 sm:pt-6 lg:grid-cols-[1.2fr_1fr]">
+      <section>
+        <h1 className="display" style={{ fontSize: "clamp(40px, 6vw, 72px)" }}>
+          Evening, {profile?.display_name?.split(" ")[0] ?? "friend"}.
+        </h1>
+        {profile && <div className="mt-3"><ProfileEditor me={profile} /></div>}
+        <Invitations invites={invites} userId={guest || !profile ? null : profile.id} />
+        <div className="mt-8 flex items-baseline justify-between gap-4">
+          <h2 className="display" style={{ fontSize: 34 }}>Your tables</h2>
+          {tables.length > 0 && (
+            <p className="text-sm text-chalk-faint">{waiting === 0 ? "Nothing waiting on you" : `${waiting} waiting on you`}</p>
+          )}
+        </div>
+        {tables.length === 0 ? (
+          <p className="mt-3 max-w-md text-chalk-faint">
+            You are not sitting anywhere yet. Deal a table below, or join one with the code a friend sent you.
+          </p>
+        ) : (
+          <div className="mt-2"><TableList tables={tables} /></div>
+        )}
+        <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
+          <DealTable autoOpen={autoDeal} defaults={defaults} saved={!guest} />
+          <Link href="/practice" className="tap text-sm text-chalk-faint underline-offset-4 hover:text-chalk hover:underline">Practice hand</Link>
+        </div>
+        <History />
+      </section>
+      {profile && (guest ? (
+        <section>
+          <KeepAccount />
+          <p className="mt-4 max-w-md text-sm text-chalk-faint">Friends lists and the people-online view unlock once your account is saved.</p>
+        </section>
+      ) : (
+        <Friends me={profile} />
+      ))}
+    </div>
+  );
+}
