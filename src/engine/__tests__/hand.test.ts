@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { buildDeck, seededShuffle } from '../deck';
 import {
-  autoMeldSelection, DEFAULT_HAND_SORT, meldBySuit, meldCards, sortHand,
-  type HandSortOrder, type RankDirection,
+  autoMeldSelection, DEFAULT_HAND_SORT, meldBySuit, meldCards, sortHand, suitSequence,
+  type RankDirection, type SuitOrder, type TrumpPlacement,
 } from '../hand';
 import { computeMeld } from '../meld';
 import type { CardId, MeldItem, Suit } from '../types';
@@ -13,32 +13,62 @@ const overlappingMeld: CardId[] = [
 ];
 
 describe('sortHand', () => {
-  const orders: { order: HandSortOrder; expected: string[] }[] = [
-    { order: 'trump-first', expected: ['SHCD', 'SHCD', 'HSCD', 'CSHD', 'DSHC'] },
-    { order: 'suits', expected: ['SHCD', 'SHCD', 'SHCD', 'SHCD', 'SHCD'] },
-    { order: 'alternating', expected: ['SHCD', 'SHCD', 'HSDC', 'CHSD', 'DSHC'] },
+  // Suits left to right for trump none, S, H, C, D.
+  const sequences: { suits: SuitOrder; trump: TrumpPlacement; expected: string[] }[] = [
+    { suits: 'fixed', trump: 'left', expected: ['SHCD', 'SHCD', 'HSCD', 'CSHD', 'DSHC'] },
+    { suits: 'fixed', trump: 'right', expected: ['SHCD', 'HCDS', 'SCDH', 'SHDC', 'SHCD'] },
+    { suits: 'fixed', trump: 'off', expected: ['SHCD', 'SHCD', 'SHCD', 'SHCD', 'SHCD'] },
+    { suits: 'alternating', trump: 'left', expected: ['SHCD', 'SHCD', 'HSDC', 'CHSD', 'DSHC'] },
+    { suits: 'alternating', trump: 'right', expected: ['SHCD', 'HCDS', 'SDCH', 'HSDC', 'SHCD'] },
+    { suits: 'alternating', trump: 'off', expected: ['SHCD', 'SHCD', 'SHCD', 'SHCD', 'SHCD'] },
   ];
-  for (const { order, expected } of orders) {
-    it.each([null, ...suits])(`sorts ${order} with trump %s`, trump => {
-      const hand: CardId[] = ['AD0', 'AC0', 'AH0', 'AS0'];
-      const index = trump === null ? 0 : suits.indexOf(trump) + 1;
-      expect(sortHand(hand, trump, { order, ranks: 'high-first' }))
-        .toEqual([...expected[index]].map(suit => `A${suit}0`));
-    });
+  const rankOrders: Record<RankDirection, string[]> = {
+    'high-first': ['A', 'T', 'K', 'Q', 'J', '9'],
+    'low-first': ['9', 'J', 'Q', 'K', 'T', 'A'],
+  };
+  const fullHand = seededShuffle(buildDeck(), 'every combination');
+  for (const { suits: suitOrder, trump: placement, expected } of sequences) {
+    for (const ranks of ['high-first', 'low-first'] as RankDirection[]) {
+      it.each([null, ...suits])(`lays out ${suitOrder} suits, trump ${placement}, ${ranks}, with trump %s`, trump => {
+        const order = expected[trump === null ? 0 : suits.indexOf(trump) + 1];
+        const prefs = { suits: suitOrder, trump: placement, ranks };
+        expect(suitSequence(trump, prefs).join('')).toBe(order);
+        const want = [...order].flatMap(suit => rankOrders[ranks].flatMap(rank => [`${rank}${suit}0`, `${rank}${suit}1`]));
+        expect(sortHand(fullHand, trump, prefs)).toEqual(want);
+      });
+    }
   }
+
+  it.each(suits)('puts trump at the far right with Right, and the other suits in the Left order (trump %s)', trump => {
+    for (const suitOrder of ['fixed', 'alternating'] as SuitOrder[]) {
+      const left = suitSequence(trump, { suits: suitOrder, trump: 'left' });
+      const right = suitSequence(trump, { suits: suitOrder, trump: 'right' });
+      expect(right).toEqual([...left.slice(1), trump]);
+    }
+  });
+
+  it('alternates colours with alternating suits whenever trump moves', () => {
+    const red = (suit: string) => suit === 'H' || suit === 'D';
+    for (const trump of suits) {
+      for (const placement of ['left', 'right'] as TrumpPlacement[]) {
+        const seq = suitSequence(trump, { suits: 'alternating', trump: placement });
+        for (let i = 1; i < seq.length; i++) expect(red(seq[i])).not.toBe(red(seq[i - 1]));
+      }
+    }
+  });
 
   it.each<RankDirection>(['high-first', 'low-first'])('sorts every rank within each suit %s', ranks => {
     const expectedRanks = ranks === 'high-first' ? ['A', 'T', 'K', 'Q', 'J', '9'] : ['9', 'J', 'Q', 'K', 'T', 'A'];
     const expected = suits.flatMap(suit => expectedRanks.map(rank => `${rank}${suit}0`));
     const hand = seededShuffle(buildDeck().filter(card => card[2] === '0'), 'rank order');
-    expect(sortHand(hand, null, { order: 'suits', ranks })).toEqual(expected);
+    expect(sortHand(hand, null, { suits: 'fixed', trump: 'off', ranks })).toEqual(expected);
   });
 
-  it('defaults to trump-first and high-first without mutating its inputs', () => {
+  it('defaults to trump on the left and high-first without mutating its inputs', () => {
     const hand: CardId[] = ['9S0', 'KH0', 'AD0', 'TS0', 'AC0', 'AH0', 'AS0'];
     const original = [...hand];
     const prefs = { ...DEFAULT_HAND_SORT };
-    expect(prefs).toEqual({ order: 'trump-first', ranks: 'high-first' });
+    expect(prefs).toEqual({ suits: 'fixed', trump: 'left', ranks: 'high-first' });
     expect(sortHand(hand, 'H')).toEqual(['AH0', 'KH0', 'AS0', 'TS0', '9S0', 'AC0', 'AD0']);
     expect(sortHand(hand, 'H', prefs)).toEqual(sortHand(hand, 'H'));
     expect(hand).toEqual(original);
@@ -52,7 +82,7 @@ describe('sortHand', () => {
       ? ['AS0', 'AS0', 'AS1', 'AS1', 'TS0', 'TS1']
       : ['TS0', 'TS1', 'AS0', 'AS0', 'AS1', 'AS1'];
     for (let seed = 0; seed < 5; seed++) {
-      expect(sortHand(seededShuffle(hand, String(seed)), 'S', { order: 'suits', ranks })).toEqual(expected);
+      expect(sortHand(seededShuffle(hand, String(seed)), 'S', { suits: 'fixed', trump: 'off', ranks })).toEqual(expected);
     }
   });
 

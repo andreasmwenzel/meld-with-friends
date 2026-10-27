@@ -8,13 +8,14 @@ import { Game } from "@/components/table/Game";
 import type { Snapshot } from "@/components/table/types";
 import { decodeSpec, encodeSpec, labStore, parseImport, type LabSnapshot } from "./labStore";
 import { LabPanel } from "./LabPanel";
+import { createLabBroadcast, LAB_GAME } from "./labBroadcast";
 
 const CODE = "LAB000";
 const NAMES = ["South", "West", "North", "East"] as const;
 
-function snapshotFor(s: LabSnapshot, rules: GameState["rules"]): Snapshot {
+function snapshotFor(s: LabSnapshot, rules: GameState["rules"], live = false): Snapshot {
   return {
-    table: { id: "lab", code: CODE, host: `lab${s.view}`, status: "playing", rules: { ...rules } },
+    table: { id: "lab", code: CODE, host: `lab${s.view}`, status: "playing", rules: { ...rules }, ...(live ? { current_game_id: LAB_GAME } : {}) },
     seats: SEATS.map(seat => s.bots.includes(seat)
       ? { seat, user_id: null, profile: null, bot: `${NAMES[seat]} bot` }
       : { seat, user_id: `lab${seat}`, bot: null, profile: { id: `lab${seat}`, handle: NAMES[seat].toLowerCase(), display_name: NAMES[seat], avatar_seed: NAMES[seat] } }),
@@ -70,6 +71,8 @@ function exposeConsole() {
 
 export function Lab() {
   const [ready, setReady] = useState(false);
+  // ?broadcast=1: game events reach the board as on a live table (see labBroadcast.ts); ?autoplay=1 plays the hand out.
+  const [broadcast] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("broadcast") === "1" ? createLabBroadcast() : null);
   const [chrome, setChrome] = useState(true);
   const snap = useSyncExternalStore(labStore?.subscribe ?? (() => () => {}), () => labStore?.get(), () => null);
 
@@ -81,7 +84,7 @@ export function Lab() {
       const s = labStore.get();
       const path = url.slice(url.indexOf(CODE) + CODE.length);
       if (path === "" || path === "?") return Response.json(snapshotFor(s, labStore.state.rules));
-      if (path === "/view") return Response.json({ ...viewFor(labStore.state, s.view), ready: s.flags.ready });
+      if (path === "/view") return Response.json(broadcast ? broadcast.view(s.view, { ready: s.flags.ready }) : { ...viewFor(labStore.state, s.view), ready: s.flags.ready });
       if (path === "/tick") return Response.json({ acted: false, rev: labStore.state.rev, delayMs: s.speed });
       if (path === "/ready") { labStore.setFlags({ ready: [...new Set([...s.flags.ready, s.view])] }); return Response.json({ ok: true }); }
       if (path === "/pause") { labStore.setFlags({ paused: true }); return Response.json({ ok: true }); }
@@ -90,7 +93,8 @@ export function Lab() {
         try {
           const { action } = JSON.parse(String(init?.body)) as { action: Action };
           labStore.act({ ...action, seat: s.view } as Action);
-          return Response.json(viewFor(labStore.state, s.view));
+          const view = viewFor(labStore.state, s.view);
+          return Response.json(broadcast ? broadcast.withKey(view) : view);
         } catch (e) { return Response.json({ error: (e as Error).message }, { status: 422 }); }
       }
       return Response.json({ error: "Not available in the lab." }, { status: 400 });
@@ -98,9 +102,25 @@ export function Lab() {
     const qs = new URLSearchParams(window.location.search);
     setChrome(qs.get("chrome") !== "0"); // eslint-disable-line react-hooks/set-state-in-effect -- read once from the URL on mount
     exposeConsole();
-    void boot(qs).finally(() => { setReady(true); labStore.kick(); });
-    return () => { window.fetch = real; };
-  }, []);
+    // Strict Mode runs this effect twice: setup that finishes after cleanup must undo itself.
+    let disposed = false;
+    let autoplay: ReturnType<typeof setInterval> | undefined;
+    let unsubscribe: (() => void) | undefined;
+    void boot(qs).then(async () => {
+      if (!broadcast || disposed) return;
+      const stop = await broadcast.start();
+      if (disposed) { stop(); return; }
+      unsubscribe = stop;
+      if (qs.get("autoplay") !== "1") return;
+      // Every seat moves through the lab store, so each move reaches the board only as a broadcast.
+      labStore.setRunning(false);
+      autoplay = setInterval(() => {
+        const phase = labStore.state.phase;
+        if (phase === "hand_over" || phase === "game_over" || !labStore.step()) clearInterval(autoplay);
+      }, labStore.get().speed);
+    }).finally(() => { if (disposed) return; setReady(true); labStore.kick(); });
+    return () => { disposed = true; window.fetch = real; clearInterval(autoplay); unsubscribe?.(); };
+  }, [broadcast]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -118,12 +138,14 @@ export function Lab() {
 
   if (!ready || !snap) return <div className="min-h-[60vh]" />;
   const state = labStore.state;
-  const table = snapshotFor(snap, state.rules);
+  const table = snapshotFor(snap, state.rules, !!broadcast);
   const me = table.seats[snap.view].profile!;
   return (
     <div className={`flex h-dvh flex-col overflow-hidden ${chrome ? "lg:pr-[360px]" : ""}`}>
-      <Game key={`${snap.epoch}:${snap.view}:${snap.bots.join("")}`} local={snap.flags.local} code={CODE} me={me} snap={table} rev={state.rev}
+      <Game key={`${snap.epoch}:${snap.view}:${snap.bots.join("")}`} local={snap.flags.local} code={CODE} me={me} snap={table}
+        {...broadcast ? { feed: broadcast.feed, inspect: broadcast.inspect } : { rev: state.rev }}
         connection={snap.flags.reconnecting ? "reconnecting" : "ok"} onTableChange={() => {}} />
+      {broadcast && <pre id="lab-broadcast" hidden />}
       {chrome ? <LabPanel snap={snap} state={state} /> : <style>{"nextjs-portal{display:none}"}</style>}
     </div>
   );

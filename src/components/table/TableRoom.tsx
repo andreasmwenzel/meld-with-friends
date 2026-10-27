@@ -9,6 +9,7 @@ import { Wordmark } from "@/components/site/Wordmark";
 import { Seating } from "./Seating";
 import { Game } from "./Game";
 import { Chat, useTableChat } from "./Chat";
+import { createGameFeed, routeTableEvent } from "./viewSync";
 import type { Snapshot } from "./types";
 
 export function TableRoom({ code, me, guest = false }: { code: string; me: Profile; guest?: boolean }) {
@@ -16,7 +17,7 @@ export function TableRoom({ code, me, guest = false }: { code: string; me: Profi
   const [error, setError] = useState<string | null>(null);
   const [degraded, setDegraded] = useState(false);
   const requests = useRef({ issued: 0, applied: 0 });
-  const [gameRev, setGameRev] = useState(0);
+  const [feed] = useState(createGameFeed);
   usePresence({ userId: me.id, handle: me.handle, tableCode: code });
   const [seated, setSeated] = useState(false);
   const chat = useTableChat(code, me, seated);
@@ -38,12 +39,11 @@ export function TableRoom({ code, me, guest = false }: { code: string; me: Profi
   // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch, state is set after await
   useEffect(() => { void refresh(); }, [refresh]);
 
-  const onEvent = useCallback((ev: TableEvent) => {
-    if (ev.type === "game") { setGameRev(current => Math.max(current, ev.rev)); void refresh(); }
-    else void refresh();
-  }, [refresh]);
+  // The tab's one subscription to the table; see routeTableEvent for who fetches what.
+  const onEvent = useCallback((ev: TableEvent) => routeTableEvent(ev, feed, () => void refresh()), [refresh, feed]);
   const { status } = useTableChannel(code, onEvent);
-  useDisconnectedPolling(status, refresh);
+  const poll = useCallback(async () => { feed.emit({ type: "resync" }); await refresh(); }, [refresh, feed]);
+  useDisconnectedPolling(status, poll);
   const connection = degraded || status !== "subscribed" ? "reconnecting" : "ok";
 
   if (error) {
@@ -65,7 +65,7 @@ export function TableRoom({ code, me, guest = false }: { code: string; me: Profi
   if (atBoard) {
     return (
       <main className="flex h-dvh flex-col overflow-hidden">
-        <Game connection={connection} code={code} me={me} snap={snap} rev={gameRev} onTableChange={refresh}
+        <Game key={snap.table.current_game_id ?? ""} connection={connection} code={code} me={me} snap={snap} feed={feed} onTableChange={refresh}
           chat={snap.mySeat !== null ? { unread: chat.unread, render: (visible) => <Chat chat={chat} embedded={{ visible }} /> } : undefined} />
       </main>
     );

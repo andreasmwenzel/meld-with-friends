@@ -10,8 +10,8 @@ The engine is game-agnostic at the storage layer (`games.state` is jsonb keyed b
 | --- | --- | --- |
 | Rules engine | `src/engine/` | Pure TS, deterministic, no I/O. `applyAction(state, action)` returns new state or throws `IllegalAction`. `viewFor(state, seat)` returns a `PlayerView` with other hands hidden. Unit tested with vitest. |
 | Data | `supabase/migrations/*.sql` | Schema + RLS. Hidden information (full `GameState`) is only readable by the service role. Clients never read `games.state` directly. |
-| Server | `src/app/api/**/route.ts` and `src/server/` | Route handlers run with the service role after verifying the user's session. They validate, call the engine, write state, then broadcast `{ rev }` on the table's Realtime channel. |
-| Client | `src/app/**`, `src/components/**` | Subscribes to the Realtime channel; on any message, refetches its own `PlayerView` from `/api/tables/[code]/view`. Presence on a global `lobby` channel gives "friends online / at a table". |
+| Server | `src/app/api/**/route.ts` and `src/server/` | Route handlers run with the service role after verifying the user's session. They validate, call the engine, write state, then broadcast `{ rev }` on the table's Realtime channel; a move that changes nothing private also carries its public part, signed (see Realtime channels). |
+| Client | `src/app/**`, `src/components/**` | `TableRoom` holds the tab's one subscription to the table channel. Seat, trade and control events refetch the table snapshot; seat events (ready checks among them) also make the board refetch its view once; `game` events go to the board, which applies a signed public move for the next revision locally and otherwise refetches its own `PlayerView` from `/api/tables/[code]/view` at most once per event (none for its own move, whose POST response carries the view). Events arriving together share one fetch, and so does the seat event echoing this player's own ready check (see `src/components/table/viewSync.ts`). Presence on a global `lobby` channel gives "friends online / at a table". |
 
 ## Data model (Postgres)
 
@@ -32,7 +32,18 @@ Logical conflicts in SQL functions (a stale revision, a table that changed, a pa
 
 ## Realtime channels
 
-- `table:{code}` — broadcast events: `seats` (seat map changed), `trade` (offer created/answered), `game` ({ rev }), `chat`.
+- `table:{code}` — broadcast events: `seats` (seat map changed), `trade` (offer created/answered), `game` ({ rev, move?, sig? }), `chat`.
+
+The table channel is public to anyone with the code, so a `game` event never carries hidden cards.
+`publicMove` (`src/engine/publicMove.ts`) describes a move only when no seat's private view changes
+beyond the mover losing the card it played: bids, trump, meld declarations and confirmations, and card
+plays within a hand. Deals, passing, the end of a hand and a new game send the bare revision. The
+description is the move's public fields plus the view fields it changed, identical for every seat.
+The server signs it with an Ed25519 key derived from its service-role secret
+(`src/server/moveSigning.ts`), bound to the game id; each view carries the public key (`moveKey`).
+A client applies a move only if the signature checks, it names the current game, and its revision is
+exactly one past the client's; anything else (a gap, out of order, no Ed25519 in the browser) fetches
+`/view`. The acting client takes its own move from the POST response.
 - `presence:lobby` — presence keyed by user id with `{ handle, tableCode | null }`.
 - `invites:{userId}` — broadcast event `invites` with an empty payload when a friend deals that player in; the lobby refetches `GET /api/invites` under its own session. Public like the table channels, so it carries nothing beyond the fact of a nudge.
 
