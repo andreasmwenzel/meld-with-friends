@@ -158,6 +158,32 @@ it("drops a cached member and an emptied pick once that friend is removed", asyn
   expect(sent.at(-1)).toEqual({ url: "/api/tables", method: "POST", body: { gameKind: "pinochle", rules: {} } });
 });
 
+it("drops a removed friend from an open editor's selection, its counter and its Save", async () => {
+  const me: Profile = { id: "me", handle: "me", display_name: "Me", avatar_seed: "" };
+  let accepted = friends.slice(0, 13).map((f) => ({ id: `fs-${f.id}`, requester: "me", addressee: f.id, status: "accepted", requester_profile: me, addressee_profile: f }));
+  groups = [{ ...tuesday, members: friends.slice(0, 12).map((f) => ({ userId: f.id, handle: f.handle, displayName: f.display_name, avatarSeed: "" })) }];
+  const base = globalThis.fetch;
+  globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === "/api/friends/fs-f1" && init?.method === "DELETE") {
+      accepted = accepted.filter((f) => f.addressee !== "f1"); groups = groups.map((g) => ({ ...g, members: g.members.filter((m) => m.userId !== "f1") }));
+    }
+    if (url === "/api/friends") return new Response(JSON.stringify({ accepted, incoming: [], outgoing: [] }), { status: 200 });
+    return base(url, init);
+  }) as typeof fetch;
+  render(<Friends me={me} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Edit Tuesday" }));
+  expect(screen.getByText("12 of 12")).toBeTruthy();
+  expect((screen.getByRole("button", { name: "Player13" }) as HTMLButtonElement).disabled).toBe(true);
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Remove Player1 Surname" })); });
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Player1" })).toBeNull());
+  expect(screen.getByText("11 of 12")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Player13" }));
+  expect(screen.getByText("12 of 12")).toBeTruthy();
+  sent = [];
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save" })); });
+  expect(sent).toEqual([{ url: "/api/groups/g1", method: "PATCH", body: { members: [...friends.slice(1, 12).map((f) => f.id), "f13"] } }]);
+});
+
 describe("invitations", () => {
   const invite = (code: string, seated = 1): Invitation => ({ code, hostName: "Margaret", hostSeed: "0", seated, invitedAt: "2026-10-26T19:00:00Z" });
   const deliver = async (topic: string, event: string) => {

@@ -73,5 +73,17 @@ psql -c "begin; delete from public.friendships where requester='$(u 8)'; select 
 sleep 0.5; psql -c "select public.deal_for_group('BCDFGM','$(u 9)','pinochle','{}','$R')" >/dev/null; wait
 expect "unfriend, then deal concurrently: nobody is invited" "$(psql -c "select count(*) from public.table_invites i join public.tables t on t.id=i.table_id where t.code='BCDFGM'")" 0
 expect "unfriend, then deal concurrently: no invitation outlives the friendship" "$(stray)" 0
+# Nobody joins a group under a deal. Host 6's group starts with 2. A held lock on that friendship pauses
+# the deal; meanwhile 3 is added, the hold ends, and 3 is unfriended before the deal commits. The add
+# must wait for the deal, so the deal invites only 2 and the add is then refused.
+psql -c "insert into public.friendships(requester,addressee,status) values('$(u 6)','$(u 2)','accepted'),('$(u 6)','$(u 3)','accepted')"
+J=$(psql -c "select public.create_friend_group('$(u 6)','Join',array['$(u 2)']::uuid[])")
+psql -c "begin; select 1 from public.friendships where requester='$(u 6)' and addressee='$(u 2)' for update; select pg_sleep(2); commit;" >/dev/null &
+sleep 0.5; psql -c "begin; select public.deal_for_group('BCDFGN','$(u 6)','pinochle','{}','$J'); select pg_sleep(2); commit;" >/dev/null &
+sleep 0.5; psql -c "select public.set_friend_group_members('$J','$(u 6)',array['$(u 2)','$(u 3)']::uuid[])" >/dev/null 2>&1 &
+sleep 2; psql -c "delete from public.friendships where requester='$(u 6)' and addressee='$(u 3)'"; wait
+expect "deal, add, unfriend concurrently: no invitation outlives the friendship" "$(stray)" 0
+expect "deal, add, unfriend concurrently: only the member present at the deal is invited" "$(psql -c "select string_agg(user_id::text,',') from public.table_invites i join public.tables t on t.id=i.table_id where t.code='BCDFGN'")" "$(u 2)"
+expect "deal, add, unfriend concurrently: no membership outlives the friendship" "$(orphans)" 0
 expect "unfriending withdraws invitations" "$(psql -c "select count(*) from public.table_invites where user_id in ('$(u 4)','$(u 5)')")" 0
 echo "All friend group database checks passed."

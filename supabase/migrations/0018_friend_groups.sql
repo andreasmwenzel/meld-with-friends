@@ -107,30 +107,30 @@ begin
 end $$;
 
 -- Invites the members of the host's group who are still friends and not already seated. Returns who was invited.
--- Same invariant as membership: an invitation exists only between accepted friends. The friendship rows
--- are share-locked first, in id order so two deals never lock in opposite orders. An unfriend that comes
--- later waits for this deal to commit and its trigger then withdraws the invitation; one that came first
--- has changed the row, so the insert below, a later statement, no longer sees the friendship.
+-- Same invariant as membership: an invitation exists only between accepted friends. The group row is
+-- locked first, as every member insert locks it (set_friend_group_members and the member trigger), so
+-- nobody joins the group under this deal; an unfriend can still remove a member, which only shrinks it.
+-- Then the members' friendship rows are share-locked, in id order so two deals never lock in opposite
+-- orders, and only the members whose rows were locked are invited. An unfriend that comes later waits
+-- for this deal to commit and its trigger then withdraws the invitation; one that came first has
+-- changed or deleted the row, so the lock skips it.
 create function public.invite_group(p_table uuid,p_group uuid,p_user uuid) returns uuid[]
 language plpgsql security definer set search_path='' as $$
-declare invited uuid[];
+declare members uuid[]; invited uuid[];
 begin
  if not exists(select 1 from public.tables where id=p_table and host=p_user and status='open') then
   raise exception 'Only the host of an open table can invite' using errcode='42501';
  end if;
- if not exists(select 1 from public.friend_groups where id=p_group and owner=p_user) then
-  raise exception 'Group not found' using errcode='P0002';
- end if;
- perform 1 from public.friendships f join public.friend_group_members m on m.group_id=p_group
-  and ((f.requester=p_user and f.addressee=m.user_id) or (f.addressee=p_user and f.requester=m.user_id))
-  where f.status='accepted' order by f.id for share of f;
+ perform 1 from public.friend_groups where id=p_group and owner=p_user for update;
+ if not found then raise exception 'Group not found' using errcode='P0002'; end if;
+ select coalesce(array_agg(l.user_id),'{}') into members from (
+  select m.user_id from public.friendships f join public.friend_group_members m on m.group_id=p_group
+   and ((f.requester=p_user and f.addressee=m.user_id) or (f.addressee=p_user and f.requester=m.user_id))
+  where f.status='accepted' order by f.id for share of f) l;
  with sent as (
   insert into public.table_invites(table_id,user_id,invited_by)
-  select p_table,m.user_id,p_user from public.friend_group_members m
-  where m.group_id=p_group
-   and not exists(select 1 from public.seats s where s.table_id=p_table and s.user_id=m.user_id)
-   and exists(select 1 from public.friendships f where f.status='accepted'
-    and ((f.requester=p_user and f.addressee=m.user_id) or (f.addressee=p_user and f.requester=m.user_id)))
+  select p_table,u,p_user from unnest(members) u
+  where not exists(select 1 from public.seats s where s.table_id=p_table and s.user_id=u)
   on conflict do nothing returning user_id)
  select coalesce(array_agg(user_id),'{}') into invited from sent;
  return invited;

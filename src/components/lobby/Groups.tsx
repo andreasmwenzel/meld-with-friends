@@ -34,7 +34,14 @@ function GroupEditor({ group, friends, onSaved, onClose }: {
   const [picked, setPicked] = useState<string[]>(() => (group?.members ?? []).map((m) => m.userId).filter((id) => friends.some((f) => f.id === id)));
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  // Only friends can be members; the server drops anyone whose friendship ends.
+  // Only friends can be members; the server drops anyone whose friendship ends. When the friends reload
+  // (an unfriend while this is open), the selection drops them too, so they neither count nor get saved.
+  const friendIds = friends.map((f) => f.id).join();
+  const [seenFriends, setSeenFriends] = useState(friendIds);
+  if (seenFriends !== friendIds) {
+    setSeenFriends(friendIds);
+    setPicked((p) => p.filter((id) => friends.some((f) => f.id === id)));
+  }
   const toggle = (id: string) => setPicked((p) => p.includes(id) ? p.filter((x) => x !== id) : p.length >= MAX_GROUP_MEMBERS ? p : [...p, id]);
   const full = picked.length >= MAX_GROUP_MEMBERS;
 

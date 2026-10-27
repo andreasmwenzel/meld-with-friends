@@ -148,10 +148,13 @@ trigger reads the friendship row `for share`; ending a friendship (delete, or a 
 `accepted`) updates or deletes that row, so the two serialize. If the insert locks first, the unfriend
 waits and its trigger then deletes the new membership; if the unfriend locks first, the insert re-reads
 the changed row and is refused. The same trigger withdraws any invitation either person left the other.
-Invitations hold the same invariant: `invite_group` share-locks the host's accepted friendships with the
-group's members, in friendship id order, before inserting. An unfriend after that waits for the deal to
-commit and then withdraws the invitation; one before it leaves no friendship for the insert to see.
-`scripts/test-groups-db.sh` races both orders of each pair in a throwaway local PostgreSQL container.
+Invitations hold the same invariant: `invite_group` first locks the group row `for update`, which every
+member insert also takes, so nobody joins the group under a deal. It then share-locks the host's
+accepted friendships with the group's members, in friendship id order, and invites only the members
+whose rows it locked. An unfriend after that waits for the deal to commit and then withdraws the
+invitation; one before it leaves no friendship to lock. `scripts/test-groups-db.sh` races both orders
+of each pair, and a deal paused mid-lock while a member is added and then unfriended, in a throwaway
+local PostgreSQL container.
 
 `GET /api/groups` returns `[{ id, name, members: [{ userId, handle, displayName, avatarSeed }] }]`,
 read under the owner's RLS. `POST /api/groups` takes `{ name, members? }` and returns 201; the

@@ -208,7 +208,12 @@ describe("migration 0018", () => {
     expect(drop).toContain("delete from public.friend_group_members");
     expect(drop).toContain("delete from public.table_invites");
     const invite = sql.slice(sql.indexOf("create function public.invite_group("), sql.indexOf("create function public.deal_for_group("));
-    expect(invite).toMatch(/order by f\.id for share of f;[\s\S]*insert into public\.table_invites/);
+    // The group lock comes before the member read, so nobody joins between the friendship locks and the insert.
+    const [groupLock, memberRead] = ["from public.friend_groups where id=p_group and owner=p_user for update", "join public.friend_group_members m"].map(s => invite.indexOf(s));
+    expect(groupLock).toBeGreaterThan(0);
+    expect(memberRead).toBeGreaterThan(groupLock);
+    expect(invite).toMatch(/order by f\.id for share of f\) l;[\s\S]*insert into public\.table_invites[\s\S]*from unnest\(members\)/);
+    expect(invite.match(/friend_group_members/g)).toHaveLength(1);
   });
   it("creates a group with its members, and deals with the host seated before anyone is invited, in one function each", () => {
     const create = sql.slice(sql.indexOf("create function public.create_friend_group("), sql.indexOf("create function public.invite_group("));
