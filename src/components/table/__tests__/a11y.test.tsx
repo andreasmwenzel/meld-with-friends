@@ -22,9 +22,11 @@ globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {
 /** The view the fake server hands out, and the actions sent to it. */
 let serving: PlayerView;
 let sent: { type: string; card?: CardId }[] = [];
+/** While set, a move waits for this before the fake server answers. */
+let hold: Promise<void> | null = null;
 
 beforeEach(() => {
-  sent = [];
+  sent = []; hold = null;
   // Manual meld, so the meld presets hold still; a second press plays.
   localStorage.setItem("meld.cards", JSON.stringify({ confirmPlay: true, motion: "off", autoMeld: false }));
   window.matchMedia = ((query: string) => ({ matches: query.includes("coarse") || query.includes("max-width"), media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} })) as unknown as typeof window.matchMedia;
@@ -40,25 +42,34 @@ function snapFor(state: GameState): Snapshot {
   } as unknown as Snapshot;
 }
 
-/** Sits you at seat 0 of a lab position and waits for the hand. Computers never move: the tick says nothing happened. */
-async function table(preset: string) {
+/** Sits you at seat 0 of a lab position and waits for the hand (or `ready`). Moves you send are applied; computers never
+ *  move: the tick says nothing happened. Anything in `around` sits on the page beside the table, as a site header would. */
+async function table(preset: string, { ready = "[data-hand-card]", around = null as React.ReactNode } = {}) {
   const { state } = buildScenario(PRESETS.find((p) => p.id === preset)!.spec);
+  let current = state;
   serving = viewFor(state, 0);
   const snap = snapFor(state);
   window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    if (url.endsWith("/act")) sent.push((JSON.parse(String(init?.body)) as { action: { type: string; card?: CardId } }).action);
+    if (url.endsWith("/act")) {
+      const action = (JSON.parse(String(init?.body)) as { action: Action }).action;
+      sent.push(action);
+      if (hold) await hold;
+      current = applyAction(current, action);
+      serving = viewFor(current, 0);
+    }
     if (url.endsWith(`/api/tables/${CODE}`)) return Response.json(snap);
     if (url.endsWith("/tick")) return Response.json({ acted: false, rev: serving.rev });
     return Response.json({ ...serving, ready: [] });
   }) as typeof fetch;
-  const ui = render(<Game code={CODE} me={me} snap={snap} rev={state.rev} onTableChange={() => {}} />);
-  await vi.waitFor(() => { if (!document.querySelector("[data-hand-card]")) throw new Error("hand not rendered"); });
+  const ui = render(<>{around}<Game code={CODE} me={me} snap={snap} rev={state.rev} onTableChange={() => {}} /></>);
+  await vi.waitFor(() => { if (!document.querySelector(ready)) throw new Error("table not rendered"); });
   /** Moves the table on by `actions` and lets it fetch the new view, as a broadcast revision would. */
   const advance = async (...actions: Action[]) => {
     const next = actions.reduce(applyAction, state);
     serving = viewFor(next, 0);
-    ui.rerender(<Game code={CODE} me={me} snap={snap} rev={next.rev} onTableChange={() => {}} />);
+    current = next;
+    ui.rerender(<>{around}<Game code={CODE} me={me} snap={snap} rev={next.rev} onTableChange={() => {}} /></>);
     await vi.waitFor(() => { if (!announced()) throw new Error("nothing announced"); });
   };
   return { state, advance };
@@ -151,9 +162,101 @@ describe("keyboard play", () => {
     await enter(card);
     expect(card.getAttribute("aria-pressed")).toBe("true");
     expect(document.querySelector("p[role=status]")?.textContent).toMatch(/press again to play$/);
+    // The server holds the move: pressing again meanwhile sends nothing more and keeps the card on its way.
+    let answer!: () => void;
+    hold = new Promise((resolve) => { answer = resolve; });
+    const played = card.getAttribute("data-hand-card")!;
     await enter(card);
     await vi.waitFor(() => expect(sent.filter((a) => a.type === "play_card")).toHaveLength(1));
-    expect(sent[0].card).toBe(card.getAttribute("data-hand-card"));
+    expect(sent[0].card).toBe(played);
+    await enter(card);
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(sent).toHaveLength(1);
+    expect(card.isConnected).toBe(true);
+    expect(card.getAttribute("aria-pressed")).toBe("true");
+    // Once it lands the card leaves the hand, and focus stays in the hand rather than dropping to the page.
+    await act(async () => { answer(); });
+    await vi.waitFor(() => expect(document.querySelector(`[data-hand-card="${played}"]`)).toBeNull());
+    await vi.waitFor(() => expect(hand().contains(document.activeElement)).toBe(true));
+    expect(sent).toHaveLength(1);
+  });
+
+  it("arrow keys with Alt, Ctrl or Meta held, or already handled, are left to the browser", async () => {
+    await table("play-lead");
+    act(() => { cards()[1].focus(); });
+    const at = document.activeElement!;
+    for (const init of [{ key: "ArrowLeft", altKey: true }, { key: "ArrowRight", altKey: true }, { key: "Home", ctrlKey: true }, { key: "End", metaKey: true }]) {
+      expect(fireEvent.keyDown(at, init)).toBe(true);
+      expect(document.activeElement).toBe(at);
+    }
+    // Something earlier claimed the key: the hand leaves it alone.
+    const handled = new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true });
+    handled.preventDefault();
+    act(() => { at.dispatchEvent(handled); });
+    expect(document.activeElement).toBe(at);
+    fireEvent.keyDown(at, { key: "End" });
+    expect(document.activeElement).toBe(cards().at(-1));
+  });
+});
+
+/** Tab as the browser sends it: whoever handles the keydown may move focus; otherwise focus moves on in document order. */
+function pressTab(shift = false) {
+  const from = document.activeElement ?? document.body;
+  let moved = false;
+  act(() => { moved = !fireEvent.keyDown(from, { key: "Tab", shiftKey: shift }); });
+  if (!moved) {
+    if (shift) throw new Error("Shift+Tab fell through to the page");
+    tab();
+  }
+  return document.activeElement as HTMLElement;
+}
+
+describe("the result sheet", () => {
+  const sheet = () => screen.getByRole("dialog");
+  const open = () => table("hand-made", { ready: "[role=dialog]", around: <button type="button">Page header</button> });
+
+  it("keeps Tab inside, wrapping at both ends, with the page behind it out of reach", async () => {
+    await open();
+    await vi.waitFor(() => expect(document.activeElement).toBe(sheet()));
+    expect(screen.getByRole("button", { name: "Page header", hidden: true }).closest("[inert]")).not.toBeNull();
+    expect(document.querySelector("[data-announcer]")?.closest("[inert]")).toBeNull();
+    const first = pressTab();
+    expect(sheet().contains(first)).toBe(true);
+    // Shift+Tab off the first stop goes round to the last, Tab off the last back to the first.
+    const last = pressTab(true);
+    expect(last).not.toBe(first);
+    expect(sheet().contains(last)).toBe(true);
+    expect(pressTab()).toBe(first);
+    // Walking forward through every stop never leaves the sheet.
+    let at = first;
+    for (let i = 0; i < 10; i++) { at = pressTab(); expect(sheet().contains(at)).toBe(true); }
+  });
+
+  it("Escape looks at the table, Back returns, and Tab reaches Deal from there; the page comes back afterwards", async () => {
+    await open();
+    await vi.waitFor(() => expect(document.activeElement).toBe(sheet()));
+    expect(document.body.style.overflow).toBe("hidden");
+    act(() => { fireEvent.keyDown(document.activeElement!, { key: "Escape" }); });
+    const back = screen.getByRole("button", { name: "Back to the result" });
+    expect(document.activeElement).toBe(back);
+    // Looking at the table lets go of the page.
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("button", { name: "Page header" }).closest("[inert]")).toBeNull();
+    expect(document.body.style.overflow).toBe("");
+    await enter(back);
+    const look = screen.getByRole("button", { name: "Look at the table" });
+    expect(document.activeElement).toBe(look);
+    expect(screen.getByRole("button", { name: "Page header", hidden: true }).closest("[inert]")).not.toBeNull();
+    // Look is near the end of the sheet; Tab wraps round to the top and on to Deal.
+    let at: HTMLElement = look;
+    const deal = screen.getByRole("button", { name: "Deal the next hand" });
+    for (let i = 0; i < 6 && at !== deal; i++) at = pressTab();
+    expect(document.activeElement).toBe(deal);
+    await enter(deal);
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(sent.at(-1)?.type).toBe("next_hand");
+    expect(screen.getByRole("button", { name: "Page header" }).closest("[inert]")).toBeNull();
+    expect(document.body.style.overflow).toBe("");
   });
 });
 

@@ -674,6 +674,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const tabStop = rove && hand.includes(rove) ? rove
     : hand.find((c) => view.phase === "playing" ? view.legal.playableCards.includes(c) : picking) ?? hand[0];
   const moveInHand = (e: React.KeyboardEvent) => {
+    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
     const cards = [...(handRef.current?.querySelectorAll<HTMLButtonElement>("[data-hand-card]") ?? [])];
     const i = cards.indexOf(document.activeElement as HTMLButtonElement);
     if (i < 0) return;
@@ -710,7 +711,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           </button>
         </div>
         {paused && (
-          <div role="status" className="board-banner panel mx-2 mb-1 flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5 sm:mx-auto sm:w-[min(100%-1rem,760px)]">
+          <div className="board-banner panel mx-2 mb-1 flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5 sm:mx-auto sm:w-[min(100%-1rem,760px)]">
             <p className="text-sm">
               {canResume
                 ? <>Paused by {paused.by === me.id ? "you" : paused.name}{paused.reason ? `: ${paused.reason}` : ""}.</>

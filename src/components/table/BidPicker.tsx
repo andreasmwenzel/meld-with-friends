@@ -27,6 +27,7 @@ export function BidPicker({ min, step, busy, onBid, pass, shoot, misdeal = null 
   };
   // Arrow keys walk the grid of amounts: sideways by one, up and down by a row.
   const walk = (e: React.KeyboardEvent) => {
+    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
     const buttons = [...(grid.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
     const i = buttons.indexOf(document.activeElement as HTMLButtonElement);
     const by = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: 3, ArrowUp: -3 }[e.key];

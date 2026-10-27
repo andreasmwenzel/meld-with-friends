@@ -24,6 +24,55 @@ function headline(view: PlayerView, nameOf: (s: SeatIndex) => string) {
   return h.wentSet ? `${who} went set on ${h.bid}.` : `${who} made ${h.bid}${verb("", "")} in ${SUIT_GLYPH[h.trump]}.`;
 }
 
+const FOCUSABLE = "button, a[href], input, select, textarea, [tabindex]";
+const LIVE = "[data-announcer]";
+
+/** Makes everything on the page but `el` (and the table's live region, so moves are still heard) inert.
+ *  Returns the undo. Elements that were inert already are left as they were. */
+function isolate(el: HTMLElement) {
+  const touched: Element[] = [];
+  const walk = (parent: Element) => {
+    for (const child of parent.children) {
+      if (child === el || child.matches(LIVE)) continue;
+      if (child.contains(el) || child.querySelector(LIVE)) walk(child);
+      else if (!child.hasAttribute("inert")) { child.setAttribute("inert", ""); touched.push(child); }
+    }
+  };
+  walk(document.body);
+  return () => touched.forEach((child) => child.removeAttribute("inert"));
+}
+
+/** While `active`: the rest of the page is out of reach, Tab wraps inside `el`, Escape runs `onEscape`, the page holds still. */
+function useModal(ref: React.RefObject<HTMLElement | null>, active: boolean, onEscape: () => void) {
+  const escape = useRef(onEscape);
+  useEffect(() => { escape.current = onEscape; });
+  useEffect(() => {
+    const el = ref.current;
+    if (!active || !el) return;
+    const restore = isolate(el);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      if (e.key === "Escape") { e.preventDefault(); escape.current(); return; }
+      if (e.key !== "Tab") return;
+      const stops = [...el.querySelectorAll<HTMLElement>(FOCUSABLE)]
+        .filter((s) => s.tabIndex >= 0 && !(s as HTMLButtonElement).disabled && !s.closest("[inert], [hidden]"));
+      if (!stops.length) { e.preventDefault(); el.focus(); return; }
+      const at = document.activeElement as HTMLElement | null;
+      const inside = !!at && el.contains(at) && at !== el;
+      if (e.shiftKey && (!inside || at === stops[0])) { e.preventDefault(); stops.at(-1)!.focus(); }
+      else if (!e.shiftKey && (!inside || at === stops.at(-1))) { e.preventDefault(); stops[0].focus(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = overflow;
+      restore();
+    };
+  }, [ref, active]);
+}
+
 /** Bottom sheet (phones) or centred card (desktop) over the table once a hand ends. */
 export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, readyInfo, which, setWhich, peek, setPeek, countdown, local = false, replayHref = null }: {
   local?: boolean;
@@ -50,6 +99,8 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
   }, [peek]);
   // A button that goes away under focus ("Ready for the next hand") leaves it on the sheet, not the page.
   useEffect(() => { if (!peek && (!document.activeElement || document.activeElement === document.body)) sheet.current?.focus(); });
+  // Modal while it is up; looking at the table lets go, and Escape is the way to look.
+  useModal(sheet, !peek, () => setPeek(true));
   const myTeam = teamOf(view.seat);
   const them: Team = myTeam === "red" ? "blue" : "red";
   const cols: Team[] = [myTeam, them];
