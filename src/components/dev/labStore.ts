@@ -221,9 +221,9 @@ export function parseImport(data: unknown): { base: GameState; actions: Action[]
       try {
         const start = newGame(state.seed, state.rules, dealer);
         // Older logs lack the bidder's shoot decision after the pass; replayLog fills it in.
-        const played = replayLog(start, actions);
+        const played = replayLog(start, actions, state);
         const end = played.states.at(-1)!;
-        if (end.rev - (played.actions.length - actions.length) === state.rev && canonical(end.players) === canonical(state.players) && canonical(end.score) === canonical(state.score)) {
+        if (end.rev - (played.actions.length - actions.length) === state.rev && end.phase === state.phase && canonical(end.players) === canonical(state.players) && canonical(end.score) === canonical(state.score)) {
           return { base: start, actions: played.actions, note: `Rebuilt from seed with ${played.actions.length} actions` };
         }
       } catch { /* try the next dealer */ }

@@ -152,4 +152,27 @@ describe('replays with the decision', () => {
     expect(rebuilt.actions).toEqual(actions);
     expect(rebuilt.states.at(-1)!.score).toEqual(final.score);
   });
+  it.each([4, 0])('replays an older log that ends on the pass into meld (passCount %i)', passCount => {
+    // Logged before the decision existed: the last action took the hand straight to meld.
+    let state = newGame('after-pass', { scoring: 'modern', shoot: 'points', shootPoints: 100, passCount }, 0);
+    const older: Action[] = [{ type: 'bid', seat: 1, amount: 25 }, ...[2, 3, 0].map(seat => ({ type: 'pass_bid', seat }) as Action), { type: 'declare_trump', seat: 1, suit: 'S' }];
+    for (const action of older) state = applyAction(state, action);
+    if (passCount) {
+      for (const seat of [3, 1] as const) {
+        const action: Action = { type: 'pass_cards', seat, cards: state.players[seat].hand.slice(0, passCount) };
+        state = applyAction(state, action);
+        older.push(action);
+      }
+    }
+    expect(state.phase).toBe('deciding_shoot');
+    const decline: Action = { type: 'decline_shoot', seat: 1 };
+    const melding = applyAction(state, decline);
+    // The stored game is in meld, one revision behind the replay because it never took the decision.
+    const rebuilt = rebuildFromLog({ ...melding, rev: melding.rev - 1 }, older)!;
+    expect(rebuilt).not.toBeNull();
+    expect(rebuilt.actions).toEqual([...older, decline]);
+    expect(rebuilt.states.at(-1)!.phase).toBe('melding');
+    // A game stored at the decision itself is left waiting on it.
+    expect(rebuildFromLog(state, older)!.actions).toEqual(older);
+  });
 });

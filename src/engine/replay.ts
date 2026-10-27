@@ -49,7 +49,7 @@ export function rebuildFromLog(final: GameState, actions: Action[]): { start: Ga
   for (const dealer of dealers) {
     try {
       const start = newGame(final.seed, final.rules, dealer);
-      const played = replayLog(start, actions);
+      const played = replayLog(start, actions, final);
       // Each decision the older log lacks adds a revision the stored game never had.
       const added = played.actions.length - actions.length;
       const last = played.states[played.states.length - 1];
@@ -62,19 +62,25 @@ export function rebuildFromLog(final: GameState, actions: Action[]): { start: Ga
 /**
  * Applies a logged action list from `start`. Games logged before the bidder's shoot decision after
  * the pass existed went straight to meld, so where the log moves on without a decision the bidder is
- * taken to have played it out. Returns every state and the actions actually applied.
+ * taken to have played it out. So is a log that ends on the pass into meld when the stored game
+ * (`final`, if given) is no longer waiting on the decision. Returns every state and the actions
+ * actually applied; each inserted decision adds a revision the stored game never had.
  */
-export function replayLog(start: GameState, actions: readonly Action[]): { states: GameState[]; actions: Action[] } {
+export function replayLog(start: GameState, actions: readonly Action[], final?: Pick<GameState, 'phase'>): { states: GameState[]; actions: Action[] } {
   const states = [start];
   const applied: Action[] = [];
   const apply = (action: Action) => { states.push(applyAction(states[states.length - 1], action)); applied.push(action); };
-  for (const action of actions) {
+  const declineIfSkipped = (next?: Action) => {
     const at = states[states.length - 1];
-    if (at.phase === 'deciding_shoot' && at.bidder !== null && action.type !== 'shoot' && action.type !== 'decline_shoot') {
+    if (at.phase === 'deciding_shoot' && at.bidder !== null && next?.type !== 'shoot' && next?.type !== 'decline_shoot') {
       apply({ type: 'decline_shoot', seat: at.bidder });
     }
+  };
+  for (const action of actions) {
+    declineIfSkipped(action);
     apply(action);
   }
+  if (final && final.phase !== 'deciding_shoot') declineIfSkipped();
   return { states, actions: applied };
 }
 
