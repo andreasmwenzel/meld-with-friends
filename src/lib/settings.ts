@@ -40,7 +40,7 @@ export const limitsSchema = z.object({
   leisurelyIdleDays: z.number().int().min(1).max(365),
   /** delete finished tables, games and logs after this many days */
   retainFinishedDays: z.number().int().min(1).max(365),
-  /** delete guest accounts that never sat down after this many days */
+  /** delete unseated guest accounts after this many days without activity */
   retainGuestDays: z.number().int().min(1).max(365),
 });
 export type Limits = z.infer<typeof limitsSchema>;
@@ -88,5 +88,5 @@ export const SETTING_FIELDS: { group: "bots" | "limits"; key: string; label: str
   { group: "limits", key: "idleTableHours", label: "Idle table timeout (hours)", help: "Tables with no activity for this long are finished by the daily cron." },
   { group: "limits", key: "leisurelyIdleDays", label: "Leisurely idle timeout (days)", help: "Tables at a leisurely pace are finished after this long without a move." },
   { group: "limits", key: "retainFinishedDays", label: "Keep finished tables (days)", help: "Then games and logs are deleted." },
-  { group: "limits", key: "retainGuestDays", label: "Keep unused guests (days)", help: "Guest accounts that never sat down are removed after this." },
+  { group: "limits", key: "retainGuestDays", label: "Keep inactive guests (days)", help: "Guest accounts with no activity for this long, seated nowhere and hosting nothing, are removed." },
 ];
