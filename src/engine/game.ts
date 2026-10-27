@@ -457,7 +457,10 @@ function apply(previous: GameState, action: Action, legacyShoot: boolean): GameS
       requireAction(legal.canClaim, 'You cannot claim the rest now');
       const line = claimLineFor(state, action.seat);
       requireAction(line !== null && state.trump !== null, 'No proven claim line');
-      state.claim = { seat: action.seat, fromTrick: state.tricksTaken.red.length + state.tricksTaken.blue.length + 1, hands: snapshotHands(state) };
+      const hands = snapshotHands(state);
+      // A sitting-out hand never reaches the table, so a claim shows nobody those cards.
+      if (state.sittingOut != null) hands[state.sittingOut] = [];
+      state.claim = { seat: action.seat, fromTrick: state.tricksTaken.red.length + state.tricksTaken.blue.length + 1, hands };
       log(state, `${name} claims the rest.`);
       // Replies use actual hands only AFTER the proof. Every choice loses; play them legally so
       // counters, trick records, meld saving, shoots and the last-trick bonus use ordinary scoring.

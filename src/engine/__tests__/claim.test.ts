@@ -148,7 +148,11 @@ describe('claim settlement', () => {
     for (const seat of [1, 3] as const) expect(viewFor(state, seat).legal.canClaim).toBe(false);
     const claimed = applyAction(state, { type: 'claim', seat: 0 });
     expect(claimed.history.at(-1)?.shotMade).toBe(true);
-    for (const seat of seats) expect(leakedCards(claimed, seat)).toEqual([]);
+    for (const seat of seats) {
+      expect(leakedCards(claimed, seat)).toEqual([]);
+      // The sitting-out hand never reaches the table, so the claim shows nobody those cards.
+      expect(viewFor(claimed, seat).claim?.hands[2]).toEqual([]);
+    }
   });
 
   it('a shooter remembers the cards it passed back to its sitting-out partner', () => {
