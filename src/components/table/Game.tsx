@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError, isTransientError, type Profile } from "@/lib/api";
-import { useTableChannel, useDisconnectedPolling } from "@/lib/realtime/useTableChannel";
+import { ViewSync, type GameFeed } from "./viewSync";
 import type { Action, CardId, PlayerView, SeatIndex, Suit, Team } from "@/engine/types";
 import { PlayingCard, CardBack, SUIT_GLYPH, SUIT_NAME, RANK_LABEL, splitCard, cardName } from "@/components/cards/PlayingCard";
 import { Avatar } from "@/components/site/Avatar";
@@ -47,8 +47,12 @@ function countersIn(trick: NonNullable<PlayerView["currentTrick"]>, rules: Playe
   }, 0);
 }
 
-export function Game({ code, me, snap, rev, onTableChange, connection = "ok", local = false, suggested, chat }: {
-  code: string; me: Profile; snap: Snapshot; rev: number; onTableChange: () => void; connection?: "ok" | "reconnecting"; local?: boolean;
+export function Game({ code, me, snap, rev, feed, onTableChange, connection = "ok", local = false, suggested, chat }: {
+  code: string; me: Profile; snap: Snapshot; onTableChange: () => void; connection?: "ok" | "reconnecting"; local?: boolean;
+  /** boards without a channel (lab, practice) reload whenever this changes */
+  rev?: number;
+  /** the table room's channel events; the board fetches once per game event */
+  feed?: GameFeed;
   /** cards a coach suggests, outlined in the hand (practice) */
   suggested?: CardId[];
   /** table talk for the menu's Talk tab, and how many messages are unread */
@@ -74,13 +78,14 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (hintTimer.current) clearTimeout(hintTimer.current); }, []);
   const [degraded, setDegraded] = useState(false);
-  const requests = useRef({ issued: 0, applied: 0, rev: -1 });
-  const applyView = useCallback((next: PlayerView, request: number) => {
-    if (request < requests.current.applied || next.rev < requests.current.rev) return;
-    requests.current.applied = request;
-    requests.current.rev = next.rev;
-    setView(next); setDegraded(false);
-  }, []);
+  const [sync] = useState(() => new ViewSync<PlayerView>({
+    fetchView: () => api<PlayerView>(`/api/tables/${code}/view`),
+    apply: (next) => { setView(next); setDegraded(false); },
+    onError: (e) => {
+      if (isTransientError(e)) setDegraded(true);
+      else setError(e instanceof ApiError && e.status === 404 ? "No table has this code." : (e as Error).message);
+    },
+  }));
   const reconnecting = connection === "reconnecting" || degraded;
   const { prefs: cardPrefs, width: cardW, short, reducedMotion } = useCardPrefs();
   useEffect(() => {
@@ -98,48 +103,42 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   const { slideMs, holdMs, sweepMs } = motionTimings(motion);
   const router = useRouter();
 
-  const load = useCallback(async () => {
-    const request = ++requests.current.issued;
-    try {
-      const next = await api<PlayerView>(`/api/tables/${code}/view`);
-      applyView(next, request);
-    } catch (e) {
-      if (request < requests.current.applied) return;
-      requests.current.applied = request;
-      if (isTransientError(e)) setDegraded(true);
-      else setError(e instanceof ApiError && e.status === 404 ? "No table has this code." : (e as Error).message);
-    }
-  }, [code, applyView]);
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch, state is set after await
+  const load = useCallback(() => sync.load(), [sync]);
   useEffect(() => { void load(); }, [load, rev]);
-  const { status } = useTableChannel(code, event => { if (event.type === "resync" || event.type === "game") void load(); });
-  useDisconnectedPolling(status, load);
+  // One fetch per game event at most; resyncs (reconnect, tab shown, polling) always fetch.
+  useEffect(() => feed?.subscribe((event) => { if (event.type === "game") sync.event(event.rev); else void sync.load(); }), [feed, sync]);
+  const live = !!feed && connection === "ok";
+  // The game ending also finishes the table; game events no longer refetch the table, so ask once.
+  const tableEnding = view?.phase === "game_over" && snap.table.status === "playing";
+  useEffect(() => { if (tableEnding) onTableChange(); }, [tableEnding, onTableChange]);
 
   /** Sends an action; resolves to the view it brought back, or null if nothing came back. */
   async function act(action: ClientAction): Promise<PlayerView | null> {
     if (!view || busy) return null;
-    const request = ++requests.current.issued;
+    const request = sync.begin();
     const body = { action: { ...action, seat: view.seat }, expectedRev: view.rev, requestId: crypto.randomUUID() };
     setBusy(true); setError(null);
-    try {
-      let next: PlayerView;
-      try { next = await api<PlayerView>(`/api/tables/${code}/act`, { body }); }
-      catch (e) {
-        if (e instanceof ApiError) throw e;
-        next = await api<PlayerView>(`/api/tables/${code}/act`, { body });
-      }
-      applyView(next, request); setSelected([]);
-      if (next.phase === "game_over") onTableChange();
-      return next;
-    } catch (e) {
-      if (request < requests.current.applied) return null;
-      if (e instanceof ApiError && e.status === 409 && e.data && typeof (e.data as PlayerView).rev === "number") {
-        applyView(e.data as PlayerView, request); setSelected([]);
-        return e.data as PlayerView;
-      } else if (isTransientError(e)) setDegraded(true);
-      else setError((e as Error).message);
-      return null;
-    } finally { setBusy(false); }
+    // The response carries the new view, so the broadcast for this move needs no fetch.
+    return sync.act(async () => {
+      try {
+        let next: PlayerView;
+        try { next = await api<PlayerView>(`/api/tables/${code}/act`, { body }); }
+        catch (e) {
+          if (e instanceof ApiError) throw e;
+          next = await api<PlayerView>(`/api/tables/${code}/act`, { body });
+        }
+        sync.accept(next, request); setSelected([]);
+        return next;
+      } catch (e) {
+        if (!sync.current(request)) return null;
+        if (e instanceof ApiError && e.status === 409 && e.data && typeof (e.data as PlayerView).rev === "number") {
+          sync.accept(e.data as PlayerView, request); setSelected([]);
+          return e.data as PlayerView;
+        } else if (isTransientError(e)) setDegraded(true);
+        else setError((e as Error).message);
+        return null;
+      } finally { setBusy(false); }
+    });
   }
 
   async function countdownNext(signal: AbortSignal) {
@@ -153,14 +152,14 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
       if (signal.aborted || document.hidden || !canCountdownAdvance(table, latest, {
         tableId: snap.table.id, userId: me.id, handNumber: view.handNumber, rev: view.rev,
       })) return;
-      const request = ++requests.current.issued;
+      const request = sync.begin();
       submitted = true;
       setBusy(true);
       // One normal action request, with the freshly checked revision and no retry.
       const next = await api<PlayerView>(`/api/tables/${code}/act`, { body: {
         action: { type: "next_hand", seat: latest.seat }, expectedRev: latest.rev, requestId: crypto.randomUUID(),
       } });
-      applyView(next, request);
+      sync.accept(next, request);
       setSelected([]);
     } catch (e) {
       if (submitted || !signal.aborted) setError((e as Error).message);
@@ -201,7 +200,11 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
         if (cancelled) return;
         tickFailures.current = 0;
         if (typeof r.delayMs === "number") setPace(r.delayMs);
-        if (r.acted || r.rev > requests.current.rev) await load();
+        // With a live channel the broadcast brings the move; fetch only if it has not arrived shortly.
+        if (r.acted || r.rev > sync.rev) {
+          if (live) sync.expect(r.rev, 2000);
+          else await load();
+        }
       } catch {
         if (cancelled) return;
         setDegraded(true);
@@ -212,7 +215,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
     timer = setTimeout(run, nudgePending.current ? 0 : delay);
     nudgePending.current = false;
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [botTurn, view, code, load, leader, pace, nudgeVersion]);
+  }, [botTurn, view, code, load, sync, live, leader, pace, nudgeVersion]);
 
   const [displayedTrick, setDisplayedTrick] = useState<PlayerView["currentTrick"]>(null);
   const trickHold = useRef<{ key: string; until: number }>({ key: "", until: 0 });
