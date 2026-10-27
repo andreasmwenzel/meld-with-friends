@@ -1,4 +1,5 @@
 import type { CardId, PlayerView, SeatIndex, Suit } from '../types';
+import { auction } from './bid';
 import { ranks, seats, suits, suitOf } from './shared';
 
 export function knowledge(view: PlayerView) {
@@ -23,13 +24,15 @@ export function knowledge(view: PlayerView) {
 }
 
 /**
- * How strong a seat's public calls say its hand is: -0.5 for a pass without a bid, 0 before it
- * has called, and 0.4 to 1 for a bid, rising with how far above the minimum it went.
+ * How strong a seat's public calls say its hand is: -0.5 for a pass without a bid while the other
+ * side held the bid or nobody had bid, 0 before it has called or for a pass over its partner's
+ * high bid (the same neutral reading `partnerSignal` uses), and 0.4 to 1 for a bid, rising with
+ * how far above the minimum it went.
  */
 export function bidStrength(view: PlayerView, seat: SeatIndex) {
-  const calls = view.bids.filter(b => b.seat === seat);
+  const calls = auction(view).filter(b => b.seat === seat);
   const bids = calls.filter(b => b.amount !== null);
-  if (!bids.length) return calls.length ? -.5 : 0;
+  if (!bids.length) return calls.some(c => c.over !== (seat + 2) % 4) ? -.5 : 0;
   if (bids.some(b => b.shoot)) return 1;
   const top = Math.max(...bids.map(b => b.amount!));
   return Math.min(1, .4 + .6 * (top - view.rules.minBid) / (10 * view.rules.bidStep));

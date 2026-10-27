@@ -10,6 +10,8 @@ import type { Bid, CardId, PlayerView, SeatIndex } from '../types';
 const bonus = DEFAULT_SETTINGS.bots.partnerBidBonus;
 // South (0) is the bot; North (2) is its partner; West (1) and East (3) are opponents.
 const moderate: CardId[] = ['AS0', 'TS0', 'KS0', '9S0', '9S1', 'AH0', 'KH0', 'QH0', 'JD0', 'QD0', '9C0', 'JC0'];
+// South's hand in seed partner-race:252 (dealer South): worth 25.9 alone, so 23 after the margin.
+const borderline: CardId[] = ['9S1', 'QS1', 'KH0', 'TH1', 'JH1', 'AH0', '9C1', '9H1', 'KD1', 'QD1', 'KS0', 'KC1'];
 const monster: CardId[] = ['AS0', 'AS1', 'TS0', 'KS0', 'QS0', 'JS0', 'QS1', '9S0', 'AH0', 'AD0', 'JD0', 'AC0'];
 
 /** A modern-scoring bidding view for South with the given public auction. */
@@ -28,13 +30,30 @@ describe('partner auction', () => {
     const view = biddingView(moderate, partnerHolds);
     // The hand is worth a raise counting on partner, so the old rule bid against partner here.
     expect(bidCeiling(view)).toBeGreaterThanOrEqual(26);
-    expect(bidCeiling(view, DEFAULT_SETTINGS.bots, SIGNAL.passed)).toBeLessThan(26);
+    expect(bidCeiling(view, DEFAULT_SETTINGS.bots, 0)).toBeLessThan(26);
     expect(chooseAction(view)).toEqual({ type: 'pass_bid', seat: 0 });
+  });
+
+  it('counts on nothing from partner when deciding to take over', () => {
+    const view = biddingView(borderline, partnerHolds);
+    // Even the weak-pass signal would lift this hand to 26; on its own it reaches only 23.
+    expect(bidCeiling(view, DEFAULT_SETTINGS.bots, SIGNAL.passed)).toBeGreaterThanOrEqual(26);
+    expect(bidCeiling(view, DEFAULT_SETTINGS.bots, 0)).toBe(23);
+    expect(chooseAction(view)).toEqual({ type: 'pass_bid', seat: 0 });
+  });
+
+  it('passes over partner in seed partner-race:252', () => {
+    let state = newGame('partner-race:252', {}, 0);
+    while (state.turn !== 0) state = applyAction(state, chooseAction(viewFor(state, state.turn!), { budgetMs: 0, seed: `252:${state.rev}` }));
+    const view = viewFor(state, 0);
+    expect(view.bids).toEqual(partnerHolds);
+    expect([...view.hand].sort()).toEqual([...borderline].sort());
+    expect(chooseAction(view, { budgetMs: 0, seed: '252' })).toEqual({ type: 'pass_bid', seat: 0 });
   });
 
   it('takes over when its own hand carries the higher contract', () => {
     const view = biddingView(monster, partnerHolds);
-    expect(bidCeiling(view, DEFAULT_SETTINGS.bots, SIGNAL.passed)).toBeGreaterThanOrEqual(26);
+    expect(bidCeiling(view, DEFAULT_SETTINGS.bots, 0)).toBeGreaterThanOrEqual(26);
     expect(chooseAction(view)).toEqual({ type: 'bid', seat: 0, amount: 26 });
   });
 
@@ -53,7 +72,7 @@ describe('partner auction', () => {
         const action = chooseAction(view, { budgetMs: 0, seed: `${i}:${state.rev}` });
         if (action.type === 'bid' && view.highBid?.seat === (view.seat + 2) % 4) {
           partnerRaises++;
-          expect(action.amount).toBeLessThanOrEqual(bidCeiling(view, DEFAULT_SETTINGS.bots, SIGNAL.passed));
+          expect(action.amount).toBeLessThanOrEqual(bidCeiling(view, DEFAULT_SETTINGS.bots, 0));
         }
         state = applyAction(state, action);
       }
@@ -117,13 +136,28 @@ describe('bid-history sampling', () => {
     expect(weight(1, '9H0')).toBe(1);
   });
 
+  it('reads a pass the same way partnerSignal does', () => {
+    // West (1) passes over East's (3) high bid: no takeover hand, not weakness.
+    const neutral = biddingView(moderate, [{ seat: 3, amount: 25 }, { seat: 0, amount: null }, { seat: 1, amount: null }]);
+    expect(bidStrength(neutral, 1)).toBe(0);
+    expect(partnerSignal({ ...neutral, seat: 3 })).toBe(SIGNAL.unknown);
+    // Passing over the other side's bid, or before anyone bid, is a weak hand in both readings.
+    const overOpponent = biddingView(moderate, [{ seat: 0, amount: 25 }, { seat: 1, amount: null }]);
+    expect(bidStrength(overOpponent, 1)).toBe(-.5);
+    expect(partnerSignal({ ...overOpponent, seat: 3 })).toBe(SIGNAL.passed);
+    const first = biddingView(moderate, [{ seat: 1, amount: null }]);
+    expect(bidStrength(first, 1)).toBe(-.5);
+    expect(partnerSignal({ ...first, seat: 3 })).toBe(SIGNAL.passed);
+  });
+
   it('gives aces to the seat that bid and takes them from the seat that passed', () => {
     const { view } = playingView('weights');
     const [a, b] = [((view.seat + 1) % 4) as SeatIndex, ((view.seat + 3) % 4) as SeatIndex];
     const ace = (c: CardId) => c[0] === 'A';
     const flat = shares({ ...view, bids: [] }, ace);
-    const aBids = shares({ ...view, bids: [{ seat: a, amount: 30 }, { seat: b, amount: null }] }, ace);
-    const bBids = shares({ ...view, bids: [{ seat: b, amount: 30 }, { seat: a, amount: null }] }, ace);
+    // a and b are partners, so the pass comes first: a pass over partner's bid would read neutral.
+    const aBids = shares({ ...view, bids: [{ seat: b, amount: null }, { seat: a, amount: 30 }] }, ace);
+    const bBids = shares({ ...view, bids: [{ seat: a, amount: null }, { seat: b, amount: 30 }] }, ace);
     expect(aBids[a]).toBeGreaterThan(flat[a] + .1);
     expect(aBids[b]).toBeLessThan(flat[b] - .1);
     expect(bBids[b]).toBeGreaterThan(flat[b] + .1);

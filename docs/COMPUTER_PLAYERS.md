@@ -27,14 +27,14 @@ The trick-strength part scales with the configured deck counter total. The partn
 
 `chooseBid` and `partnerSignal` in `bid.ts`. Signal values are in classic units (modern games scale them by 0.1).
 
-- **Don't bid against partner.** When partner holds the high bid, a bot passes and lets it stand. It takes over only if its own hand could carry the higher contract with no help: its ceiling, computed with the weak 25 partner signal, still reaches the next legal bid. This holds whether or not an opponent is still in the auction, so two bots on one side never race each other, and once both opponents have passed the auction ends at partner's bid.
+- **Don't bid against partner.** When partner holds the high bid, a bot passes and lets it stand. It takes over only if its own hand could carry the higher contract with no help: its ceiling, computed with a partner signal of 0, still reaches the next legal bid. This holds whether or not an opponent is still in the auction, so two bots on one side never race each other, and once both opponents have passed the auction ends at partner's bid.
 - **Reading partner's calls.** No call yet: 60. A pass at any time when the other side held the bid, or when nobody had bid: 25, a weak hand. A pass over our own side's high bid: 60, since by the first convention it only says partner had no takeover hand. Any bid, even one partner later stopped raising: 100 plus `partnerBidBonus`.
 - **Jump bids show meld.** Each step a partner's bid goes over the cheapest legal bid adds 30, up to two steps (60). Bots do not make jump bids themselves (the arena showed it cost them, see Measured results); the reading is there for a human partner who jumps to show meld.
 - **Opponents' calls** do not change the bid, but they shape how a bot imagines the hidden hands during play.
 
 ### Opponent modelling from the auction
 
-`bidStrength` in `knowledge.ts` reads each seat's public calls: -0.5 for passing without a bid, 0 before any call, and 0.4 rising to 1 for a bid ten steps above the minimum (or a shoot). `cardWeights` turns that into relative odds for unknown cards: aces `exp(0.6 × strength)`, trump `exp(0.4 × strength)`, and on top of that trump is `exp(0.8)` likelier with the declarer (it chose trump and was passed trump) and `exp(-0.4)` with the declarer's partner, when passing is on. `sampleDeal` tries seats for each card in a weighted random order (first choice proportional to weight) inside the same backtracking, so counts, voids and public meld still hold exactly.
+`bidStrength` in `knowledge.ts` reads each seat's public calls the same way `partnerSignal` does: -0.5 for passing without a bid while the other side held the bid or nobody had bid, 0 before any call or for a pass over its partner's high bid, and 0.4 rising to 1 for a bid ten steps above the minimum (or a shoot). `cardWeights` turns that into relative odds for unknown cards: aces `exp(0.6 × strength)`, trump `exp(0.4 × strength)`, and on top of that trump is `exp(0.8)` likelier with the declarer (it chose trump and was passed trump) and `exp(-0.4)` with the declarer's partner, when passing is on. `sampleDeal` tries seats for each card in a weighted random order (first choice proportional to weight) inside the same backtracking, so counts, voids and public meld still hold exactly.
 
 For example, in classic scoring, `AS0 AH0 AD0 AC0 TS0 KS0 QS0 JS0 9S0 KH0 QH0 JD0` has 320 meld with spades: a run, dix, heart marriage, aces around, and pinochle. Six trump, four aces, one protected ten, and 70 counter points give a 573.5 projection before the partner acts. With a 35 safety margin and a step of 10, the ceiling is 530. A partner pass lowers it to 500; a partner bid raises it to 570. The bot still bids only the next legal increment. Shooting requires permission from the rules plus eight trump, both trump aces, and an ace in every side suit.
 
@@ -76,8 +76,8 @@ Against the bots before this change (2026-10-26):
 
 | Run | Games | New bots win | Mean final score, new minus old | Bids made, new / old | Partner raises, new / old |
 | --- | --- | --- | --- | --- | --- |
-| `bot-duel.mjs 500 origin/main 0` (heuristic play) | 1000 | 54.9% | +9.2 | 82.9% / 78.8% | 222 / 4447 |
-| `bot-duel.mjs 150 origin/main 15` (10 samples per play) | 300 | 55.7% | +10.8 | 87.8% / 82.5% | 76 / 1276 |
+| `bot-duel.mjs 500 origin/main 0` (heuristic play) | 1000 | 54.8% | +9.2 | 83.0% / 78.8% | 99 / 4449 |
+| `bot-duel.mjs 150 origin/main 15` (10 samples per play; measured before the takeover ceiling dropped partner's signal to 0) | 300 | 55.7% | +10.8 | 87.8% / 82.5% | 76 / 1276 |
 
 Variants tried on the way, each as a paired duel of new against new with one switch: allowing one "support" raise of partner while an opponent is still bidding lost 44.7% of 2000 games (-9.1 per game), so bots never make it. Jump bids to show meld cost about 2 points per game against the old bots, so bots don't jump. Turning the auction-based card weights off lost 47.5% of 400 games at 15 ms (-3.6 per game), so the weights stay.
 

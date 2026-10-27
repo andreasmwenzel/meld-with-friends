@@ -65,7 +65,8 @@ export function bidCeiling(view: PlayerView, config: BotConfig = DEFAULT_SETTING
 export function chooseBid(view: PlayerView, config: BotConfig = DEFAULT_SETTINGS.bots): number | null {
   const { canBid, minBid } = view.legal;
   if (!canBid || minBid === null || minBid > bidCeiling(view, config)) return null;
-  if (view.highBid?.seat === partnerOf(view.seat)) return bidCeiling(view, config, SIGNAL.passed) >= minBid ? minBid : null;
+  // Takeover ceiling counts on nothing from partner: signal 0, not even the weak-pass reading.
+  if (view.highBid?.seat === partnerOf(view.seat)) return bidCeiling(view, config, 0) >= minBid ? minBid : null;
   return minBid;
 }
 
