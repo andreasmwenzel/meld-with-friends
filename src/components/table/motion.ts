@@ -32,3 +32,10 @@ export function sweepTo(winner: Rel) {
   const [wx, wy] = EDGE[winner];
   return { "--sx": `${wx * 0.9}px`, "--sy": `${wy * 0.9}px` };
 }
+
+/** Claimed hands travel from their actual fan positions to the claimer's chair. */
+export function claimSweep(from: Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>, to: Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>, scale = 1) {
+  const x = (to.left + to.width / 2 - from.left - from.width / 2) / scale;
+  const y = (to.top + to.height / 2 - from.top - from.height / 2) / scale;
+  return { transform: `translate(${x}px, ${y}px) scale(.8)`, opacity: 0 };
+}

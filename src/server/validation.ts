@@ -51,6 +51,7 @@ export const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("declare_meld"), seat: seatSchema, cards }).strict(),
   z.object({ type: z.literal("confirm_meld"), seat: seatSchema }).strict(),
   z.object({ type: z.literal("play_card"), seat: seatSchema, card }).strict(),
+  z.object({ type: z.literal("claim"), seat: seatSchema }).strict(),
   z.object({ type: z.literal("next_hand"), seat: seatSchema }).strict(),
 ]);
 export const handleSchema = z.string().trim().toLowerCase().regex(/^[a-z0-9_]{3,32}$/);

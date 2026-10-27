@@ -116,12 +116,12 @@ function presetSteps(id: string): Step[] {
 
 // The generated games above rarely shoot or throw in a hand, so both are pinned here.
 describe('public moves for shoots and misdeals', () => {
-  it.each(['hand-shoot-made', 'hand-shoot-missed', 'game-shoot-win'])('%s: the shoot call is public, the play that ends the hand is not', id => {
+  it.each(['hand-shoot-made', 'hand-shoot-missed', 'game-shoot-win'])('%s: the shoot call is public, the action that ends the hand is not', id => {
     const steps = presetSteps(id);
     const shoot = steps.find(s => s.action.type === 'shoot')!;
     expect(shoot.move?.action).toEqual({ type: 'shoot', seat: shoot.action.seat });
     const last = steps.at(-1)!;
-    expect(last.action.type).toBe('play_card');
+    expect(last.action.type).toBe(id === 'hand-shoot-missed' ? 'play_card' : 'claim');
     expect(['hand_over', 'game_over']).toContain(last.next.phase);
     expect(last.move).toBeNull();
     for (const { prev, move } of steps.filter(s => s.move)) for (const seat of SEATS) expect(applyPublicMove(viewFor(prev, seat), move!)).not.toBeNull();

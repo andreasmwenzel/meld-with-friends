@@ -59,7 +59,8 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit, ani
   const meldOf = (seat: SeatIndex): CardId[] => meldOut ? sortHand([...new Set(frame.players[seat].meld.flatMap(item => item.cards))], frame.trump, prefs.sort) : [];
   const hand = (seat: SeatIndex) => {
     const out = new Set(meldOf(seat));
-    return sortHand(frame.players[seat].hand.filter(c => !out.has(c)), frame.trump, prefs.sort);
+    const remaining = move.kind === "claim" ? viewFor(frame, seat).claim?.hands[seat] ?? [] : frame.players[seat].hand;
+    return sortHand(remaining.filter(c => !out.has(c)), frame.trump, prefs.sort);
   };
   // Lit cards lift wherever they now sit: a pass lights up in the hand that received it.
   const raised = (seat: SeatIndex): Set<CardId> => new Set<CardId>(frame.players[seat].hand.filter(c => lit.has(c)));

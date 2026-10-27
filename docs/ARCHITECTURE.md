@@ -195,6 +195,9 @@ received passes enter `PlayerView.recap`. Trick indexes start at 1; counters exc
 the last-trick bonus. Deal resets these records. Missing fields in older games are
 read as empty, and missing pace is exposed as `live`.
 
+On an empty trick, the leader may claim every remaining trick only when their own hand and public plays prove a winning line against every possible unseen reply, leading highest trumps before side-suit winners and treating equal ranks as losses for the later copy.
+The claim reveals the remaining hands and plays that line through the normal engine, awarding every remaining trick, its counters and the last-trick bonus to the claimer's side while preserving scoring, recap and replay.
+
 Rules accept `pace: "live" | "leisurely"`. Cron passes `leisurelyIdleDays` to
 `cleanup_tables`; leisurely tables use that timeout rather than `idleTableHours`,
 including time spent paused. Visits do not refresh game activity or delay cleanup.

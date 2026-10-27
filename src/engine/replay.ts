@@ -1,7 +1,7 @@
 // Game replay: rebuild a game from its action log, cut it at the last completed hand, and strip
 // everything a browser could use to deal the hand still in progress. Pure; no I/O.
 import { cardLabel } from './deck';
-import { applyAction, newGame } from './game';
+import { applyAction, newGame, viewFor } from './game';
 import type { Action, CardId, GameState, HandRecord, SeatIndex, Suit, Trick } from './types';
 
 /** One logged action. `state` is present when the action dealt new cards (next hand or a redeal): the
@@ -153,6 +153,7 @@ export function describeStep(action: Action, before: GameState, after: GameState
       const record = after.history.length > before.history.length ? after.history[after.history.length - 1] : null;
       return `${line}. ${nameOf(winner)} takes the trick${record ? `. ${handOutcome(record, nameOf)}` : ''}`;
     }
+    case 'claim': return `${who} claims the rest. ${handOutcome(after.history[after.history.length - 1], nameOf)}`;
     case 'next_hand': return `Hand ${after.handNumber}: ${nameOf(after.dealer)} deals`;
   }
 }
@@ -174,6 +175,7 @@ export function handOutcome(record: HandRecord, nameOf: (seat: SeatIndex) => str
 /** Cards a step touched, for lighting them on the board: the card played, the cards passed, or the meld laid down. */
 export function cardsOfStep(action: Action, after: GameState): CardId[] {
   switch (action.type) {
+    case 'claim': return Object.values(viewFor(after, action.seat).claim?.hands ?? {}).flat();
     case 'play_card': return [action.card];
     case 'pass_cards': return action.cards;
     case 'declare_meld': return [...new Set(after.players[action.seat].meld.flatMap(item => item.cards))];

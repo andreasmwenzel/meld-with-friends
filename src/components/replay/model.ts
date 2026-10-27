@@ -2,7 +2,7 @@
 import { cardsOfStep, describeStep, expandReplay, handOutcome, type Replay } from "@/engine/replay";
 import type { Action, CardId, GameState, HandRecord, SeatIndex, Trick } from "@/engine/types";
 
-export type MoveKind = "deal" | "bid" | "trump" | "pass" | "meld" | "play";
+export type MoveKind = "deal" | "bid" | "trump" | "pass" | "meld" | "play" | "claim";
 
 export interface Move {
   /** index into `frames` of the position after this move */
@@ -35,7 +35,7 @@ export interface Walk { frames: GameState[]; moves: Move[]; chapters: Chapter[] 
 
 const KIND: Record<Action["type"], MoveKind> = {
   bid: "bid", pass_bid: "bid", shoot: "bid", decline_shoot: "bid", misdeal: "bid", declare_trump: "trump", pass_cards: "pass",
-  declare_meld: "meld", confirm_meld: "meld", play_card: "play", next_hand: "deal",
+  declare_meld: "meld", confirm_meld: "meld", play_card: "play", claim: "claim", next_hand: "deal",
 };
 const lastTrickOf = (state: GameState) => (state as GameState & { lastTrick?: Trick | null }).lastTrick ?? null;
 

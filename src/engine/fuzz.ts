@@ -3,6 +3,7 @@
 import { applyAction, newGame, viewFor } from './game';
 import { random } from './ai/shared';
 import { actors, botAction, checkState } from './scenario';
+import { claimLine } from './claim';
 import type { Action, CardId, GameState, RulesConfig, SeatIndex } from './types';
 
 export interface FuzzFailure { seed: string; rules: Partial<RulesConfig>; error: string; base: GameState; actions: Action[] }
@@ -28,8 +29,9 @@ export function leakedCards(state: GameState, seat: SeatIndex): string[] {
     ...(s.passedOut?.[seat] ?? []), ...(s.passedIn?.[seat] ?? []),
   ]);
   // A thrown-in hand is shown to the whole table on purpose; the old deal's cards are not this deal's.
-  const { revealed, ...rest } = { ...view, misdeal: null };
+  const { revealed, claim, ...rest } = { ...view, misdeal: null };
   if (revealed && !(state.rules.revealHands && (state.phase === 'hand_over' || state.phase === 'game_over'))) return ['revealed hands outside the reveal'];
+  if (claim && !['hand_over', 'game_over'].includes(state.phase)) return ['claimed hands before hand over'];
   return [...cardsIn(rest)].filter(card => !allowed.has(card));
 }
 
@@ -60,13 +62,60 @@ function fuzzAction(state: GameState, seat: SeatIndex): Action {
   return botAction(state, seat);
 }
 
+/** Exhaust every reply with up to three cards per seat; otherwise try 32 seeded opposing lines.
+ * The claimer follows the proven line; every other seat is free to choose ANY legal reply.
+ */
+export function verifyClaim(state: GameState, seed: string): number {
+  if (state.turn === null) return 0;
+  const seat = state.turn;
+  const line = claimLine(viewFor(state, seat));
+  if (!line) return 0;
+  const claimed = applyAction(state, { type: 'claim', seat });
+  const before = viewFor(state, seat).recap.tricks.length;
+  let playouts = 0;
+  const assert = (played: GameState) => {
+    const view = viewFor(played, seat);
+    if (view.recap.tricks.slice(before).some(trick => trick.winner !== seat)) throw new Error('A proven claimer lost a trick');
+    for (const key of ['history', 'score', 'winner', 'phase'] as const) {
+      if (JSON.stringify(played[key]) !== JSON.stringify(claimed[key])) throw new Error(`Claim and playout disagree on ${key}`);
+    }
+    if (view.recap.tricks.length !== 12 || played.players.some(p => p.hand.length)) throw new Error('Claim playout did not finish all twelve tricks');
+    playouts++;
+  };
+  const walk = (at: GameState) => {
+    if (at.phase !== 'playing') { assert(at); return; }
+    const who = at.turn!;
+    const view = viewFor(at, who);
+    const cards = who === seat ? [line[view.recap.tricks.length - before]] : view.legal.playableCards;
+    for (const card of cards) walk(applyAction(at, { type: 'play_card', seat: who, card }));
+  };
+  if (line.length <= 3) walk(state);
+  else {
+    const rng = random(seed);
+    for (let trial = 0; trial < 32; trial++) {
+      let at = state;
+      while (at.phase === 'playing') {
+        const who = at.turn!;
+        const view = viewFor(at, who);
+        const cards = view.legal.playableCards;
+        const card = who === seat ? line[view.recap.tricks.length - before] : cards[Math.floor(rng() * cards.length)];
+        at = applyAction(at, { type: 'play_card', seat: who, card });
+      }
+      assert(at);
+    }
+  }
+  return playouts;
+}
+
 export function fuzz(games: number, prefix = 'fuzz', maxActions = 3000): {
   played: number; actions: number; failures: FuzzFailure[];
   /** how often each action type was played, so a run shows it reached every decision */
   kinds: Record<string, number>;
+  claims: { positions: number; playouts: number };
 } {
   const failures: FuzzFailure[] = [];
   const kinds: Record<string, number> = {};
+  const claims = { positions: 0, playouts: 0 };
   let total = 0;
   for (let i = 0; i < games; i++) {
     const seed = `${prefix}:${i}`;
@@ -79,6 +128,10 @@ export function fuzz(games: number, prefix = 'fuzz', maxActions = 3000): {
         const seat = state.phase === 'hand_over' ? 0 : actors(state)[0];
         if (seat === undefined) throw new Error(`Nobody can act in ${state.phase}`);
         const action = state.phase === 'hand_over' ? { type: 'next_hand', seat } as Action : fuzzAction(state, seat);
+        if (state.phase === 'playing' && viewFor(state, seat).legal.canClaim) {
+          claims.positions++;
+          claims.playouts += verifyClaim(state, `${seed}:${state.rev}:claim`);
+        }
         const kind = action.type === 'shoot' && state.phase === 'deciding_shoot' ? 'shoot_after_pass' : action.type;
         state = applyAction(state, action);
         actions.push(action);
@@ -96,5 +149,5 @@ export function fuzz(games: number, prefix = 'fuzz', maxActions = 3000): {
     }
     total += actions.length;
   }
-  return { played: games, actions: total, failures, kinds };
+  return { played: games, actions: total, failures, kinds, claims };
 }

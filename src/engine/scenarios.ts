@@ -63,6 +63,10 @@ export const PRESETS: Preset[] = [
 
   { id: 'play-lead', group: 'Trick play', title: 'Your lead', note: 'You won the bid and lead the first trick.',
     spec: { dealer: 3, bidder: 0, bid: 30, trump: 'S', to: 'playing' } },
+  { id: 'claim-all', group: 'Trick play', title: 'Claim all available', note: 'Hand 3: six remaining spades, two club aces and a diamond ace. Every other spade has been played.',
+    spec: { seed: 'claim-all', handNumber: 3, dealer: 3, bidder: 0, bid: 29, trump: 'S', rules: { scoring: 'modern', passCount: 0 },
+      hands: { 0: ['AS', 'AS', 'TS', 'TS', 'KS', 'KS', 'QS', 'QS', 'JS', 'AC', 'AC', 'AD'], 1: ['JS1'], 2: ['9S0'], 3: ['9S1'] },
+      to: 'playing', tricks: 3, plays: 0 }, bots: [] },
   { id: 'play-must-trump', group: 'Trick play', title: 'Must trump', note: 'Clubs led and you are void: only spades are playable.',
     spec: { dealer: 0, bidder: 1, bid: 26, trump: 'S', rules: { scoring: 'modern', passCount: 0 },
       hands: { 0: VOID_IN_CLUBS, 1: ['AC', 'TC'], 2: ['9C', 'QC'], 3: ['JC', 'KC'] }, play: ['AC', '9C', 'JC'], to: 'playing', turn: 0 } },

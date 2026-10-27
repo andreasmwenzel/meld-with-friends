@@ -26,6 +26,7 @@ export function chooseAction(view: PlayerView, options: { budgetMs?: number; see
     if (full.total !== declared || (!full.total && !declaredZero)) return { type: 'declare_meld', seat, cards: [...view.hand] };
   }
   if (l.canConfirmMeld) return {type:'confirm_meld',seat};
+  if (l.canClaim) return {type:'claim',seat};
   if (l.playableCards.length) return {type:'play_card',seat,card:choosePlay(view,{ ...options, config })};
   throw new Error('No legal action for this seat');
 }

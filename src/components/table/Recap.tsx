@@ -129,6 +129,17 @@ export function Recap({ view, nameOf, lastSeenRev }: {
           </div>
         )}
 
+        {view.claim && (
+          <div>
+            <p>{nameOf(view.claim.seat)} claimed the rest from trick {view.claim.fromTrick}. Remaining hands:</p>
+            <ul className="mt-1 space-y-2">
+              {seatsFromMe.map(seat => <li key={seat} className="flex flex-wrap items-center gap-2">
+                <span>{nameOf(seat)}</span><Cards cards={sortHand(view.claim!.hands[seat], view.trump, prefs.sort)} />
+              </li>)}
+            </ul>
+          </div>
+        )}
+
         {(r.tricks.length > 0 || r.current) && (
           <div>
             <p className="text-sm font-semibold">Tricks</p>
@@ -148,7 +159,7 @@ export function Recap({ view, nameOf, lastSeenRev }: {
                       ))}
                     </span>
                     <span className="text-sm">
-                      {nameOf(t.leader)} led, <span className="font-semibold" style={{ color: teamInk(teamOf(t.winner)) }}>{nameOf(t.winner)}</span> took it{t.counters > 0 ? `, ${t.counters}` : ""}
+                      {view.claim && t.index >= view.claim.fromTrick ? "Claimed: " : <>{nameOf(t.leader)} led, </>}<span className="font-semibold" style={{ color: teamInk(teamOf(t.winner)) }}>{nameOf(t.winner)}</span> took it{t.counters > 0 ? `, ${t.counters}` : ""}
                     </span>
                   </div>
                 </li>
