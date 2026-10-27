@@ -9,7 +9,6 @@ import { SignOut } from "@/components/site/SignOut";
 import { Wordmark } from "@/components/site/Wordmark";
 import { DealTable } from "./DealTable";
 import { Friends } from "./Friends";
-import { History } from "./History";
 import { Invitations, type Invitation } from "./Invitations";
 import { ProfileEditor } from "./ProfileEditor";
 import { TableList } from "./TableList";
@@ -33,7 +32,8 @@ export function LobbyFrame({ children }: { children: ReactNode }) {
 
 /**
  * The lobby: tables you sit at and tables you are invited to come first, then dealing a new one,
- * then finished games. House rules are set in the deal panel, which remembers the last ones dealt.
+ * with links to a practice hand and past games (/history) beside it. House rules are set in the
+ * deal panel, which remembers the last ones dealt.
  */
 export function Lobby({ userId, profile, guest, tables, invites, autoDeal, defaults }: {
   userId: string; profile: (Profile & { default_rules?: unknown }) | null; guest: boolean; tables: TableSummary[]; invites: Invitation[];
@@ -63,9 +63,12 @@ export function Lobby({ userId, profile, guest, tables, invites, autoDeal, defau
         )}
         <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
           <DealTable autoOpen={autoDeal} defaults={defaults} saved={!guest} />
-          <Link href="/practice" className="tap text-sm text-chalk-faint underline-offset-4 hover:text-chalk hover:underline">Practice hand</Link>
+          {/* The two links wrap together, so on a phone they share a line under the button. */}
+          <div className="flex gap-x-6">
+            <Link href="/practice" className="tap text-sm text-chalk-faint underline-offset-4 hover:text-chalk hover:underline">Practice hand</Link>
+            <Link href="/history" className="tap text-sm text-chalk-faint underline-offset-4 hover:text-chalk hover:underline">Past games</Link>
+          </div>
         </div>
-        <History />
       </section>
       {profile && (guest ? (
         <section>

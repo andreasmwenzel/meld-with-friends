@@ -9,7 +9,7 @@ const PROFILE = { id: ME, handle: "copper_heron", display_name: "Andreas", avata
 /**
  * Local-only preview of the signed-in lobby at / with sample tables. `?tables=N` shows the first N
  * (`?tables=0` is the empty lobby), `?as=guest` a guest's lobby, `?new=1` the open deal panel.
- * Friends and history fetch from the API, so without a session they show their error notes.
+ * Friends fetch from the API, so without a session they show their error notes.
  */
 export default function DevHomePage({ searchParams }: PageProps<"/dev/home">) {
   if (process.env.NODE_ENV === "production") notFound();
