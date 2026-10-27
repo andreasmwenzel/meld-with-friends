@@ -83,7 +83,12 @@ export function publicMove(prev: GameState, next: GameState, action: Action): Pu
     if (same([...a.log, ...added].slice(-LOG_CAP), b.log)) log = added;
   }
   if (log === null) return null;
-  return { rev: next.rev, action: said, patch: patch as PublicPatch, log };
+  const move: PublicMove = { rev: next.rev, action: said, patch: patch as PublicPatch, log };
+  // Each client works out its own legal actions from its view. Some depend on what only the server
+  // holds (a shooter's claim remembers the cards it passed back), so when any seat would get them
+  // wrong, there is no public move and every client fetches its view instead.
+  if (SEATS.some(seat => !same(applyPublicMove(before[seat], move)?.legal, after[seat].legal))) return null;
+  return move;
 }
 
 /** A view without the fields that differ between seats. */

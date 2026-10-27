@@ -23,8 +23,9 @@ The other three seats follow the ordinary follow, head, trump and overtrump rule
 the declarer loses ends the game with the opponents winning, regardless of score. Winning all twelve
 tricks adds exactly the target to the declaring side. A negative starting score can leave the game
 unfinished. Neither side scores meld, counters or the last trick.
-Claims are disabled during solo shoots because the claim proof assumes four active seats. Each
-three-card trick must be played out, skipping the sitting-out partner.
+Three-card tricks skip the sitting-out partner. The shooter may claim the rest: its proof also counts the
+cards it passed back to its partner as out of play (they never reach the table), even though the view
+hides those cards during play. No other seat learns them from a claim.
 
 New auction shoots are illegal. Trusted log replay uses `applyLegacyAction` for archived auction
 shoots and old post-pass shoots followed by meld. Those hands keep their four-player play and stored
