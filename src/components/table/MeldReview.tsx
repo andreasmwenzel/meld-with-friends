@@ -65,9 +65,11 @@ export function MeldReview({ melds, seat, nameOf, onHide, compact = false }: {
   }, [open, pin]);
 
   return (
-    // The chips wrap among themselves; the close button keeps its place at the end of the row.
-    <div ref={root} role="group" aria-label="Meld this hand" className="relative mx-auto flex max-w-full items-center justify-center gap-0.5 text-xs">
-      <div className="flex min-w-0 flex-wrap items-center justify-center gap-1">
+    // The chips wrap among themselves; the close button keeps its place at the end of the row. The padding is room
+    // for the 44px tap areas (hit) of chips 32px tall, so a scrolling column round the row does not cut them off.
+    <div ref={root} role="group" aria-label="Meld this hand" className="relative mx-auto flex max-w-full items-center justify-center gap-0.5 px-2 py-1.5 text-xs">
+      {/* Wrapped rows stay 12px apart, so the chips' 44px tap areas (hit) do not reach into each other. */}
+      <div className="flex min-w-0 flex-wrap items-center justify-center gap-x-1 gap-y-3">
       {seats.map((s) => {
         const total = (melds[s] ?? []).reduce((n, it) => n + it.points, 0);
         const on = open === s;
@@ -75,7 +77,7 @@ export function MeldReview({ melds, seat, nameOf, onHide, compact = false }: {
           <button key={s} type="button" data-meld-seat={s} aria-expanded={on} aria-controls={on ? popId : undefined}
             aria-label={`${nameOf(s)}, ${total} meld`}
             onClick={() => { if (on) { setOpen(null); setPin(null); } else { place(s); setOpen(s); } }}
-            className={`inline-flex min-h-8 items-baseline gap-1 rounded-full px-1.5 py-1 ${on ? "bg-chalk text-[color:var(--pip-black)]" : "bg-white/10 text-chalk hover:bg-white/20"}`}>
+            className={`hit inline-flex min-h-8 items-baseline gap-1 rounded-full px-1.5 py-1 ${on ? "bg-chalk text-[color:var(--pip-black)]" : "bg-white/10 text-chalk hover:bg-white/20"}`}>
             <span className="max-w-[7em] truncate font-semibold"
               style={{ color: on ? undefined : teamOf(s) === "red" ? "var(--deck-red-soft)" : "var(--deck-blue-soft)" }}>{nameOf(s)}</span>
             <span className="tabular-nums">{total}</span>
@@ -101,7 +103,7 @@ export function MeldReview({ melds, seat, nameOf, onHide, compact = false }: {
       )}
       {onHide && (
         <button type="button" onClick={onHide} aria-label="Hide the meld row" title="Hide"
-          className="inline-flex h-11 w-7 shrink-0 items-center justify-center rounded-full text-base leading-none text-chalk-faint hover:bg-white/10 hover:text-chalk">×</button>
+          className="hit ml-2 inline-flex h-11 w-7 shrink-0 items-center justify-center rounded-full text-base leading-none text-chalk-faint hover:bg-white/10 hover:text-chalk">×</button>
       )}
     </div>
   );

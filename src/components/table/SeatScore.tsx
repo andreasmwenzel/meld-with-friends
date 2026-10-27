@@ -104,12 +104,12 @@ export function ScoreTag({ score, name, align, placement = "below" }: { score: S
     : `${name}: meld ${score.small}`;
   const side = align === "left" ? "left-0" : align === "right" ? "right-0" : "left-1/2 -translate-x-1/2";
   const cls = "flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs leading-5";
-  // The chip stays 24px tall so nothing round it moves; the button's hit area reaches 44px.
+  // The chip stays 24px tall so nothing round it moves; the button's hit area reaches 44x44 (`hit`, globals.css).
   if (!detail) return <span className={cls}><span aria-hidden className="contents">{body}</span><span className="sr-only">{label}</span></span>;
   return (
     <div ref={root} className="relative">
       <button type="button" aria-label={label} aria-expanded={open} aria-controls={open ? popId : undefined} onClick={() => setOpen(o => !o)}
-        className={`${cls} relative before:absolute before:inset-x-0 before:-inset-y-2.5 before:content-[''] hover:bg-chalk-ghost focus-visible:bg-chalk-ghost`}>
+        className={`${cls} hit hover:bg-chalk-ghost focus-visible:bg-chalk-ghost`}>
         {body}
       </button>
       {open && (

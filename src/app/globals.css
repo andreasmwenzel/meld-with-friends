@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+/* A control drawn small that still takes a tap over at least 44x44: the hit area grows round its middle, the layout
+   does not. Raised a step, so the grown area is not lost under whatever follows (a fan of backs, the hand's row);
+   neighbouring controls keep apart by spacing. Inside a board scaled down to fit (--board-scale, Game.tsx) the area
+   grows by as much again, so it is still 44px on the screen. scripts/overlap.mjs checks every control on the table. */
+@utility hit {
+  position: relative; z-index: 15;
+  &::after {
+    content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: max(100%, calc(44px / var(--board-scale, 1))); height: max(100%, calc(44px / var(--board-scale, 1)));
+  }
+}
+
 /* A phone held sideways. Keep in step with SHORT_QUERY in src/lib/cardPrefs.ts. */
 @custom-variant short (@media (orientation: landscape) and (max-height: 500px));
 

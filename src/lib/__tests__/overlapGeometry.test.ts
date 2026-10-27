@@ -78,6 +78,16 @@ describe('findOverlaps', () => {
     expect(allowed.map((a) => [a.a, a.b])).toEqual([['chat', 'chat-badge']]);
     expect(failures.map((f) => [f.kind, f.a, f.b])).toEqual([['controls', 'play', 'action: Pass']]);
   });
+  it('needs every control to take a tap over 44x44, but for the strips of your fanned cards', () => {
+    const { failures, allowed } = findOverlaps(snap({ controls: [
+      { name: 'Last trick', w: 51, h: 16, by: ['div.flex'] },
+      { name: 'Claim all', w: 73, h: 43 },
+      { name: 'card AS0', w: 25, h: 100, card: true },
+      { name: 'card KS0', w: 25, h: 30, card: true },
+    ] }));
+    expect(failures.map((f) => [f.kind, f.b, f.a])).toEqual([['small', 'Last trick', '51x16'], ['small', 'card KS0', '25x30']]);
+    expect(allowed.map((a) => a.b)).toEqual(['card AS0']);
+  });
 });
 
 describe('checkPresence', () => {

@@ -4,9 +4,7 @@ import type { MotionPref } from "@/lib/cardPrefs";
 import { claimSweep, motionTimings } from "./motion";
 
 export function ClaimButton({ busy, onClaim }: { busy: boolean; onClaim: () => void }) {
-  // Sideways the status rows are tight (PlayStatus): a 44px target would reach over "Last trick" below it. Important,
-  // since .tap-link (globals.css) is outside the utility layer.
-  return <button type="button" disabled={busy} className="tap-link ml-3 text-sm font-semibold text-brass underline underline-offset-4 short:min-h-8!"
+  return <button type="button" disabled={busy} className="tap-link ml-3 text-sm font-semibold text-brass underline underline-offset-4"
     onClick={() => onClaim()}>
     Claim all
   </button>;

@@ -9,8 +9,11 @@
  * @typedef {{ hand: string, cards: (Box & { label?: string })[], scrolls?: boolean, clip?: Box, declared?: number | null }} Hand
  * @typedef {Box & { name: string, coveredBy?: string[], clip?: Box, own?: string | null }} Overlay
  * `expected` lists the hands the page says it draws (data-hands); `sittingOut` is the seat set aside for a shoot, if any.
- * @typedef {{ vw: number, vh: number, hands: Hand[], overlays: Overlay[], plates?: Overlay[], expected?: string[] | null, sittingOut?: string | null }} Snapshot
- * @typedef {{ kind: "control" | "controls" | "hands" | "clipped" | "covered" | "edge", a: string, b: string, cards: number, area: number }} Hit
+ * `controls` are the interactive controls with how far a tap reaches them (w x h, probed in the page); `card` marks
+ * a card of your hand.
+ * @typedef {{ name: string, w: number, h: number, card?: boolean, by?: string[] }} Target
+ * @typedef {{ vw: number, vh: number, hands: Hand[], overlays: Overlay[], plates?: Overlay[], controls?: Target[], expected?: string[] | null, sittingOut?: string | null }} Snapshot
+ * @typedef {{ kind: "control" | "controls" | "hands" | "clipped" | "covered" | "edge" | "small", a: string, b: string, cards: number, area: number, by?: string[] }} Hit
  */
 
 /** Overlaps thinner than this (px, either way) are shadows and rounding, not one thing covering another. */
@@ -52,6 +55,17 @@ export const ALLOW_CONTROLS = [
   { a: /^chat-badge$/, b: /^chat$/, why: "the unread count sits on the corner of the talk button" },
 ];
 
+/** The smallest tap target, each way (px): the platform guidance for touch, so a thumb lands on what it aims at. */
+export const MIN_TARGET = 44;
+
+/**
+ * Controls that may be smaller to tap. Everything else must take a tap over at least MIN_TARGET each way.
+ * @type {{ match: (t: Target) => boolean, why: string }[]}
+ */
+export const ALLOW_SMALL = [
+  { match: (t) => !!t.card && t.h >= MIN_TARGET - 1, why: "cards in your fan overlap: each takes a tap over the strip it shows, its full height; the fan's spacing is set by how many cards fit" },
+];
+
 /** Whether `b` shows whole inside `clip` (sideways too unless `across` is false: a hand that scrolls). */
 export function inside(/** @type {Box} */ b, /** @type {Box} */ clip, across = true, tol = TOLERANCE) {
   const down = b.y >= clip.y - tol && b.y + b.h <= clip.y + clip.h + tol;
@@ -66,7 +80,8 @@ export function allowed(overlay, hand, allow = ALLOW) {
 /**
  * Every control lying on a hand card, every control drawn over by another one, every card of one hand lying on a
  * card of another, every hand with cards cut off (by the screen or a box that hides overflow; sideways not for a hand
- * that scrolls, as yours does when it is too wide), and every control or seat plate (with its turn ring) cut off.
+ * that scrolls, as yours does when it is too wide), every control or seat plate (with its turn ring) cut off, and every
+ * control that takes a tap over less than MIN_TARGET each way.
  * ALLOW and ALLOW_COVER list the exceptions.
  * One hit per (control, hand) or (hand, hand) pair, counting the cards involved.
  * @param {Snapshot} snap
@@ -122,6 +137,13 @@ export function findOverlaps(snap, allow = ALLOW, allowCover = ALLOW_COVER, allo
   for (const hand of snap.hands) {
     const out = hand.cards.filter((c) => !inside(c, hand.clip ?? screen, !hand.scrolls));
     if (out.length) failures.push({ kind: "clipped", a: "edge", b: hand.hand, cards: out.length, area: 0 });
+  }
+  for (const t of snap.controls ?? []) {
+    // The page probes in whole pixels from a middle that may fall between two, so a 44px area can read as 43.
+    if (t.w >= MIN_TARGET - 1 && t.h >= MIN_TARGET - 1) continue;
+    const hit = /** @type {Hit} */ ({ kind: "small", a: `${t.w}x${t.h}`, b: t.name, cards: 0, area: 0, by: t.by });
+    const rule = ALLOW_SMALL.find((r) => r.match(t));
+    if (rule) ok.push({ ...hit, why: rule.why }); else failures.push(hit);
   }
   for (const o of [...snap.overlays, ...(snap.plates ?? [])]) {
     // Tight here: a turn ring is only 2px, so the usual tolerance would let it vanish unnoticed.

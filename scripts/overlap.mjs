@@ -21,16 +21,28 @@ const verbose = !!args.verbose;
 const chrome = process.env.CHROME ?? "google-chrome";
 if (shots) mkdirSync(shots, { recursive: true });
 
-const source = readFileSync("src/engine/scenarios.ts", "utf8");
-// Each preset's own line says how its hand ends up: at hand end (the result sheet) and whether passing is on, which
-// decides the screens it must reach. Read from the source, not the page, so a page that fails to show them fails.
-const presets = [...source.matchAll(/\{ id: '([\w-]+)', group: '([^']+)'[^\n]*\n(\s+spec: [^\n]*(?:\n(?!\s+\{ id:)[^\n]*)*)/g)].map(([, id, , spec]) => ({
-  id, path: `/dev/lab?preset=${id}&chrome=0&run=0`,
-  handEnd: /to: '(hand_over|game_over)'/.test(spec), passing: !/passCount: 0/.test(spec),
-}));
+// The presets as the app exports them (src/engine/scenarios.ts, served by the dev-only /dev/presets), so a change in
+// how the file is written cannot drop positions. Each spec says what the page must show: the phase it stops in, whose
+// turn it is, whether the hand ends (the result sheet) and whether passing is on.
+const listed = await fetch(base + "/dev/presets").then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+  .catch((e) => { console.error(`Could not load the presets from ${base}/dev/presets (${e.message}); start pnpm dev first.`); process.exit(2); });
+// A cross-check on the list: no fewer presets than entries that look like one in the source.
+const inSource = (readFileSync("src/engine/scenarios.ts", "utf8").match(/^\s*\{\s*id:/gm) ?? []).length;
+if (!Array.isArray(listed) || !listed.length || listed.length < inSource) {
+  console.error(`/dev/presets gave ${Array.isArray(listed) ? listed.length : "no"} presets; scenarios.ts has ${inSource}.`);
+  process.exit(2);
+}
+const presets = listed.map(({ id, spec, view }) => {
+  const phase = spec.to ?? "bidding";
+  return { id, path: `/dev/lab?preset=${id}&chrome=0&run=0`, phase, handEnd: phase === "hand_over" || phase === "game_over",
+    passing: spec.rules?.passCount !== 0, myTurn: spec.turn == null ? null : spec.turn === view };
+});
 const only = args.only?.split(",");
-const targets = args.url ? [{ id: "custom", path: args.url, handEnd: null, passing: null }] : presets.filter((p) => !only || only.includes(p.id));
-if (!targets.length) { console.error("Nothing to check. Preset ids:", presets.map((p) => p.id).join(" ")); process.exit(2); }
+const targets = args.url ? [{ id: "custom", path: args.url, phase: null, handEnd: null, passing: null, myTurn: null }] : presets.filter((p) => !only || only.includes(p.id));
+if (!targets.length || (only && targets.length < only.length)) {
+  console.error(`Unknown preset${only ? ` in ${only.filter((id) => !presets.some((p) => p.id === id)).join(", ")}` : ""}. Preset ids:`, presets.map((p) => p.id).join(" "));
+  process.exit(2);
+}
 const withTalk = (path) => `${path}${path.includes("?") ? "&" : "?"}chat=1&unread=3`;
 
 // ---- a small Chrome DevTools Protocol client over one browser WebSocket (Node's built-in WebSocket) ----
@@ -130,9 +142,33 @@ const MEASURE = `(() => {
     const b = box(el);
     return { name: "seat " + el.dataset.seatPlate, x: b.x - 2, y: b.y - 2, w: b.w + 4, h: b.h + 4, clip: clipOf(el) };
   });
+  // Tap targets: how far a tap still reaches each control, probed from its middle outwards along both axes with
+  // elementFromPoint, so padding and pseudo-elements that widen the hit area count and neighbours drawn on top do not.
+  // With the talk popover open only its own controls are in reach; otherwise every control on the table.
+  const label = (el) => el.dataset.overlay || (el.dataset.handCard && "card " + el.dataset.handCard) || (el.getAttribute("aria-label") || el.textContent || el.tagName).replace(/\\s+/g, " ").trim().slice(0, 28);
+  const reach = (el) => {
+    const r = el.getBoundingClientRect(), cy = r.top + r.height / 2;
+    const on = (x, y) => { if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false; const t = document.elementFromPoint(x, y); return !!t && (t === el || el.contains(t)); };
+    // The middle of the part that shows (a card in a fan shows only a strip at its left).
+    let a = -1, b = -1;
+    for (let x = Math.floor(r.left); x <= r.right; x++) if (on(x, cy)) { if (a < 0) a = x; b = x; }
+    if (a < 0) return { w: 0, h: 0 };
+    const cx = (a + b) / 2;
+    // What a tap lands on just past the reach, when that is inside the 44px the control should have: the reason it falls short.
+    const by = new Set();
+    const what = (x, y) => { const t = document.elementFromPoint(x, y); if (!t) return "the screen edge"; const c = t.closest("button, a, [data-hand], [data-overlay]") ?? t; return (c.dataset?.overlay || c.dataset?.hand || c.getAttribute?.("aria-label") || c.tagName.toLowerCase() + (typeof c.className === "string" && c.className ? "." + c.className.split(" ")[0] : "")).slice(0, 30); };
+    const out = (dx, dy, max) => { let n = 0; while (n < max && on(cx + dx * (n + 1), cy + dy * (n + 1))) n++; if (n < 22) by.add(what(cx + dx * (n + 1), cy + dy * (n + 1))); return n; };
+    const mx = r.width / 2 + 30, my = r.height / 2 + 30;
+    const w = out(-1, 0, mx) + out(1, 0, mx) + 1, h = out(0, -1, my) + out(0, 1, my) + 1;
+    return { w, h, by: w < 44 || h < 44 ? [...by] : [] };
+  };
+  const pop = document.querySelector("[data-overlay=chat-popover]:not([hidden])");
+  const controls = [...document.querySelectorAll(".board :is(button, a[href], input, select, textarea, [role=button], [role=tab])")]
+    .filter((el) => vis(el) && !el.closest("[inert]") && !el.disabled && (pop ? pop.contains(el) : !el.closest("[data-overlay=chat-popover]")))
+    .map((el) => ({ name: label(el), card: el.hasAttribute("data-hand-card"), ...reach(el) }));
   const board = document.querySelector(".board[data-phase]");
-  return { vw: innerWidth, vh: innerHeight, hands, overlays, plates, modal: !!document.querySelector("[role=dialog][aria-modal=true]"),
-    expected: board ? (board.dataset.hands ?? "").split(" ").filter(Boolean) : null, phase: board?.dataset.phase ?? null, sittingOut: board?.dataset.sittingOut ?? null,
+  return { vw: innerWidth, vh: innerHeight, hands, overlays, plates, controls, modal: !!document.querySelector("[role=dialog][aria-modal=true]"),
+    expected: board && board.dataset.hands != null ? board.dataset.hands.split(" ").filter(Boolean) : null, phase: board?.dataset.phase ?? null, sittingOut: board?.dataset.sittingOut ?? null,
     canPlay: !!board && board.hasAttribute("data-can-play"), claim: !!board && board.hasAttribute("data-claim") };
 })()`;
 
@@ -196,6 +232,9 @@ async function job(target, [w, h]) {
     };
 
     const first = await look("table");
+    // The position the preset asks for: the phase, and in trick play whether it is your turn with a card to play.
+    if (target.phase) await expect(first.phase === target.phase, `expected phase ${target.phase}, the board is in ${first.phase ?? "no phase (data-phase missing)"}`);
+    if (target.phase === "playing" && target.myTurn != null) await expect(first.canPlay === target.myTurn, target.myTurn ? "expected your turn with a card to play" : "expected another seat's turn, but you can play");
     const handEnd = target.handEnd ?? ["hand_over", "game_over"].includes(first.phase);
     if (handEnd) {
       // Hand over: the sheet is modal; "Look at the table" shows every hand face up with the peek buttons along the bottom.
@@ -272,7 +311,7 @@ for (const r of report) {
       failures++;
       byPreset.set(r.id, (byPreset.get(r.id) ?? 0) + 1);
       const what = f.kind === "control" ? `${f.a} on ${f.b} hand` : f.kind === "hands" ? `${f.a} hand on ${f.b} hand` : f.kind === "controls" ? `${f.a} on ${f.b}`
-        : f.kind === "covered" ? `${f.b} covered by ${f.a}` : f.kind === "edge" ? `${f.b} cut off by the screen edge or a clipping box`
+        : f.kind === "small" ? `"${f.b}" can be tapped over ${f.a}, under 44x44${f.by?.length ? ` (cut short by ${f.by.join(", ")})` : ""}` : f.kind === "covered" ? `${f.b} covered by ${f.a}` : f.kind === "edge" ? `${f.b} cut off by the screen edge or a clipping box`
         : `${f.b} hand cut off by the screen edge or a clipping box`;
       const size = f.kind === "controls" ? ` (${f.area}px²)` : f.kind === "control" || f.kind === "hands" ? ` (${f.cards} card${f.cards === 1 ? "" : "s"}, up to ${f.area}px²)` : f.kind === "clipped" ? ` (${f.cards} card${f.cards === 1 ? "" : "s"})` : "";
       console.log(`${r.id} ${r.size} ${s.state}: ${what}${size}${s.file ? `  ${s.file}` : ""}`);

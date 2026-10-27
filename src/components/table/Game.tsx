@@ -846,7 +846,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
             which stand 2px outside their plates, inside the stage's clip. */}
         <div ref={stage} className="board-flat flex min-h-0 flex-1 items-start justify-center overflow-hidden p-1">
           <div className="board-flat board-lift" style={{ ...(fit.scale < 1 ? { width: fit.w * fit.scale, height: fit.h * fit.scale } : null), transform: fit.top ? `translateY(${fit.top}px)` : undefined }}>
-            <div ref={boardRef} className="board-flat w-[min(100vw-2rem,760px)] origin-top-left" style={{ transform: fit.scale < 1 ? `scale(${fit.scale})` : undefined }}>
+            <div ref={boardRef} className="board-flat w-[min(100vw-2rem,760px)] origin-top-left" style={{ transform: fit.scale < 1 ? `scale(${fit.scale})` : undefined, "--board-scale": fit.scale } as React.CSSProperties}>
               {/* partner across */}
               <OpponentRow className="board-north" align="center" {...seatProps(2)} />
               <div className="board-flat grid grid-cols-[minmax(64px,auto)_minmax(0,1fr)_minmax(64px,auto)] items-center gap-2">
@@ -1190,13 +1190,13 @@ function MeldLine({ rules, hand, trump, lit, setLit }: { rules: PlayerView["rule
     const mine = all.find((x) => x.suit === trump);
     if (!mine || mine.items.length === 0) return <p className="mt-2 text-center text-xs text-chalk-faint">No meld in {SUIT_NAME[trump]}.</p>;
     return (
-      <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 text-xs text-chalk-faint">
+      <div className="mt-2 mb-1.5 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-3 text-xs text-chalk-faint">
         <span>Your meld, tap to see it:</span>
         {mine.items.map((it, i) => {
           const key = `${i}`, on = open === key && same(it.cards);
           return (
             <button key={key} type="button" aria-pressed={on} onClick={() => pick(key, it.cards)}
-              className={`rounded-full px-2.5 py-1 text-chalk ${on ? "bg-chalk text-[color:var(--pip-black)]" : "bg-white/10 hover:bg-white/20"}`}>
+              className={`hit inline-flex h-8 min-w-11 items-center justify-center rounded-full px-2.5 text-chalk ${on ? "bg-chalk text-[color:var(--pip-black)]" : "bg-white/10 hover:bg-white/20"}`}>
               {itemLabel(it)} {it.points}
             </button>
           );
@@ -1208,13 +1208,13 @@ function MeldLine({ rules, hand, trump, lit, setLit }: { rules: PlayerView["rule
   const shown = worth.find((x) => x.suit === open);
   return (
     <div className="mt-2 text-center text-xs text-chalk-faint">
-      <div className="flex flex-wrap items-center justify-center gap-1.5">
+      <div className="mb-1.5 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-3">
         <span>Your meld, tap a suit:</span>
         {worth.map((x) => {
           const on = open === x.suit;
           return (
             <button key={x.suit} type="button" aria-pressed={on} onClick={() => pick(x.suit, x.cards)}
-              className={`rounded-full px-2.5 py-1 ${on ? "bg-chalk" : "bg-white/10 hover:bg-white/20"}`}>
+              className={`hit inline-flex h-8 min-w-11 items-center justify-center gap-1 rounded-full px-2.5 ${on ? "bg-chalk" : "bg-white/10 hover:bg-white/20"}`}>
               <span style={{ color: on ? suitColour(x.suit) : undefined }} className={on ? "" : x.suit === "H" || x.suit === "D" ? "text-deck-red-soft" : "text-chalk"}>{SUIT_GLYPH[x.suit]}</span>
               {" "}<span className={on ? "text-[color:var(--pip-black)]" : "text-chalk"}>{x.total}</span>
             </button>
@@ -1282,24 +1282,25 @@ function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact, busy, 
     : done ? <><Name name={nameOf(trick.winner!)} />{` took it${took > 0 ? `, ${took} ${took === 1 ? "counter" : "counters"}` : view.sittingOut == null ? ", no counters" : ""}.`}</>
     : mine ? shootStatus ?? constraintSentence(view) ?? "Tap a card to play it."
     : shootStatus;
-  const link = "whitespace-nowrap text-xs text-chalk-faint underline underline-offset-4 hover:text-chalk";
+  const link = "hit whitespace-nowrap text-xs text-chalk-faint underline underline-offset-4 hover:text-chalk";
   // Each line is a single row of text, so a name can shrink inside it while the words round it stay whole.
   const line = "flex min-w-0 max-w-full whitespace-pre";
   return (
     <div data-play-status="" className="flex w-full flex-col items-center text-center pb-5 short:pb-0">
-      <div className="flex h-8 max-w-full items-center gap-3">
+      {/* Rows 44px tall, so each row's controls take a full tap without reaching into the other row's. */}
+      <div className="flex h-11 max-w-full items-center gap-3">
         {peek.last ? <p className={`display text-chalk ${line}`} style={{ fontSize: compact ? 17 : 19 }}>Last trick: <Name name={nameOf(peek.last.winner!)} /> took it.</p>
           // In the status's own row, not floating over it: a Play button laid over the bar covered "Last trick" and
           // "Claim all" (scripts/overlap.mjs, the armed screen).
           : mine && armed ? <button type="button" data-keep-armed="" data-overlay="play" data-own-card={armed.card} onClick={armed.play} aria-label={`Play ${cardName(armed.card)}`}
-            className="btn btn-brass whitespace-nowrap" style={{ height: 32, minHeight: 32, padding: "0 16px" }}>
+            className="hit btn btn-brass whitespace-nowrap" style={{ height: 32, minHeight: 32, padding: "0 16px" }}>
             Play {SUIT_GLYPH[splitCard(armed.card).suit]}{RANK_LABEL[splitCard(armed.card).rank]}
           </button>
           : mine ? <p className={`display ${line}`} style={{ fontSize: compact ? 19 : 22, color: "var(--brass)" }}>Your play.</p>
           : <p className={`text-sm text-chalk ${line}`}><Name name={nameOf(view.turn!)} /> to play.</p>}
         {view.legal.canClaim && <ClaimButton busy={busy} onClaim={claim} />}
       </div>
-      <div className="flex h-10 max-w-full flex-wrap content-center items-center justify-center gap-x-3 text-xs leading-5 text-chalk-faint short:h-5">
+      <div className="flex h-11 max-w-full flex-wrap content-center items-center justify-center gap-x-3 text-xs leading-5 text-chalk-faint">
         {detail && <span className={typeof detail === "string" ? "max-w-full truncate" : line}>{detail}</span>}
         {(peek.can || peek.last) && <button type="button" onClick={peek.toggle} className={link}>{peek.last ? "Back to the table" : "Last trick"}</button>}
         {stalled && <button type="button" onClick={nudge} className={link}>Nudge the computers</button>}

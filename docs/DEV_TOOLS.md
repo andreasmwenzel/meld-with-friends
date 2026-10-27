@@ -118,10 +118,12 @@ reduced, and waits for the layout to stop moving. The screens:
   bottom), without and with the popover. The result sheet itself is skipped, since the board is behind its scrim;
 - **peek-dealt**: the face-up hands switched to "As dealt", where passing was played and the hand was not claimed.
 
-Each screen a position should reach is required. A missing "Look at the table", Play button, "As dealt" toggle or
-popover fails with the position, size and step. Which positions end the hand and play with passing is read from
-`src/engine/scenarios.ts`, not from the page. The run also fails if fewer than two screens per position and size
-were checked.
+The presets come from the app's own exported list, served by the dev-only `/dev/presets` (404 in production); the run
+stops if that list is empty or shorter than the entries in `src/engine/scenarios.ts`. Each preset's spec says what
+the page must show: the phase it stops in (the board's `data-phase`), in trick play whether it is your turn with a
+card to play, whether the hand ends, and whether passing is on. Each screen a position should reach is required:
+a wrong phase, or a missing "Look at the table", Play button, "As dealt" toggle or popover, fails with the position,
+size and step. The run also fails if fewer than two screens per position and size were checked.
 
 On each screen it reads the boxes of every card (`data-card`) of every hand (`data-hand`: `mine`, `west`, `north`,
 `east`, also the set-aside stack after a shoot), the cards on the cloth (trick and meld, as `table`), the controls
@@ -134,11 +136,18 @@ the action bar, `data-overlay-zone`) and the seat plates with their turn ring (`
 - a control on a hand card, two hands' cards on each other (the cloth counts as a hand), or two controls on each other;
 - a control drawn over by another control;
 - a hand card, control or seat plate cut off by the screen edge or a box that hides overflow (your hand may run
-  off sideways, since it scrolls).
+  off sideways, since it scrolls);
+- a control that takes a tap over less than 44x44px. Every button, link and field on the table (only the popover's
+  own while it is open) is probed from the middle of the part that shows, outwards, with `elementFromPoint`, so
+  padding and a grown hit area count and a neighbour drawn on top does not; the line names what cut it short. Give a
+  small control the `hit` utility (globals.css): its tap area grows to 44x44 round its middle, even inside a board
+  scaled down to fit, and keep neighbours far enough apart that the grown areas do not meet.
 
 Intended overlaps, listed in `scripts/overlap-geometry.mjs` (`ALLOW`, `ALLOW_COVER`, `ALLOW_CONTROLS`): cards of
 one hand overlap each other; the open talk popover may lie over the other seats, the cloth and any control, but
-never your hand; the unread count sits on the talk button; the Play button may touch the card it plays.
+never your hand; the unread count sits on the talk button; the Play button may touch the card it plays. Small
+targets (`ALLOW_SMALL`): only the cards of your hand, which overlap in a fan and take a tap over the strip each shows,
+at full height.
 It prints one line per failure (position, size, screen, what is wrong) and exits 1; `--shots <dir>` saves a
 PNG of every screen measured, and the boxes go to `meld-overlap-report.json` in the temp directory. The rules
 themselves are unit-tested on fixture boxes (`src/lib/__tests__/overlapGeometry.test.ts`). When you add a hand, a
