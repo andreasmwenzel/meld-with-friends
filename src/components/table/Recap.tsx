@@ -99,6 +99,10 @@ export function Recap({ view, nameOf, lastSeenRev }: {
             : <>{" "}{nameOf(r.bidder)} took it at {won}{r.trump && <> in <Trump suit={r.trump} /></>}{view.highBid?.shoot && <>, then shot the moon after the pass</>}.</>)}
         </p>
 
+        {view.sittingOut != null && <p>{nameOf(view.sittingOut)} {view.sittingOut === view.seat ? "sit" : "sits"} out with cards face down. No meld is shown or scored. {view.history.find(h => h.handNumber === r.handNumber)?.shotMade === true
+          ? `The shoot was made for ${view.rules.target} points.`
+          : view.history.find(h => h.handNumber === r.handNumber)?.shotMade === false ? "The shoot missed; the shooting side loses the game." : "The declarer must win every trick alone."}</p>}
+
         {r.passing.count > 0 && r.bidder !== null && (
           <p>
             {iBid || iPartner ? (
@@ -188,7 +192,7 @@ export function Recap({ view, nameOf, lastSeenRev }: {
         {r.tricks.length > 0 && (
           <p className="text-sm text-ink-soft">
             Tricks <span style={{ color: teamInk(myTeam) }}>us {r.trickCounts[myTeam]}</span>, <span style={{ color: teamInk(them) }}>them {r.trickCounts[them]}</span>
-            {" · "}counters <span style={{ color: teamInk(myTeam) }}>us {r.counters[myTeam]}</span>, <span style={{ color: teamInk(them) }}>them {r.counters[them]}</span>
+            {view.sittingOut == null && <>{" · "}counters <span style={{ color: teamInk(myTeam) }}>us {r.counters[myTeam]}</span>, <span style={{ color: teamInk(them) }}>them {r.counters[them]}</span></>}
           </p>
         )}
       </div>

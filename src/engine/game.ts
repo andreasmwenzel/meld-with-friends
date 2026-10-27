@@ -2,7 +2,7 @@ import { buildDeck, cardLabel, seededShuffle, SUITS } from './deck';
 import { computeMeld, qualifiesForMisdeal } from './meld';
 import { legalPlays, playConstraint, trickWinner } from './rules';
 import { IllegalAction } from './types';
-import { resolveRules } from './scoring';
+import { legacyShootRules, resolveRules } from './scoring';
 import { claimLine } from './claim';
 import type {
   Action, CardId, GameState, HandRecap, HandRecord, HandScoreBreakdown, LegalActions, PlayerState, PlayerView,
@@ -55,8 +55,7 @@ export function validateRules(rules: RulesConfig): void {
   requireAction(rules.passCount <= 12, 'passCount cannot exceed 12');
   requireAction(rules.setPenaltyIsBid === true, 'Only bid-sized set penalties are supported');
   requireAction(rules.counting === 'tens' || rules.counting === 'classic', 'counting must be tens or classic');
-  requireAction(['off', 'game', 'points'].includes(rules.shoot), 'Invalid shoot mode');
-  requireAction(Number.isSafeInteger(rules.shootPoints) && rules.shootPoints > 0, 'shootPoints must be a positive integer');
+  requireAction(['off', 'on'].includes(rules.shoot), 'Invalid shoot mode');
   requireAction(typeof rules.dealerStuck === 'boolean' && typeof rules.mustTakeTrickToSaveMeld === 'boolean' && typeof rules.revealHands === 'boolean'
     && typeof rules.ninesMisdeal === 'boolean', 'Rule flags must be booleans');
 }
@@ -90,6 +89,7 @@ function deal(state: EngineState): void {
   state.tricksTaken = { red: [], blue: [] };
   state.misdeal = null;
   state.claim = null;
+  state.sittingOut = null;
   log(state, `Hand ${state.handNumber}: ${SEAT_NAMES[state.dealer]} deals`);
 }
 
@@ -119,25 +119,26 @@ export function legalActionsFor(state: GameState, seat: SeatIndex): LegalActions
   const bidding = state.phase === 'bidding' && onTurn && !state.bids.some(b => b.seat === seat && b.amount === null);
   const melding = state.phase === 'melding' && !state.players[seat].meldConfirmed;
   const shotBid = state.bids.some(bid => bid.shoot);
-  // With no competing bidder, the dealer takes the minimum (or redeals), or shoots.
+  // With no competing bidder, the dealer takes the minimum (or redeals).
   const allOthersPassed = seat === state.dealer && !state.highBid
     && SEATS.every(other => other === seat || state.bids.some(b => b.seat === other && b.amount === null));
   const canBid = bidding && !shotBid && !allOthersPassed;
   const deciding = state.phase === 'deciding_shoot' && onTurn && seat === state.bidder;
   return {
     canBid, minBid: canBid ? openingBid(state) : null,
-    canShoot: (bidding && state.rules.shoot !== 'off' && !shotBid) || deciding,
+    canShoot: deciding && state.rules.shoot !== 'off',
     canDeclineShoot: deciding,
     canMisdeal: bidding && state.rules.ninesMisdeal && !state.bids.some(b => b.seat === seat)
       && qualifiesForMisdeal(state.players[seat].hand),
     canPassBid: bidding, canDeclareTrump: state.phase === 'declaring_trump' && onTurn,
     mustPassCount: onTurn && (state.phase === 'passing_to_bidder' || state.phase === 'passing_back') ? state.rules.passCount : null,
     canDeclareMeld: melding, canConfirmMeld: melding,
-    canClaim: claimLine({ phase: state.phase, seat, turn: state.turn, hand: state.players[seat].hand,
+    // Claim proofs currently assume four active seats. Solo shoots must be played out.
+    canClaim: state.sittingOut == null && claimLine({ phase: state.phase, seat, turn: state.turn, hand: state.players[seat].hand,
       playedCards: (state as EngineState).playedCards ?? [], currentTrick: state.currentTrick, trump: state.trump }) !== null,
-    playableCards: state.phase === 'playing' && onTurn && state.currentTrick && state.trump
+    playableCards: state.phase === 'playing' && onTurn && seat !== state.sittingOut && state.currentTrick && state.trump
       ? legalPlays(state.players[seat].hand, state.currentTrick, state.trump) : [],
-    playConstraint: state.phase === 'playing' && onTurn && state.currentTrick && state.trump
+    playConstraint: state.phase === 'playing' && onTurn && seat !== state.sittingOut && state.currentTrick && state.trump
       ? playConstraint(state.players[seat].hand, state.currentTrick, state.trump) : null,
     canAdvanceHand: state.phase === 'hand_over',
   };
@@ -199,14 +200,15 @@ function countCounters(cards: CardId[], rules: RulesConfig): number {
 }
 function finishHand(state: GameState, lastWinner: SeatIndex, shotMade?: boolean): void {
   requireAction(state.bidder !== null && state.highBid?.amount != null && state.trump !== null, 'Hand is missing its contract');
+  const solo = state.sittingOut != null;
   const meld = { red: 0, blue: 0 };
-  for (const player of state.players) meld[teamOf(player.seat)] += player.meldPoints;
+  for (const player of solo ? [] : state.players) meld[teamOf(player.seat)] += player.meldPoints;
   const counters = { red: 0, blue: 0 };
   for (const team of ['red', 'blue'] as const) {
-    counters[team] = countCounters(state.tricksTaken[team].flat(), state.rules);
+    counters[team] = solo ? 0 : countCounters(state.tricksTaken[team].flat(), state.rules);
   }
   const lastTrick = { red: 0, blue: 0 };
-  if (state.players.every(player => player.hand.length === 0)) {
+  if (!solo && state.players.every(player => player.hand.length === 0)) {
     lastTrick[teamOf(lastWinner)] = state.rules.lastTrickBonus;
   }
   const tricks = { red: counters.red + lastTrick.red, blue: counters.blue + lastTrick.blue };
@@ -225,13 +227,17 @@ function finishHand(state: GameState, lastWinner: SeatIndex, shotMade?: boolean)
   if (state.highBid.shoot) {
     requireAction(shotMade !== undefined, 'Shoot outcome is missing');
     const delta = { red: 0, blue: 0 };
-    if (state.rules.shoot === 'game') {
+    if (solo) {
+      delta[bidding] = shotMade ? state.rules.target : 0;
+      breakdown[bidding].shoot = delta[bidding];
+      if (!shotMade) state.winner = defending;
+    } else if (state.legacyShootRules?.mode !== 'points') {
       const winner = shotMade ? bidding : defending;
       delta[winner] = Math.max(state.score[winner], state.rules.target) - state.score[winner];
       breakdown[winner].shoot = delta[winner];
       state.winner = winner;
     } else {
-      delta[bidding] = shotMade ? state.rules.shootPoints : -state.rules.shootPoints;
+      delta[bidding] = shotMade ? (state.legacyShootRules?.points ?? state.rules.target) : -(state.legacyShootRules?.points ?? state.rules.target);
       delta[defending] = savedMeld(defending) + tricks[defending];
       breakdown[bidding].shoot = delta[bidding];
       scoreNormally(defending);
@@ -239,13 +245,14 @@ function finishHand(state: GameState, lastWinner: SeatIndex, shotMade?: boolean)
     state.score.red += delta.red;
     state.score.blue += delta.blue;
     state.history.push({ handNumber: state.handNumber, dealer: state.dealer, bidder: state.bidder,
-      bid, trump: state.trump, meld, tricks, delta, breakdown, wentSet: !shotMade, shotMade });
+      bid, trump: state.trump, meld, tricks, delta, breakdown, wentSet: !shotMade, shotMade,
+      ...(state.sittingOut != null ? { sittingOut: state.sittingOut } : {}) });
     if (!state.winner && (state.score[bidding] >= state.rules.target || state.score[defending] >= state.rules.target)) {
       state.winner = state.score[bidding] >= state.rules.target ? bidding : defending;
     }
     state.turn = null;
     state.phase = state.winner ? 'game_over' : 'hand_over';
-    log(state, `${bidding === 'red' ? 'Red' : 'Blue'} ${shotMade ? 'makes' : 'misses'} the shoot; hand over`);
+    log(state, `${SEAT_NAMES[state.bidder]} ${shotMade ? 'makes' : 'misses'} the shoot${solo && !shotMade ? '; shooting side loses the game' : '; hand over'}`);
     if (state.winner) log(state, `${state.winner === 'red' ? 'Red' : 'Blue'} wins the game`);
     return;
   }
@@ -279,44 +286,71 @@ function playCard(state: EngineState, seat: SeatIndex, card: CardId, claiming = 
   state.currentTrick.plays.push({ seat, card });
   (state.playedCards ??= []).push({ seat, card });
   if (!claiming) log(state, `${name} plays ${cardLabel(card)}`);
-  if (state.currentTrick.plays.length === 4) {
+  if (state.currentTrick.plays.length === (state.sittingOut != null ? 3 : 4)) {
     const winner = trickWinner(state.currentTrick, state.trump);
     state.currentTrick.winner = winner;
     state.lastTrick = clone(state.currentTrick);
     const completed = state.completedTricks ??= [];
     completed.push({ index: state.tricksTaken.red.length + state.tricksTaken.blue.length + 1,
       leader: state.currentTrick.leader, plays: clone(state.currentTrick.plays), winner,
-      counters: countCounters(state.currentTrick.plays.map(play => play.card), state.rules) });
+      counters: state.sittingOut != null ? 0 : countCounters(state.currentTrick.plays.map(play => play.card), state.rules) });
     state.tricksTaken[teamOf(winner)].push(state.currentTrick.plays.map(play => play.card));
     if (!claiming) log(state, `${SEAT_NAMES[winner]} takes the trick`);
     state.currentTrick = { leader: winner, plays: [], winner: null };
     state.turn = winner;
-    const shootLost = state.highBid?.shoot && state.bidder !== null && teamOf(winner) !== teamOf(state.bidder);
-    if (shootLost || state.players.every(p => p.hand.length === 0)) {
+    const shootLost = state.highBid?.shoot && state.bidder !== null && (state.sittingOut != null ? winner !== state.bidder : teamOf(winner) !== teamOf(state.bidder));
+    if (shootLost || (state.sittingOut != null && state.bidder !== null ? state.players[state.bidder].hand.length === 0 : state.players.every(p => p.hand.length === 0))) {
       state.currentTrick = null;
       finishHand(state, winner, state.highBid?.shoot ? !shootLost : undefined);
     }
-  } else state.turn = nextSeat(seat);
+  } else {
+    state.turn = nextSeat(seat);
+    if (state.turn === state.sittingOut) state.turn = nextSeat(state.turn);
+  }
 }
 
 export function applyAction(previous: GameState, action: Action): GameState {
+  return apply(previous, action, false);
+}
+/** Trusted action-log replay only. Live server actions always use applyAction. */
+export function applyLegacyAction(previous: GameState, action: Action): GameState {
+  return apply(previous, action, true);
+}
+function apply(previous: GameState, action: Action, legacyShoot: boolean): GameState {
   requireAction(SEATS.includes(action.seat), 'Invalid seat');
   const legal = legalActionsFor(previous, action.seat);
   const state: EngineState = clone(previous);
+  const rawShoot = (state.rules as unknown as Record<string, unknown>).shoot;
+  // Normal hands in old games still need their original stake to rebuild earlier shoots.
+  if ((rawShoot === 'game' || rawShoot === 'points' || legacyShoot || state.highBid?.shoot && state.sittingOut == null) && !state.legacyShootRules) {
+    state.legacyShootRules = legacyShootRules(state.rules);
+  }
   state.rules = resolveRules(state.rules, true);
   const player = state.players[action.seat];
   const name = SEAT_NAMES[action.seat];
   switch (action.type) {
     case 'shoot': {
-      requireAction(legal.canShoot, 'You cannot shoot now');
-      const amount = state.rules.shoot === 'points' ? state.rules.shootPoints : state.rules.target;
+      const legacyAuction = legacyShoot && state.phase === 'bidding' && legal.canPassBid
+        && state.rules.shoot !== 'off' && !state.bids.some(bid => bid.shoot);
+      requireAction(legal.canShoot || legacyAuction, 'You cannot shoot now');
+      const amount = legacyShoot && state.legacyShootRules?.mode === 'points'
+        ? state.legacyShootRules.points : state.rules.target;
       state.highBid = { seat: action.seat, amount, shoot: true };
       log(state, `${name} shoots the moon`);
-      // After the pass the auction is over: the contract becomes the shoot and meld begins.
-      if (state.phase === 'deciding_shoot') startMeld(state);
-      else {
+      if (legacyAuction) {
         state.bids.push({ ...state.highBid });
         finishBiddingAction(state);
+      } else if (legacyShoot) startMeld(state);
+      else {
+        state.sittingOut = partner(action.seat);
+        // Keep the set-aside hand for conservation and the optional hand-end reveal only.
+        state.handsAtPlay = snapshotHands(state);
+        for (const p of state.players) { p.meld = []; p.meldPoints = 0; p.meldConfirmed = false; }
+        state.phase = 'playing';
+        state.turn = action.seat;
+        state.currentTrick = { leader: action.seat, plays: [], winner: null };
+        log(state, `${SEAT_NAMES[state.sittingOut]} is sitting out; cards stay face down`);
+        log(state, 'No meld; take every trick alone');
       }
       break;
     }
@@ -421,6 +455,7 @@ export function applyAction(previous: GameState, action: Action): GameState {
         playCard(state, action.seat, card, true);
         for (let n = 1; n < 4; n++) {
           const seat = ((action.seat + n) % 4) as SeatIndex;
+          if (seat === state.sittingOut) continue;
           const reply = legalPlays(state.players[seat].hand, state.currentTrick!, state.trump)[0];
           playCard(state, seat, reply, true);
         }
@@ -463,6 +498,10 @@ export function normaliseHandRecord(h: Omit<HandRecord, 'breakdown'> & { breakdo
 export function viewFor(state: GameState, seat: SeatIndex): PlayerView {
   state = { ...state, rules: resolveRules(state.rules, true) };
   const legal = legalActionsFor(state, seat);
+  const sittingOut = state.sittingOut ?? null;
+  const hidden = sittingOut !== null && state.phase !== 'hand_over' && state.phase !== 'game_over';
+  const setAside = new Set(hidden ? state.players[sittingOut!].hand : []);
+  const visiblePass = (cards: CardId[]) => cards.filter(card => !setAside.has(card));
   const melds = { 0: state.players[0].meld, 1: state.players[1].meld, 2: state.players[2].meld, 3: state.players[3].meld };
   const meldConfirmed = { 0: state.players[0].meldConfirmed, 1: state.players[1].meldConfirmed, 2: state.players[2].meldConfirmed, 3: state.players[3].meldConfirmed };
   return clone({
@@ -470,15 +509,15 @@ export function viewFor(state: GameState, seat: SeatIndex): PlayerView {
       handNumber: state.handNumber, dealer: state.dealer, bids: state.bids,
       bidder: state.bidder, bid: state.highBid?.amount ?? null, trump: state.trump,
       passing: { done: ['deciding_shoot', 'melding', 'playing', 'hand_over', 'game_over'].includes(state.phase), count: state.rules.passCount },
-      myPassedOut: (state as EngineState).passedOut?.[seat] ?? [],
-      myPassedIn: (state as EngineState).passedIn?.[seat] ?? [],
+      myPassedOut: visiblePass((state as EngineState).passedOut?.[seat] ?? []),
+      myPassedIn: visiblePass((state as EngineState).passedIn?.[seat] ?? []),
       melds: Object.fromEntries(state.players.map(p => [p.seat, { items: p.meld, points: p.meldPoints }])) as HandRecap['melds'],
       tricks: (state as EngineState).completedTricks ?? [], current: state.currentTrick,
       trickCounts: { red: state.tricksTaken.red.length, blue: state.tricksTaken.blue.length },
-      counters: { red: countCounters(state.tricksTaken.red.flat(), state.rules), blue: countCounters(state.tricksTaken.blue.flat(), state.rules) },
+      counters: { red: sittingOut !== null ? 0 : countCounters(state.tricksTaken.red.flat(), state.rules), blue: sittingOut !== null ? 0 : countCounters(state.tricksTaken.blue.flat(), state.rules) },
     },
     seat, phase: state.phase, handNumber: state.handNumber, dealer: state.dealer,
-    turn: state.turn, rules: state.rules, hand: state.players[seat].hand,
+    turn: state.turn, rules: state.rules, sittingOut, hand: hidden && seat === sittingOut ? [] : state.players[seat].hand,
     handCounts: state.players.map(p => p.hand.length) as PlayerView['handCounts'],
     melds, meldConfirmed, bids: state.bids, highBid: state.highBid,
     bidder: state.bidder, trump: state.trump, currentTrick: state.currentTrick,

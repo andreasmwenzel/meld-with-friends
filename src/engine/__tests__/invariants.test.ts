@@ -52,7 +52,7 @@ it('plays 200 seeded random full games with conservation, legal actions, illegal
     const rng = random(seed);
     const rules: Partial<RulesConfig> = {
       target: 400, minBid: 50, passCount: [0, 4, 5][seed % 3],
-      counting: seed % 2 ? 'classic' : 'tens', shoot: seed % 2 ? 'points' : 'off', shootPoints: 100,
+      counting: seed % 2 ? 'classic' : 'tens', shoot: seed % 2 ? 'on' : 'off',
       dealerStuck: seed % 4 !== 0,
     };
     passCounts.add(rules.passCount!);
@@ -75,7 +75,7 @@ it('plays 200 seeded random full games with conservation, legal actions, illegal
       expect(() => applyAction(state, illegal)).toThrow(IllegalAction);
       state = applyAction(state, action);
       actions.push(action);
-      if (state.history.at(-1)?.shotMade === false && state.phase === 'hand_over' && state.players.some(p => p.hand.length > 0)) earlyFailedShoots++;
+      if (state.history.at(-1)?.shotMade === false && state.phase === 'game_over' && state.players.some(p => p.hand.length > 0)) earlyFailedShoots++;
     }
     expect(state.phase, `seed ${seed}`).toBe('game_over');
     conserved(state);

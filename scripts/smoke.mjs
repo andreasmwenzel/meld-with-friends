@@ -51,7 +51,7 @@ console.log("smoke passed");
 async function runSmoke() {
   console.log("players:", players.map((p) => `${p.name}=${p.id.slice(0, 8)}`).join(" "));
 
-  const rules = { scoring: "classic", counting: "classic", shoot: "points", shootPoints: 500, revealHands: true };
+  const rules = { scoring: "classic", counting: "classic", shoot: "on", revealHands: true };
   const { code } = await players[0].api("/api/tables", { method: "POST", body: { gameKind: "pinochle", rules: {} } });
   await players[0].api(`/api/tables/${code}`, { method: "PATCH", body: { rules } });
   await players[1].api(`/api/tables/${code}`, { method: "PATCH", body: { rules } }).then(() => { throw new Error("non-host changed rules"); }, () => {});
@@ -101,8 +101,7 @@ async function runSmoke() {
     } else {
       const v = await bySeat(seat).api(`/api/tables/${code}/view`);
       const L = v.legal;
-      if (L.canShoot && seat === 1 && v.bids.length === 0) view = await act(seat, { type: "shoot" });
-      else if (L.canBid && v.bids.length === 0) view = await act(seat, { type: "bid", amount: L.minBid });
+      if (L.canBid && v.bids.length === 0) view = await act(seat, { type: "bid", amount: L.minBid });
       else if (L.canPassBid) view = await act(seat, { type: "pass_bid" });
       else if (L.canDeclineShoot) view = await act(seat, { type: "decline_shoot" });
       else if (L.canDeclareTrump) view = await act(seat, { type: "declare_trump", suit: "H" });
@@ -126,7 +125,7 @@ async function runSmoke() {
   // A short game exercises rematch through HTTP without waiting for a full match.
   const short = await players[0].api("/api/tables", { method: "POST", body: { gameKind: "pinochle", rules: {} } });
   const shortPath = `/api/tables/${short.code}`;
-  await players[0].api(shortPath, { method: "PATCH", body: { rules: { target: 300, shoot: "game" } } });
+  await players[0].api(shortPath, { method: "PATCH", body: { rules: { target: 300, shoot: "on" } } });
   for (const [seat, player] of players.entries()) await player.api(`${shortPath}/seat`, { method: "POST", body: { seat } });
   await players[0].api(`${shortPath}/start`, { method: "POST" });
   await expectStatus(players[1], `${shortPath}/rematch`, { method: "POST" }, 403);

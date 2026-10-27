@@ -6,7 +6,7 @@ describe("scoring selection", () => {
     const modern = resolveRules({});
     const classic = changeScoring(modern, "classic");
     expect(classic).toMatchObject({ scoring: "classic", target: 1500, minBid: 250, bidStep: 10,
-      lastTrickBonus: 10, shootPoints: 1500, counterValue: 10 });
+      lastTrickBonus: 10, counterValue: 10 });
     expect(changeScoring(classic, "modern")).toEqual(modern);
   });
 
@@ -18,8 +18,8 @@ describe("scoring selection", () => {
 
   it("snaps custom values to the nearest option, with ties choosing the lower option", () => {
     const modern = changeScoring({ scoring: "classic", target: 1750, minBid: 275,
-      lastTrickBonus: 19, shootPoints: 810 }, "modern");
-    expect(modern).toMatchObject({ target: 150, minBid: 25, lastTrickBonus: 2, shootPoints: 100 });
+      lastTrickBonus: 19 }, "modern");
+    expect(modern).toMatchObject({ target: 150, minBid: 25, lastTrickBonus: 2 });
     for (const key of Object.keys(POINT_OPTIONS.modern) as (keyof typeof POINT_OPTIONS.modern)[]) {
       expect(POINT_OPTIONS.modern[key]).toContain(modern[key]);
     }

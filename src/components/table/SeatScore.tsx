@@ -21,6 +21,7 @@ export interface SeatScore {
 /** The public facts a chip is built from; both the live view and a replay position provide them. */
 export interface ScoreFacts {
   phase: Phase; handNumber: number; dealer: SeatIndex; bidder: SeatIndex | null; highBid: Bid | null; trump: Suit | null; bids: Bid[];
+  sittingOut?: SeatIndex | null;
   meldPoints: Record<SeatIndex, number>;
   /** counter points taken by each side so far, without the last-trick bonus */
   counters: Record<Team, number>;
@@ -43,11 +44,14 @@ export function seatScore(f: ScoreFacts, seat: SeatIndex, nameOf: (s: SeatIndex)
   }
   const team = teamOf(seat);
   const record = f.history.find(h => h.handNumber === f.handNumber) ?? null;
+  if (f.sittingOut != null && f.phase === "playing") {
+    return f.bidder === seat ? { ...EMPTY(dealer), main: "moon", suit: f.trump, rows: [["Shoot", "Take every trick alone"]] } : EMPTY(dealer);
+  }
   const playing = f.phase === "playing" || f.phase === "hand_over" || f.phase === "game_over";
   const meld = SEATS.filter(s => teamOf(s) === team).reduce((n: number, s) => n + f.meldPoints[s], 0);
   const soFar = meld + f.counters[team];
   const rows: [string, string][] = SEATS.filter(s => teamOf(s) === team && (f.meldPoints[s] > 0 || meldOut)).map(s => [`${nameOf(s)} meld`, String(f.meldPoints[s])]);
-  if (playing) rows.push(["Counters", String(f.counters[team])]);
+  if (playing && f.sittingOut == null) rows.push(["Counters", String(f.counters[team])]);
   if (record) {
     const b = record.breakdown[team];
     if (b.meldDeclared > 0 && b.meldSaved === 0) rows.push(["Meld lost, no trick", `-${b.meldDeclared}`]);
@@ -61,7 +65,7 @@ export function seatScore(f: ScoreFacts, seat: SeatIndex, nameOf: (s: SeatIndex)
     return { dealer, main: f.highBid.shoot ? "moon" : String(f.highBid.amount), suit: f.trump, total, small: null, rows: [["Bid", f.highBid.shoot ? "the moon" : String(f.highBid.amount)], ...rows] };
   }
   if (f.bidder !== null && teamOf(f.bidder) === team) return EMPTY(dealer);
-  return { ...EMPTY(dealer), small: f.phase === "melding" || f.phase === "playing" || record ? f.meldPoints[seat] : null, rows };
+  return { ...EMPTY(dealer), small: f.sittingOut != null ? null : f.phase === "melding" || f.phase === "playing" || record ? f.meldPoints[seat] : null, rows };
 }
 
 const SUIT_INK: Record<Suit, string> = { S: "var(--chalk)", C: "var(--chalk)", H: "var(--deck-red-soft)", D: "var(--deck-red-soft)" };

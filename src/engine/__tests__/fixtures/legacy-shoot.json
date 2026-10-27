@@ -1,0 +1,565 @@
+[
+  {
+    "mode": "game",
+    "timing": "auction",
+    "actions": [
+      {"type": "shoot", "seat": 1},
+      {"type": "pass_bid", "seat": 2},
+      {"type": "pass_bid", "seat": 3},
+      {"type": "pass_bid", "seat": 0},
+      {"type": "declare_trump", "seat": 1, "suit": "S"},
+      {
+        "type": "declare_meld",
+        "seat": 0,
+        "cards": ["9H0", "AC1", "QC1", "TD0", "TH0", "KD0", "TC1", "AS1", "TS0", "9C0", "JD0", "JS1"]
+      },
+      {"type": "confirm_meld", "seat": 0},
+      {
+        "type": "declare_meld",
+        "seat": 1,
+        "cards": ["TD1", "JC0", "9S1", "QD0", "QS1", "9D0", "TC0", "KH1", "9C1", "KH0", "KC0", "QC0"]
+      },
+      {"type": "confirm_meld", "seat": 1},
+      {
+        "type": "declare_meld",
+        "seat": 2,
+        "cards": ["TH1", "QH0", "AH1", "JH1", "9H1", "JD1", "AS0", "KD1", "AD1", "KS0", "JS0", "QD1"]
+      },
+      {"type": "confirm_meld", "seat": 2},
+      {
+        "type": "declare_meld",
+        "seat": 3,
+        "cards": ["KC1", "9D1", "QH1", "9S0", "AC0", "TS1", "JC1", "QS0", "JH0", "AH0", "AD0", "KS1"]
+      },
+      {"type": "confirm_meld", "seat": 3},
+      {"type": "play_card", "seat": 1, "card": "TC0"},
+      {"type": "play_card", "seat": 2, "card": "JS0"},
+      {"type": "play_card", "seat": 3, "card": "JC1"},
+      {"type": "play_card", "seat": 0, "card": "9C0"}
+    ],
+    "final": {
+      "version": 1,
+      "rules": {
+        "scoring": "modern",
+        "pace": "live",
+        "target": 150,
+        "minBid": 25,
+        "bidStep": 1,
+        "passCount": 0,
+        "lastTrickBonus": 1,
+        "counterValue": 1,
+        "counting": "tens",
+        "setPenaltyIsBid": true,
+        "mustTakeTrickToSaveMeld": true,
+        "dealerStuck": true,
+        "shoot": "game",
+        "shootPoints": 100,
+        "revealHands": true,
+        "ninesMisdeal": true
+      },
+      "phase": "game_over",
+      "handNumber": 1,
+      "dealer": 0,
+      "turn": null,
+      "players": [
+        {
+          "seat": 0,
+          "hand": ["9H0", "AC1", "QC1", "TD0", "TH0", "KD0", "TC1", "AS1", "TS0", "JD0", "JS1"],
+          "meld": [],
+          "meldPoints": 0,
+          "meldConfirmed": true,
+          "passBuffer": []
+        },
+        {
+          "seat": 1,
+          "hand": ["TD1", "JC0", "9S1", "QD0", "QS1", "9D0", "KH1", "9C1", "KH0", "KC0", "QC0"],
+          "meld": [{"kind": "marriage", "cards": ["KC0", "QC0"], "points": 2}, {"kind": "dix", "cards": ["9S1"], "points": 1}],
+          "meldPoints": 3,
+          "meldConfirmed": true,
+          "passBuffer": []
+        },
+        {
+          "seat": 2,
+          "hand": ["TH1", "QH0", "AH1", "JH1", "9H1", "JD1", "AS0", "KD1", "AD1", "KS0", "QD1"],
+          "meld": [{"kind": "marriage", "cards": ["KD1", "QD1"], "points": 2}],
+          "meldPoints": 2,
+          "meldConfirmed": true,
+          "passBuffer": []
+        },
+        {
+          "seat": 3,
+          "hand": ["KC1", "9D1", "QH1", "9S0", "AC0", "TS1", "QS0", "JH0", "AH0", "AD0", "KS1"],
+          "meld": [{"kind": "royal_marriage", "cards": ["KS1", "QS0"], "points": 4}, {"kind": "dix", "cards": ["9S0"], "points": 1}],
+          "meldPoints": 5,
+          "meldConfirmed": true,
+          "passBuffer": []
+        }
+      ],
+      "bids": [
+        {"seat": 1, "amount": 150, "shoot": true},
+        {"seat": 2, "amount": null},
+        {"seat": 3, "amount": null},
+        {"seat": 0, "amount": null}
+      ],
+      "highBid": {"seat": 1, "amount": 150, "shoot": true},
+      "bidder": 1,
+      "trump": "S",
+      "currentTrick": null,
+      "tricksTaken": {"red": [["TC0", "JS0", "JC1", "9C0"]], "blue": []},
+      "score": {"red": 150, "blue": 0},
+      "history": [
+        {
+          "handNumber": 1,
+          "dealer": 0,
+          "bidder": 1,
+          "bid": 150,
+          "trump": "S",
+          "meld": {"red": 2, "blue": 8},
+          "tricks": {"red": 1, "blue": 0},
+          "delta": {"red": 150, "blue": 0},
+          "breakdown": {
+            "red": {"meldDeclared": 2, "meldSaved": 0, "counters": 0, "lastTrick": 0, "setPenalty": 0, "shoot": 150},
+            "blue": {"meldDeclared": 8, "meldSaved": 0, "counters": 0, "lastTrick": 0, "setPenalty": 0, "shoot": 0}
+          },
+          "wentSet": true,
+          "shotMade": false
+        }
+      ],
+      "winner": "red",
+      "seed": "archive-shoot-game-auction",
+      "rev": 17
+    }
+  },
+  {
+    "mode": "game",
+    "timing": "after-pass",
+    "actions": [
+      {"type": "bid", "seat": 1, "amount": 25},
+      {"type": "pass_bid", "seat": 2},
+      {"type": "pass_bid", "seat": 3},
+      {"type": "pass_bid", "seat": 0},
+      {"type": "declare_trump", "seat": 1, "suit": "S"},
+      {"type": "shoot", "seat": 1},
+      {
+        "type": "declare_meld",
+        "seat": 0,
+        "cards": ["TD0", "AC0", "QS1", "JH1", "TC1", "9D1", "AD1", "JC0", "AD0", "KS0", "AC1", "TH0"]
+      },
+      {"type": "confirm_meld", "seat": 0},
+      {
+        "type": "declare_meld",
+        "seat": 1,
+        "cards": ["JS1", "AS1", "9D0", "JD1", "TS1", "TD1", "KS1", "QC1", "9C1", "9S0", "AS0", "QD0"]
+      },
+      {"type": "confirm_meld", "seat": 1},
+      {
+        "type": "declare_meld",
+        "seat": 2,
+        "cards": ["AH1", "KD0", "QS0", "KH0", "KC1", "KH1", "QC0", "AH0", "QD1", "JS0", "9H0", "QH1"]
+      },
+      {"type": "confirm_meld", "seat": 2},
+      {
+        "type": "declare_meld",
+        "seat": 3,
+        "cards": ["KC0", "TS0", "JH0", "9S1", "9C0", "QH0", "TH1", "JD0", "9H1", "TC0", "JC1", "KD1"]
+      },
+      {"type": "confirm_meld", "seat": 3},
+      {"type": "play_card", "seat": 1, "card": "AS0"},
+      {"type": "play_card", "seat": 2, "card": "JS0"},
+      {"type": "play_card", "seat": 3, "card": "9S1"},
+      {"type": "play_card", "seat": 0, "card": "QS1"},
+      {"type": "play_card", "seat": 1, "card": "AS1"},
+      {"type": "play_card", "seat": 2, "card": "QS0"},
+      {"type": "play_card", "seat": 3, "card": "TS0"},
+      {"type": "play_card", "seat": 0, "card": "KS0"},
+      {"type": "play_card", "seat": 1, "card": "TS1"},
+      {"type": "play_card", "seat": 2, "card": "9H0"},
+      {"type": "play_card", "seat": 3, "card": "9C0"},
+      {"type": "play_card", "seat": 0, "card": "9D1"},
+      {"type": "play_card", "seat": 1, "card": "KS1"},
+      {"type": "play_card", "seat": 2, "card": "QC0"},
+      {"type": "play_card", "seat": 3, "card": "9H1"},
+      {"type": "play_card", "seat": 0, "card": "JC0"},
+      {"type": "play_card", "seat": 1, "card": "JS1"},
+      {"type": "play_card", "seat": 2, "card": "QD1"},
+      {"type": "play_card", "seat": 3, "card": "KC0"},
+      {"type": "play_card", "seat": 0, "card": "JH1"},
+      {"type": "play_card", "seat": 1, "card": "9S0"},
+      {"type": "play_card", "seat": 2, "card": "QH1"},
+      {"type": "play_card", "seat": 3, "card": "KD1"},
+      {"type": "play_card", "seat": 0, "card": "TC1"},
+      {"type": "play_card", "seat": 1, "card": "TD1"},
+      {"type": "play_card", "seat": 2, "card": "KD0"},
+      {"type": "play_card", "seat": 3, "card": "JD0"},
+      {"type": "play_card", "seat": 0, "card": "AD0"}
+    ],
+    "final": {
+      "version": 1,
+      "rules": {
+        "scoring": "modern",
+        "pace": "live",
+        "target": 150,
+        "minBid": 25,
+        "bidStep": 1,
+        "passCount": 0,
+        "lastTrickBonus": 1,
+        "counterValue": 1,
+        "counting": "tens",
+        "setPenaltyIsBid": true,
+        "mustTakeTrickToSaveMeld": true,
+        "dealerStuck": true,
+        "shoot": "game",
+        "shootPoints": 100,
+        "revealHands": true,
+        "ninesMisdeal": true
+      },
+      "phase": "game_over",
+      "handNumber": 1,
+      "dealer": 0,
+      "turn": null,
+      "players": [
+        {
+          "seat": 0,
+          "hand": ["TD0", "AC0", "AD1", "AC1", "TH0"],
+          "meld": [{"kind": "royal_marriage", "cards": ["KS0", "QS1"], "points": 4}],
+          "meldPoints": 4,
+          "meldConfirmed": true,
+          "passBuffer": []
+        },
+        {
+          "seat": 1,
+          "hand": ["9D0", "JD1", "QC1", "9C1", "QD0"],
+          "meld": [{"kind": "dix", "cards": ["9S0"], "points": 1}],
+          "meldPoints": 1,
+          "meldConfirmed": true,
+          "passBuffer": []
+        },
+        {
+          "seat": 2,
+          "hand": ["AH1", "KH0", "KC1", "KH1", "AH0"],
+          "meld": [
+            {"kind": "marriage", "cards": ["KH0", "QH1"], "points": 2},
+            {"kind": "marriage", "cards": ["KD0", "QD1"], "points": 2},
+            {"kind": "marriage", "cards": ["KC1", "QC0"], "points": 2},
+            {"kind": "queens_around", "cards": ["QS0", "QH1", "QD1", "QC0"], "points": 6}
+          ],
+          "meldPoints": 12,
+          "meldConfirmed": true,
+          "passBuffer": []
+        },
+        {
+          "seat": 3,
+          "hand": ["JH0", "QH0", "TH1", "TC0", "JC1"],
+          "meld": [{"kind": "dix", "cards": ["9S1"], "points": 1}],
+          "meldPoints": 1,
+          "meldConfirmed": true,
+          "passBuffer": []
+        }
+      ],
+      "bids": [{"seat": 1, "amount": 25}, {"seat": 2, "amount": null}, {"seat": 3, "amount": null}, {"seat": 0, "amount": null}],
+      "highBid": {"seat": 1, "amount": 150, "shoot": true},
+      "bidder": 1,
+      "trump": "S",
+      "currentTrick": null,
+      "tricksTaken": {
+        "red": [["TD1", "KD0", "JD0", "AD0"]],
+        "blue": [
+          ["AS0", "JS0", "9S1", "QS1"],
+          ["AS1", "QS0", "TS0", "KS0"],
+          ["TS1", "9H0", "9C0", "9D1"],
+          ["KS1", "QC0", "9H1", "JC0"],
+          ["JS1", "QD1", "KC0", "JH1"],
+          ["9S0", "QH1", "KD1", "TC1"]
+        ]
+      },
+      "score": {"red": 150, "blue": 0},
+      "history": [
+        {
+          "handNumber": 1,
+          "dealer": 0,
+          "bidder": 1,
+          "bid": 150,
+          "trump": "S",
+          "meld": {"red": 16, "blue": 2},
+          "tricks": {"red": 3, "blue": 9},
+          "delta": {"red": 150, "blue": 0},
+          "breakdown": {
+            "red": {"meldDeclared": 16, "meldSaved": 0, "counters": 0, "lastTrick": 0, "setPenalty": 0, "shoot": 150},
+            "blue": {"meldDeclared": 2, "meldSaved": 0, "counters": 0, "lastTrick": 0, "setPenalty": 0, "shoot": 0}
+          },
+          "wentSet": true,
+          "shotMade": false
+        }
+      ],
+      "winner": "red",
+      "seed": "archive-shoot-game-after-pass",
+      "rev": 42
+    }
+  },
+  {
+    "mode": "points",
+    "timing": "auction",
+    "actions": [
+      {"type": "shoot", "seat": 1},
+      {"type": "pass_bid", "seat": 2},
+      {"type": "pass_bid", "seat": 3},
+      {"type": "pass_bid", "seat": 0},
+      {"type": "declare_trump", "seat": 1, "suit": "S"},
+      {
+        "type": "declare_meld",
+        "seat": 0,
+        "cards": ["JS1", "JS0", "9H1", "JH0", "JH1", "QS1", "AH0", "9C0", "TD0", "JD1", "AH1", "9H0"]
+      },
+      {"type": "confirm_meld", "seat": 0},
+      {
+        "type": "declare_meld",
+        "seat": 1,
+        "cards": ["QC0", "9D0", "AD0", "JD0", "9S0", "JC1", "KD1", "TC1", "JC0", "TS1", "KC1", "QC1"]
+      },
+      {"type": "confirm_meld", "seat": 1},
+      {
+        "type": "declare_meld",
+        "seat": 2,
+        "cards": ["TC0", "AC1", "QD0", "AS0", "KD0", "KS0", "9C1", "KC0", "9S1", "KS1", "QH0", "9D1"]
+      },
+      {"type": "confirm_meld", "seat": 2},
+      {
+        "type": "declare_meld",
+        "seat": 3,
+        "cards": ["AD1", "QS0", "TS0", "AC0", "QH1", "TH0", "AS1", "TH1", "KH1", "TD1", "KH0", "QD1"]
+      },
+      {"type": "confirm_meld", "seat": 3},
+      {"type": "play_card", "seat": 1, "card": "AD0"},
+      {"type": "play_card", "seat": 2, "card": "9D1"},
+      {"type": "play_card", "seat": 3, "card": "QD1"},
+      {"type": "play_card", "seat": 0, "card": "JD1"},
+      {"type": "play_card", "seat": 1, "card": "TC1"},
+      {"type": "play_card", "seat": 2, "card": "AC1"},
+      {"type": "play_card", "seat": 3, "card": "AC0"},
+      {"type": "play_card", "seat": 0, "card": "9C0"}
+    ],
+    "final": {
+      "version": 1,
+      "rules": {
+        "scoring": "modern",
+        "pace": "live",
+        "target": 150,
+        "minBid": 25,
+        "bidStep": 1,
+        "passCount": 0,
+        "lastTrickBonus": 1,
+        "counterValue": 1,
+        "counting": "tens",
+        "setPenaltyIsBid": true,
+        "mustTakeTrickToSaveMeld": true,
+        "dealerStuck": true,
+        "shoot": "points",
+        "shootPoints": 100,
+        "revealHands": true,
+        "ninesMisdeal": true
+      },
+      "phase": "hand_over",
+      "handNumber": 1,
+      "dealer": 0,
+      "turn": null,
+      "players": [
+        {
+          "seat": 0,
+          "hand": ["JS1", "JS0", "9H1", "JH0", "JH1", "QS1", "AH0", "TD0", "AH1", "9H0"],
+          "meld": [{"kind": "pinochle", "cards": ["QS1", "JD1"], "points": 4}],
+          "meldPoints": 4,
+          "meldConfirmed": true,
+          "passBuffer": []
+        },
+        {
+          "seat": 1,
+          "hand": ["QC0", "9D0", "JD0", "9S0", "JC1", "KD1", "JC0", "TS1", "KC1", "QC1"],
+          "meld": [{"kind": "marriage", "cards": ["KC1", "QC0"], "points": 2}, {"kind": "dix", "cards": ["9S0"], "points": 1}],
+          "meldPoints": 3,
+          "meldConfirmed": true,
+          "passBuffer": []
+        },
+        {
+          "seat": 2,
+          "hand": ["TC0", "QD0", "AS0", "KD0", "KS0", "9C1", "KC0", "9S1", "KS1", "QH0"],
+          "meld": [{"kind": "marriage", "cards": ["KD0", "QD0"], "points": 2}, {"kind": "dix", "cards": ["9S1"], "points": 1}],
+          "meldPoints": 3,
+          "meldConfirmed": true,
+          "passBuffer": []
+        },
+        {
+          "seat": 3,
+          "hand": ["AD1", "QS0", "TS0", "QH1", "TH0", "AS1", "TH1", "KH1", "TD1", "KH0"],
+          "meld": [{"kind": "marriage", "cards": ["KH0", "QH1"], "points": 2}],
+          "meldPoints": 2,
+          "meldConfirmed": true,
+          "passBuffer": []
+        }
+      ],
+      "bids": [
+        {"seat": 1, "amount": 100, "shoot": true},
+        {"seat": 2, "amount": null},
+        {"seat": 3, "amount": null},
+        {"seat": 0, "amount": null}
+      ],
+      "highBid": {"seat": 1, "amount": 100, "shoot": true},
+      "bidder": 1,
+      "trump": "S",
+      "currentTrick": null,
+      "tricksTaken": {"red": [["TC1", "AC1", "AC0", "9C0"]], "blue": [["AD0", "9D1", "QD1", "JD1"]]},
+      "score": {"red": 10, "blue": -100},
+      "history": [
+        {
+          "handNumber": 1,
+          "dealer": 0,
+          "bidder": 1,
+          "bid": 100,
+          "trump": "S",
+          "meld": {"red": 7, "blue": 5},
+          "tricks": {"red": 3, "blue": 1},
+          "delta": {"red": 10, "blue": -100},
+          "breakdown": {
+            "red": {"meldDeclared": 7, "meldSaved": 7, "counters": 3, "lastTrick": 0, "setPenalty": 0, "shoot": 0},
+            "blue": {"meldDeclared": 5, "meldSaved": 0, "counters": 0, "lastTrick": 0, "setPenalty": 0, "shoot": -100}
+          },
+          "wentSet": true,
+          "shotMade": false
+        }
+      ],
+      "winner": null,
+      "seed": "archive-shoot-points-auction",
+      "rev": 21
+    }
+  },
+  {
+    "mode": "points",
+    "timing": "after-pass",
+    "actions": [
+      {"type": "bid", "seat": 1, "amount": 25},
+      {"type": "pass_bid", "seat": 2},
+      {"type": "pass_bid", "seat": 3},
+      {"type": "pass_bid", "seat": 0},
+      {"type": "declare_trump", "seat": 1, "suit": "S"},
+      {"type": "shoot", "seat": 1},
+      {
+        "type": "declare_meld",
+        "seat": 0,
+        "cards": ["9H0", "9H1", "TD0", "TS0", "AH1", "QD1", "9S1", "JD0", "AD1", "AS0", "9C1", "KS0"]
+      },
+      {"type": "confirm_meld", "seat": 0},
+      {
+        "type": "declare_meld",
+        "seat": 1,
+        "cards": ["KH1", "9C0", "AC1", "KD0", "JS1", "AD0", "QD0", "JD1", "9D1", "AC0", "QC1", "TH0"]
+      },
+      {"type": "confirm_meld", "seat": 1},
+      {
+        "type": "declare_meld",
+        "seat": 2,
+        "cards": ["TH1", "JH0", "9S0", "AH0", "TS1", "JC0", "QS1", "KC1", "QS0", "KH0", "QH0", "KD1"]
+      },
+      {"type": "confirm_meld", "seat": 2},
+      {
+        "type": "declare_meld",
+        "seat": 3,
+        "cards": ["JC1", "9D0", "AS1", "KC0", "JH1", "TC1", "JS0", "TD1", "QC0", "QH1", "KS1", "TC0"]
+      },
+      {"type": "confirm_meld", "seat": 3},
+      {"type": "play_card", "seat": 1, "card": "AC0"},
+      {"type": "play_card", "seat": 2, "card": "JC0"},
+      {"type": "play_card", "seat": 3, "card": "JC1"},
+      {"type": "play_card", "seat": 0, "card": "9C1"},
+      {"type": "play_card", "seat": 1, "card": "AC1"},
+      {"type": "play_card", "seat": 2, "card": "KC1"},
+      {"type": "play_card", "seat": 3, "card": "QC0"},
+      {"type": "play_card", "seat": 0, "card": "9S1"}
+    ],
+    "final": {
+      "version": 1,
+      "rules": {
+        "scoring": "modern",
+        "pace": "live",
+        "target": 150,
+        "minBid": 25,
+        "bidStep": 1,
+        "passCount": 0,
+        "lastTrickBonus": 1,
+        "counterValue": 1,
+        "counting": "tens",
+        "setPenaltyIsBid": true,
+        "mustTakeTrickToSaveMeld": true,
+        "dealerStuck": true,
+        "shoot": "points",
+        "shootPoints": 100,
+        "revealHands": true,
+        "ninesMisdeal": true
+      },
+      "phase": "hand_over",
+      "handNumber": 1,
+      "dealer": 0,
+      "turn": null,
+      "players": [
+        {
+          "seat": 0,
+          "hand": ["9H0", "9H1", "TD0", "TS0", "AH1", "QD1", "JD0", "AD1", "AS0", "KS0"],
+          "meld": [{"kind": "dix", "cards": ["9S1"], "points": 1}],
+          "meldPoints": 1,
+          "meldConfirmed": true,
+          "passBuffer": []
+        },
+        {
+          "seat": 1,
+          "hand": ["KH1", "9C0", "KD0", "JS1", "AD0", "QD0", "JD1", "9D1", "QC1", "TH0"],
+          "meld": [{"kind": "marriage", "cards": ["KD0", "QD0"], "points": 2}],
+          "meldPoints": 2,
+          "meldConfirmed": true,
+          "passBuffer": []
+        },
+        {
+          "seat": 2,
+          "hand": ["TH1", "JH0", "9S0", "AH0", "TS1", "QS1", "QS0", "KH0", "QH0", "KD1"],
+          "meld": [{"kind": "marriage", "cards": ["KH0", "QH0"], "points": 2}, {"kind": "dix", "cards": ["9S0"], "points": 1}],
+          "meldPoints": 3,
+          "meldConfirmed": true,
+          "passBuffer": []
+        },
+        {
+          "seat": 3,
+          "hand": ["9D0", "AS1", "KC0", "JH1", "TC1", "JS0", "TD1", "QH1", "KS1", "TC0"],
+          "meld": [{"kind": "marriage", "cards": ["KC0", "QC0"], "points": 2}],
+          "meldPoints": 2,
+          "meldConfirmed": true,
+          "passBuffer": []
+        }
+      ],
+      "bids": [{"seat": 1, "amount": 25}, {"seat": 2, "amount": null}, {"seat": 3, "amount": null}, {"seat": 0, "amount": null}],
+      "highBid": {"seat": 1, "amount": 100, "shoot": true},
+      "bidder": 1,
+      "trump": "S",
+      "currentTrick": null,
+      "tricksTaken": {"red": [["AC1", "KC1", "QC0", "9S1"]], "blue": [["AC0", "JC0", "JC1", "9C1"]]},
+      "score": {"red": 6, "blue": -100},
+      "history": [
+        {
+          "handNumber": 1,
+          "dealer": 0,
+          "bidder": 1,
+          "bid": 100,
+          "trump": "S",
+          "meld": {"red": 4, "blue": 4},
+          "tricks": {"red": 2, "blue": 1},
+          "delta": {"red": 6, "blue": -100},
+          "breakdown": {
+            "red": {"meldDeclared": 4, "meldSaved": 4, "counters": 2, "lastTrick": 0, "setPenalty": 0, "shoot": 0},
+            "blue": {"meldDeclared": 4, "meldSaved": 0, "counters": 0, "lastTrick": 0, "setPenalty": 0, "shoot": -100}
+          },
+          "wentSet": true,
+          "shotMade": false
+        }
+      ],
+      "winner": null,
+      "seed": "archive-shoot-points-after-pass",
+      "rev": 22
+    }
+  }
+]

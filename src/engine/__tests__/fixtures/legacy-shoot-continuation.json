@@ -1,0 +1,435 @@
+{
+  "actions": [
+    {
+      "type": "shoot",
+      "seat": 1
+    },
+    {
+      "type": "pass_bid",
+      "seat": 2
+    },
+    {
+      "type": "pass_bid",
+      "seat": 3
+    },
+    {
+      "type": "pass_bid",
+      "seat": 0
+    },
+    {
+      "type": "declare_trump",
+      "seat": 1,
+      "suit": "S"
+    },
+    {
+      "type": "declare_meld",
+      "seat": 0,
+      "cards": [
+        "JS1",
+        "JS0",
+        "9H1",
+        "JH0",
+        "JH1",
+        "QS1",
+        "AH0",
+        "9C0",
+        "TD0",
+        "JD1",
+        "AH1",
+        "9H0"
+      ]
+    },
+    {
+      "type": "confirm_meld",
+      "seat": 0
+    },
+    {
+      "type": "declare_meld",
+      "seat": 1,
+      "cards": [
+        "QC0",
+        "9D0",
+        "AD0",
+        "JD0",
+        "9S0",
+        "JC1",
+        "KD1",
+        "TC1",
+        "JC0",
+        "TS1",
+        "KC1",
+        "QC1"
+      ]
+    },
+    {
+      "type": "confirm_meld",
+      "seat": 1
+    },
+    {
+      "type": "declare_meld",
+      "seat": 2,
+      "cards": [
+        "TC0",
+        "AC1",
+        "QD0",
+        "AS0",
+        "KD0",
+        "KS0",
+        "9C1",
+        "KC0",
+        "9S1",
+        "KS1",
+        "QH0",
+        "9D1"
+      ]
+    },
+    {
+      "type": "confirm_meld",
+      "seat": 2
+    },
+    {
+      "type": "declare_meld",
+      "seat": 3,
+      "cards": [
+        "AD1",
+        "QS0",
+        "TS0",
+        "AC0",
+        "QH1",
+        "TH0",
+        "AS1",
+        "TH1",
+        "KH1",
+        "TD1",
+        "KH0",
+        "QD1"
+      ]
+    },
+    {
+      "type": "confirm_meld",
+      "seat": 3
+    },
+    {
+      "type": "play_card",
+      "seat": 1,
+      "card": "AD0"
+    },
+    {
+      "type": "play_card",
+      "seat": 2,
+      "card": "9D1"
+    },
+    {
+      "type": "play_card",
+      "seat": 3,
+      "card": "QD1"
+    },
+    {
+      "type": "play_card",
+      "seat": 0,
+      "card": "JD1"
+    },
+    {
+      "type": "play_card",
+      "seat": 1,
+      "card": "TC1"
+    },
+    {
+      "type": "play_card",
+      "seat": 2,
+      "card": "AC1"
+    },
+    {
+      "type": "play_card",
+      "seat": 3,
+      "card": "AC0"
+    },
+    {
+      "type": "play_card",
+      "seat": 0,
+      "card": "9C0"
+    },
+    {
+      "type": "next_hand",
+      "seat": 0
+    }
+  ],
+  "final": {
+    "version": 1,
+    "rules": {
+      "scoring": "modern",
+      "pace": "live",
+      "target": 150,
+      "minBid": 25,
+      "bidStep": 1,
+      "passCount": 0,
+      "lastTrickBonus": 1,
+      "counterValue": 1,
+      "counting": "tens",
+      "setPenaltyIsBid": true,
+      "mustTakeTrickToSaveMeld": true,
+      "dealerStuck": true,
+      "shoot": "points",
+      "shootPoints": 100,
+      "revealHands": true,
+      "ninesMisdeal": true
+    },
+    "phase": "bidding",
+    "handNumber": 2,
+    "dealer": 1,
+    "turn": 2,
+    "players": [
+      {
+        "seat": 0,
+        "hand": [
+          "AH0",
+          "JD1",
+          "KC1",
+          "QC1",
+          "KH0",
+          "AC0",
+          "TD0",
+          "KC0",
+          "QS1",
+          "JH1",
+          "TH1",
+          "9D1"
+        ],
+        "meld": [],
+        "meldPoints": 0,
+        "meldConfirmed": false,
+        "passBuffer": []
+      },
+      {
+        "seat": 1,
+        "hand": [
+          "KD0",
+          "AH1",
+          "TS1",
+          "9H0",
+          "TC0",
+          "9C1",
+          "KS0",
+          "QC0",
+          "JC0",
+          "AS1",
+          "AC1",
+          "QD0"
+        ],
+        "meld": [],
+        "meldPoints": 0,
+        "meldConfirmed": false,
+        "passBuffer": []
+      },
+      {
+        "seat": 2,
+        "hand": [
+          "QH0",
+          "KD1",
+          "9H1",
+          "JS0",
+          "KS1",
+          "TD1",
+          "9S0",
+          "AD1",
+          "TS0",
+          "9D0",
+          "TC1",
+          "TH0"
+        ],
+        "meld": [],
+        "meldPoints": 0,
+        "meldConfirmed": false,
+        "passBuffer": []
+      },
+      {
+        "seat": 3,
+        "hand": [
+          "9C0",
+          "QH1",
+          "AD0",
+          "JC1",
+          "JS1",
+          "JD0",
+          "AS0",
+          "KH1",
+          "9S1",
+          "QD1",
+          "JH0",
+          "QS0"
+        ],
+        "meld": [],
+        "meldPoints": 0,
+        "meldConfirmed": false,
+        "passBuffer": []
+      }
+    ],
+    "bids": [],
+    "highBid": null,
+    "bidder": null,
+    "trump": null,
+    "currentTrick": null,
+    "tricksTaken": {
+      "red": [],
+      "blue": []
+    },
+    "score": {
+      "red": 10,
+      "blue": -100
+    },
+    "history": [
+      {
+        "handNumber": 1,
+        "dealer": 0,
+        "bidder": 1,
+        "bid": 100,
+        "trump": "S",
+        "meld": {
+          "red": 7,
+          "blue": 5
+        },
+        "tricks": {
+          "red": 3,
+          "blue": 1
+        },
+        "delta": {
+          "red": 10,
+          "blue": -100
+        },
+        "breakdown": {
+          "red": {
+            "meldDeclared": 7,
+            "meldSaved": 7,
+            "counters": 3,
+            "lastTrick": 0,
+            "setPenalty": 0,
+            "shoot": 0
+          },
+          "blue": {
+            "meldDeclared": 5,
+            "meldSaved": 0,
+            "counters": 0,
+            "lastTrick": 0,
+            "setPenalty": 0,
+            "shoot": -100
+          }
+        },
+        "wentSet": true,
+        "shotMade": false
+      }
+    ],
+    "winner": null,
+    "seed": "archive-shoot-points-auction",
+    "rev": 22,
+    "log": [
+      "Hand 1: South deals",
+      "West shoots the moon",
+      "North passes",
+      "East passes",
+      "South passes",
+      "West wins the bid at 100",
+      "West declares spades",
+      "South melds 4",
+      "South confirms meld",
+      "West melds 3",
+      "West confirms meld",
+      "North melds 3",
+      "North confirms meld",
+      "East melds 2",
+      "East confirms meld",
+      "Meld confirmed; trick play begins",
+      "West plays A♦",
+      "North plays 9♦",
+      "East plays Q♦",
+      "South plays J♦",
+      "West takes the trick",
+      "West plays 10♣",
+      "North plays A♣",
+      "East plays A♣",
+      "South plays 9♣",
+      "North takes the trick",
+      "Blue misses the shoot; hand over",
+      "Hand 2: West deals"
+    ],
+    "handsDealt": {
+      "0": [
+        "AH0",
+        "JD1",
+        "KC1",
+        "QC1",
+        "KH0",
+        "AC0",
+        "TD0",
+        "KC0",
+        "QS1",
+        "JH1",
+        "TH1",
+        "9D1"
+      ],
+      "1": [
+        "KD0",
+        "AH1",
+        "TS1",
+        "9H0",
+        "TC0",
+        "9C1",
+        "KS0",
+        "QC0",
+        "JC0",
+        "AS1",
+        "AC1",
+        "QD0"
+      ],
+      "2": [
+        "QH0",
+        "KD1",
+        "9H1",
+        "JS0",
+        "KS1",
+        "TD1",
+        "9S0",
+        "AD1",
+        "TS0",
+        "9D0",
+        "TC1",
+        "TH0"
+      ],
+      "3": [
+        "9C0",
+        "QH1",
+        "AD0",
+        "JC1",
+        "JS1",
+        "JD0",
+        "AS0",
+        "KH1",
+        "9S1",
+        "QD1",
+        "JH0",
+        "QS0"
+      ]
+    },
+    "handsAtPlay": {
+      "0": [],
+      "1": [],
+      "2": [],
+      "3": []
+    },
+    "lastTrick": null,
+    "playedCards": [],
+    "completedTricks": [],
+    "passedOut": {
+      "0": [],
+      "1": [],
+      "2": [],
+      "3": []
+    },
+    "passedIn": {
+      "0": [],
+      "1": [],
+      "2": [],
+      "3": []
+    },
+    "misdeal": null
+  }
+}

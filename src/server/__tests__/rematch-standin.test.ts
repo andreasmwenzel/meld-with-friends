@@ -1,5 +1,6 @@
 vi.mock("@/server/bans", () => ({ isBanned: async () => false }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resolveRules } from "@/engine/scoring";
 import { newGame } from "@/engine";
 import { rematch, standIn, leaveSeat } from "@/server/tables";
 import { POST as rematchRoute } from "@/app/api/tables/[code]/rematch/route";
@@ -38,7 +39,7 @@ describe("rematch", () => {
     expect(await rematch(table.code, "host")).toEqual({ code: table.code, rev: 0 });
     expect(filters).toEqual([["id", "old-game"]]);
     expect(mocks.rpc).toHaveBeenCalledWith("rematch_game", {
-      p_table: "table", p_user: "host", p_previous: "old-game", p_rules: { target: 300 },
+      p_table: "table", p_user: "host", p_previous: "old-game", p_rules: resolveRules({ target: 300 }),
       p_state: expect.objectContaining({ dealer: 0, rev: 0, handNumber: 1, score: { red: 0, blue: 0 }, rules: expect.objectContaining({ target: 300 }) }),
     });
     expect(mocks.broadcast.mock.calls).toEqual([[table.code, { type: "seats" }], [table.code, { type: "game", rev: 0 }]]);

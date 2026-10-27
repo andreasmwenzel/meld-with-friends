@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { RulesPatch } from "./rules";
+import { resolveRules, type RulesPatch } from "./rules";
 import { loadRulesPref, saveRulesPref } from "@/lib/prefs";
 import { api } from "@/lib/api";
 
@@ -10,12 +10,12 @@ import { api } from "@/lib/api";
  * otherwise whatever this browser last dealt with. `remember` persists the choice both places.
  */
 export function useRulesPref(profileDefaults?: RulesPatch | null) {
-  const [rules, setRules] = useState<RulesPatch>(profileDefaults ?? {});
+  const [rules, setRules] = useState<RulesPatch>(() => resolveRules(profileDefaults));
   useEffect(() => {
     if (!profileDefaults || Object.keys(profileDefaults).length === 0) {
       const local = loadRulesPref();
       // eslint-disable-next-line react-hooks/set-state-in-effect -- reading localStorage after hydration
-      if (Object.keys(local).length) setRules(local);
+      if (Object.keys(local).length) setRules(resolveRules(local));
     }
   }, [profileDefaults]);
   async function remember(next: RulesPatch, signedIn: boolean) {

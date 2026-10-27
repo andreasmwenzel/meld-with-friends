@@ -9,7 +9,7 @@ export function chooseAction(view: PlayerView, options: { budgetMs?: number; see
   const { legal: l, seat }=view;
   if (l.canAdvanceHand) return {type:'next_hand',seat};
   if (l.canMisdeal) return {type:'misdeal',seat};
-  // The auction and the bidder's decision after the pass use the same test; a shoot can only happen once.
+  // Only the bidder decides, after passing, with no partner contribution.
   if (l.canShoot && overwhelming(view, config)) return {type:'shoot',seat};
   if (l.canDeclineShoot) return {type:'decline_shoot',seat};
   if (l.canPassBid) {

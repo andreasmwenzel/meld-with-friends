@@ -5,9 +5,9 @@ import { useId, useRef, useState } from "react";
 const BATCH_SIZE = 30;
 
 /** Append legal increments so scrolling never discards earlier bids or the selection. */
-export function BidPicker({ min, step, busy, onBid, pass, shoot, misdeal = null }: {
+export function BidPicker({ min, step, busy, onBid, pass, misdeal = null }: {
   min: number; step: number; busy: boolean; onBid: (amount: number) => void;
-  pass: { label: string; run: () => void } | null; shoot: (() => void) | null;
+  pass: { label: string; run: () => void } | null;
   /** throw the hand in for nines; offered on the table row only, not inside the bid dialog */
   misdeal?: (() => void) | null;
 }) {
@@ -37,13 +37,7 @@ export function BidPicker({ min, step, busy, onBid, pass, shoot, misdeal = null 
   };
   const alternatives = (inDialog = false) => <>
     {pass && <button type="button" className="btn btn-ghost btn-compact" style={{ color: inDialog ? "var(--ink-soft)" : "var(--chalk-faint)" }} onClick={pass.run} disabled={busy}>{pass.label}</button>}
-    {shoot && (
-      <button type="button" className="btn btn-ghost btn-compact" style={{ color: inDialog ? "var(--brass-deep)" : "var(--brass)", boxShadow: "inset 0 0 0 1.5px var(--brass)" }} onClick={shoot} disabled={busy}
-        aria-label="Shoot the moon">
-        {/* Short on narrow phones so bid, pass and shoot stay on one row. */}
-        <span className={inDialog ? "hidden" : "sm:hidden"}>Shoot</span><span className={inDialog ? "" : "hidden sm:inline"}>Shoot the moon</span>
-      </button>
-    )}
+
   </>;
 
   return (

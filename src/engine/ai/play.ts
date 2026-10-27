@@ -9,7 +9,7 @@ export function heuristic(hand: CardId[], legal: CardId[], trick: Trick, trump: 
   const cheap = (a: CardId,b: CardId) => strength(a)-strength(b) || a.localeCompare(b);
   if (!trick.plays.length) {
     const boss = legal.filter(c => !remaining.some(r => suitOf(r) === suitOf(c) && strength(r) > strength(c)));
-    const pull = team(seat) === (bidder === null ? '' : team(bidder)) && hand.filter(c => suitOf(c) === trump).length >= config.pullTrumpMin;
+    const pull = view.sittingOut != null && seat === bidder || team(seat) === (bidder === null ? '' : team(bidder)) && hand.filter(c => suitOf(c) === trump).length >= config.pullTrumpMin;
     return [...(boss.length ? boss : legal)].sort((a,b) => (pull ? Number(suitOf(b) === trump)-Number(suitOf(a) === trump) : 0) || strength(b)-strength(a) || cheap(a,b))[0];
   }
   const winner = trickWinner(trick, trump);
@@ -17,7 +17,7 @@ export function heuristic(hand: CardId[], legal: CardId[], trick: Trick, trump: 
   if (team(winner) !== team(seat) && winning.length) return [...winning].sort(cheap)[0];
   if (team(winner) === team(seat)) {
     const winningCard = trick.plays.find(p => p.seat === winner)!.card;
-    const safe = trick.plays.length === 3 || !remaining.some(c => suitOf(c) === suitOf(winningCard) && strength(c) > strength(winningCard)) && suitOf(winningCard) === trump;
+    const safe = trick.plays.length === (view.sittingOut != null ? 2 : 3) || !remaining.some(c => suitOf(c) === suitOf(winningCard) && strength(c) > strength(winningCard)) && suitOf(winningCard) === trump;
     if (safe && config.smearWillingness > 0) return [...legal].sort((a,b) =>
       config.smearWillingness * (points(b,view.rules)-points(a,view.rules)) - (1-config.smearWillingness) * (strength(b)-strength(a)) * view.rules.counterValue || cheap(a,b))[0];
   }
@@ -26,38 +26,46 @@ export function heuristic(hand: CardId[], legal: CardId[], trick: Trick, trump: 
 }
 function playout(view: PlayerView, deal: CardId[][], first: CardId, config: BotConfig): number {
   const hands = deal.map(h => [...h]);
+  const solo = view.sittingOut != null;
+  if (solo) hands[view.sittingOut!] = [];
+  const trickSize = solo ? 3 : 4;
   let trick: Trick = { ...view.currentTrick!, plays: [...view.currentTrick!.plays] };
   let seat = view.seat;
   const totals = { red: 0, blue: 0 };
   const counts = { ...view.trickCounts };
   // Completed tricks are public; current trick is counted only when it finishes.
   const completed = view.playedCards.length - trick.plays.length;
-  for (let i=0;i<completed;i+=4) {
-    const plays=view.playedCards.slice(i,i+4);
+  for (let i=0;i<completed;i+=trickSize) {
+    const plays=view.playedCards.slice(i,i+trickSize);
     totals[team(trickWinner({ leader: plays[0].seat, plays, winner:null },view.trump!))] += plays.reduce((n,p)=>n+points(p.card,view.rules),0);
   }
   let card = first;
   while (hands.some(h => h.length)) {
     hands[seat].splice(hands[seat].indexOf(card),1);
     trick.plays.push({ seat, card });
-    if (trick.plays.length === 4) {
+    if (trick.plays.length === trickSize) {
       seat = trickWinner(trick, view.trump!);
       totals[team(seat)] += trick.plays.reduce((n,p)=>n+points(p.card,view.rules),0);
       counts[team(seat)]++;
+      if (solo && seat !== view.bidder) return team(view.seat) === team(view.bidder!) ? -view.rules.target : view.rules.target;
       if (!hands.some(h=>h.length)) totals[team(seat)] += view.rules.lastTrickBonus;
       trick = { leader:seat, plays:[], winner:null };
-    } else seat = ((seat+1)%4) as SeatIndex;
+    } else {
+      seat = ((seat+1)%4) as SeatIndex;
+      if (seat === view.sittingOut) seat = ((seat+1)%4) as SeatIndex;
+    }
     if (!hands.some(h=>h.length)) break;
     const remaining=hands.flat();
     card=heuristic(hands[seat],legalPlays(hands[seat],trick,view.trump!),trick,view.trump!,seat,view.bidder,remaining,view,config);
   }
+  if (solo) return team(view.seat) === team(view.bidder!) ? view.rules.target : -view.rules.target;
   const meld = { red:0, blue:0 };
   for (const s of [0,1,2,3] as SeatIndex[]) meld[team(s)] += view.melds[s].reduce((n,m)=>n+m.points,0);
   for (const t of ['red','blue'] as const) if (!view.rules.mustTakeTrickToSaveMeld || counts[t]) totals[t] += meld[t];
   const bidding=team(view.bidder!);
   if (view.highBid?.shoot) {
     const made=counts[bidding]===12;
-    totals[bidding]=made?view.rules.shootPoints:-view.rules.shootPoints;
+    totals[bidding]=made?view.rules.target:-view.rules.target;
   } else if (totals[bidding] < view.highBid!.amount!) totals[bidding]=-view.highBid!.amount!;
   return team(view.seat)==='red'?totals.red-totals.blue:totals.blue-totals.red;
 }

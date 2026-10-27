@@ -21,6 +21,10 @@ describe("announcements", () => {
     expect(speakLine("East wins the bid at 260", nameOf)).toBe("June wins the bid at 260");
     expect(speakLine("Red makes 300; hand over", nameOf)).toBe("Red makes 300; hand over");
     expect(speakLine("South shoots the moon", nameOf)).toBe("You shoot the moon");
+    expect(speakLine("South is sitting out; cards stay face down", nameOf)).toBe("You are sitting out; cards stay face down");
+    expect(speakLine("North is sitting out; cards stay face down", nameOf)).toBe("Walt is sitting out; cards stay face down");
+    expect(speakLine("South misses the shoot; shooting side loses the game", nameOf)).toBe("You miss the shoot; shooting side loses the game");
+    expect(speakLine("South makes the shoot; hand over", nameOf)).toBe("You make the shoot; hand over");
     expect(speakLine("South plays it out", nameOf)).toBe("You play it out");
     expect(speakLine("West plays it out", nameOf)).toBe("Margaret plays it out");
   });

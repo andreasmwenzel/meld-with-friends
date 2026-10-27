@@ -2,7 +2,7 @@ import { DEFAULT_SETTINGS, type BotConfig } from '../../lib/settings';
 import { computeMeld } from '../meld';
 import { scoringFactor } from '../scoring';
 import type { PlayerView, SeatIndex, Suit } from '../types';
-import { points, suits, suitOf } from './shared';
+import { points, strength, suits, suitOf } from './shared';
 
 /**
  * Partner signals in classic units; docs/COMPUTER_PLAYERS.md lists the conventions. Bots never
@@ -70,7 +70,15 @@ export function chooseBid(view: PlayerView, config: BotConfig = DEFAULT_SETTINGS
   return minBid;
 }
 
-/** A hand to shoot with: enough of one suit, both its aces, and an ace in every other suit. Once trump is named, that suit. */
+/** Conservative solo test after passing. Draw every possible opposing trump, then cash only aces. */
 export function overwhelming(view: PlayerView, config: BotConfig = DEFAULT_SETTINGS.bots) {
-  return (view.trump ? [view.trump] : suits).some(s => view.hand.filter(c => suitOf(c) === s).length >= config.shootMinTrump && view.hand.filter(c => suitOf(c) === s && c[0] === 'A').length === 2 && suits.every(side => side === s || view.hand.some(c => suitOf(c) === side && c[0] === 'A')));
+  if (view.phase !== 'deciding_shoot' || !view.trump) return false;
+  const trump = view.hand.filter(c => suitOf(c) === view.trump);
+  if (trump.length < config.shootMinTrump || trump.filter(c => c[0] === 'A').length !== 2) return false;
+  // Count every unseen trump as hostile, including any actually set aside with partner.
+  const missing = [...'ATKQJ9'].flatMap(rank => [0, 1].map(copy => `${rank}${view.trump}${copy}` as import('../types').CardId))
+    .filter(card => !trump.includes(card));
+  const highestMissing = Math.max(-1, ...missing.map(strength));
+  const safeLeads = trump.filter(card => strength(card) >= highestMissing).length;
+  return safeLeads >= missing.length && view.hand.every(card => suitOf(card) === view.trump || card[0] === 'A');
 }

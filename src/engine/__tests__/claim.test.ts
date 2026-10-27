@@ -131,11 +131,24 @@ describe('claim settlement', () => {
     if (claimed.phase === 'hand_over') expect(viewFor(applyAction(claimed, { type: 'next_hand', seat: 0 }), 0).claim).toBeNull();
   });
 
-  it.each(['points', 'game'] as const)('settles a made shoot in %s mode', shoot => {
-    const { state } = buildScenario({ ...spec, rules: { ...spec.rules, shoot }, shoot: true });
+  it.each(['points', 'game'] as const)('settles a legacy four-player shoot in %s mode', mode => {
+    const { state } = buildScenario(spec);
+    state.highBid = { ...state.highBid!, shoot: true };
+    state.legacyShootRules = { mode, points: 100 };
     const claimed = applyAction(state, { type: 'claim', seat: 0 });
     expect(claimed.history).toEqual(playOut(state).history);
     expect(claimed.history.at(-1)?.shotMade).toBe(true);
+  });
+
+  it('requires solo shoots to be played out even with a proven winning line', () => {
+    const { state } = buildScenario({ ...spec, rules: { ...spec.rules, shoot: 'on' }, shoot: true });
+    expect(state.sittingOut).toBe(2);
+    expect(claimLine(viewFor(state, 0))).not.toBeNull();
+    expect(verifyClaim(state, 'solo-shoot')).toBe(0);
+    for (const seat of seats) {
+      expect(viewFor(state, seat).legal.canClaim).toBe(false);
+      expect(() => applyAction(state, { type: 'claim', seat })).toThrow(/cannot claim/);
+    }
   });
 
   it('bots claim and replay preserves the claim and revealed hands', () => {

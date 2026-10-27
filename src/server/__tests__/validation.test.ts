@@ -8,8 +8,8 @@ describe("table rules validation", () => {
     for (const rules of [{}, DEFAULT_RULES,
       { target: 300, minBid: 100, bidStep: 20, passCount: 0, lastTrickBonus: 0, counting: "classic", dealerStuck: false, mustTakeTrickToSaveMeld: false },
       { target: 5000, minBid: 1000, bidStep: 25, passCount: 5, lastTrickBonus: 50 },
-      { bidStep: 50, shoot: "game", shootPoints: 100 },
-      { shoot: "points", shootPoints: 5000 },
+      { scoring: "classic", bidStep: 50, shoot: "on" },
+      { shoot: "on" },
       { revealHands: true }, { revealHands: false },
     ]) expect(rulesSchema.parse(rules)).toEqual(rules);
   });
@@ -23,7 +23,7 @@ describe("table rules validation", () => {
     { mustTakeTrickToSaveMeld: 0 }, { dealerStuck: "false" },
     { revealHands: "true" }, { revealHands: null },
     { setPenaltyIsBid: false }, { unexpected: true },
-    { shoot: "invalid" }, { shootPoints: 90 }, { shootPoints: 5010 }, { shootPoints: 105 },
+    { shoot: "invalid" }, { shoot: "game" }, { shoot: "points" }, { shootPoints: 90 }, { shootPoints: 5010 }, { shootPoints: 105 },
   ])("rejects unsupported rules %j", rules => {
     expect(rulesSchema.safeParse(rules).success).toBe(false);
   });
@@ -41,7 +41,6 @@ describe("table rules validation", () => {
     { scoring: "modern", counting: "classic" },
     { scoring: "modern", target: 29 }, { scoring: "modern", target: 501 },
     { scoring: "modern", minBid: 9 }, { scoring: "modern", minBid: 101 },
-    { scoring: "modern", shootPoints: 9 }, { scoring: "modern", shootPoints: 501 },
     { scoring: "modern", counterValue: 10 }, { scoring: "modern", bidStep: 10 },
     { scoring: "modern", lastTrickBonus: 6 },
     { scoring: "classic", counterValue: 1 }, { scoring: "classic", bidStep: 1 },

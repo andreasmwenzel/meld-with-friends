@@ -286,13 +286,13 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     if (!view) return;
     const last = view.claim ? null : view.lastTrick;
     const key = `${view.handNumber}:${last?.plays.map(p => p.card).join(",") ?? ""}`;
-    if (last?.plays.length === 4 && key !== trickHold.current.key) {
+    if (last?.winner != null && key !== trickHold.current.key) {
       trickHold.current = { key, until: Date.now() + (holdMs + sweepMs) };
     }
     const live = view.currentTrick?.plays.length ? view.currentTrick
       : view.phase === "hand_over" || view.phase === "game_over" ? last : view.currentTrick;
     const remaining = trickHold.current.until - Date.now();
-    setDisplayedTrick(remaining > 0 && last?.plays.length === 4 ? last : live);
+    setDisplayedTrick(remaining > 0 && last?.winner != null ? last : live);
     if (remaining <= 0) return;
     const timer = setTimeout(() => setDisplayedTrick(live), remaining);
     return () => clearTimeout(timer);
@@ -653,9 +653,9 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   }
 
   // Seeing the last trick again: the centre shows it, the status above your hand says who took it.
-  const lastTrick = view.lastTrick && view.lastTrick.plays.length === 4 && view.lastTrick.winner !== null ? view.lastTrick : null;
+  const lastTrick = view.lastTrick && view.lastTrick.winner !== null ? view.lastTrick : null;
   const peeking = !!lastTrick && view.phase === "playing" && peekRev === view.rev;
-  const showingLast = !!lastTrick && displayedTrick?.plays.length === 4 && displayedTrick.plays.every((p, i) => p.card === lastTrick.plays[i].card);
+  const showingLast = !!lastTrick && displayedTrick?.winner != null && displayedTrick.plays.every((p, i) => p.card === lastTrick.plays[i].card);
   const peek = { last: peeking ? lastTrick : null, can: !!lastTrick && view.phase === "playing" && !showingLast,
     toggle: () => setPeekRev((r) => (r === view.rev ? null : view.rev)) };
   // The cloth is not read out, so say what the last trick held when it is shown again.
@@ -695,16 +695,17 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const readyInfo = view.phase === "hand_over" && snap.seats.filter((x) => x.user_id).length > 1
     ? { me: isReady(view.seat), all: waitingNames.length === 0, readyNames, waitingNames, post: postReady } : null;
   // Tighten the fan until it fits the row; scroll only once cards would get too thin to tap.
+  const handCount = view.sittingOut === view.seat && view.phase === "playing" ? view.handCounts[view.seat] : hand.length;
   const baseStep = cardW * (cardW < 60 ? 0.42 : 0.5);
-  const fitStep = handW > 0 && hand.length > 1 ? (handW - cardW) / (hand.length - 1) : baseStep;
+  const fitStep = handW > 0 && handCount > 1 ? (handW - cardW) / (handCount - 1) : baseStep;
   const step = Math.max(Math.max(20, cardW * 0.34), Math.min(baseStep, fitStep));
   const overlap = cardW - step;
-  const scrollHand = handW > 0 && cardW + (hand.length - 1) * step > handW + 0.5;
+  const scrollHand = handW > 0 && cardW + (handCount - 1) * step > handW + 0.5;
 
   // Numbers only beside each name; the breakdown is a tap away. The other side's meld and totals hide with the preference, bids never do.
   const sum = (seat: SeatIndex) => (view.melds[seat] ?? []).reduce((n, m) => n + m.points, 0);
   const facts: ScoreFacts = {
-    phase: view.phase, handNumber: view.handNumber, dealer: view.dealer, bidder: view.bidder, highBid: view.highBid, trump: view.trump, bids: view.bids,
+    sittingOut: view.sittingOut, phase: view.phase, handNumber: view.handNumber, dealer: view.dealer, bidder: view.bidder, highBid: view.highBid, trump: view.trump, bids: view.bids,
     meldPoints: { 0: sum(0), 1: sum(1), 2: sum(2), 3: sum(3) }, counters: view.recap.counters, history: view.history,
   };
   const over = view.phase === "hand_over" || view.phase === "game_over";
@@ -796,7 +797,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
         {/* action bar */}
         <div ref={actionRef} {...keepFocus} className="board-action mt-1 min-h-[64px] shrink-0 sm:mt-2 sm:min-h-[88px]">
           <ActionBar key={view.rev} view={view} selected={selected} busy={busy || updating} act={act} nameOf={nameOf} autoMeld={cardPrefs.autoMeld} />
-          {view.phase === "playing" && view.playedCards.length < 4 && meldHidden !== view.handNumber && (
+          {view.phase === "playing" && view.sittingOut == null && view.playedCards.length < 4 && meldHidden !== view.handNumber && (
             <div className="mt-1 flex min-h-11 items-center justify-center">
               {/* Hiding removes the button that had focus; the hand takes it. */}
               <MeldReview key={view.handNumber} melds={view.melds} seat={view.seat} nameOf={nameOf} compact={short}
@@ -831,6 +832,9 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
         )}
         <div ref={handRef} tabIndex={-1} {...keepFocus} role="group" aria-label="Your hand" onKeyDown={moveInHand} className={`board-hand relative mt-1 flex shrink-0 outline-none sm:mt-2 ${scrollHand ? "hand-scroll overflow-x-auto" : "justify-center"}`} style={{ minHeight: (cardW * 7) / 5 + (short ? 8 : 20), paddingTop: scrollHand ? 16 : undefined }}>
           <div className={`flex items-end ${scrollHand ? "mx-auto w-max" : ""}`} style={{ paddingLeft: overlap }}>
+            {view.sittingOut === view.seat && view.phase === "playing" && <span role="img" aria-label={`${view.handCounts[view.seat]} cards face down, sitting out`} className="flex">
+              {Array.from({ length: view.handCounts[view.seat] }, (_, i) => <CardBack key={i} width={cardW} team={teamOf(view.seat)} style={{ marginLeft: -overlap }} />)}
+            </span>}
             {hand.map((c) => {
               const playable = view.phase === "playing" ? view.legal.playableCards.includes(c) || c === unshown : picking;
               const isArmed = armedCard === c;
@@ -969,9 +973,9 @@ function SuggestedMark() {
 /** What a shoot after the pass would stake, against the bid it replaces. */
 function shootStake(view: PlayerView, nameOf: (s: SeatIndex) => string): string {
   const who = view.bidder === null ? "The bidder" : nameOf(view.bidder);
-  const stake = view.rules.shoot === "game" ? " to win the game" : ` for ${view.rules.shootPoints}`;
-  if (who !== "You") return `${who} may shoot the moon${stake}.`;
-  return `Take every trick${stake}, or play out the ${view.highBid?.amount ?? "bid"}.`;
+  if (who !== "You") return `${who} may shoot the moon. Their partner sits out; they must take every trick.`;
+  const wins = view.score[teamOf(view.bidder!)] + view.rules.target >= view.rules.target;
+  return `Your partner sits out; take every trick and your side gains ${view.rules.target} points${wins ? "; that wins the game" : ""}.`;
 }
 
 /** "You are shooting the moon" or "West is shooting the moon". */
@@ -992,6 +996,7 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
   // The engine keeps meld in the hand; while it lies on the table it is not among the backs.
   const n = faceUp?.length ?? view.handCounts[seat] - laid;
   const team = teamOf(seat);
+  const sittingOut = view.sittingOut === seat;
   const active = view.turn === seat;
   const vertical = align !== "center";
   const items = align === "left" ? "items-start" : align === "right" ? "items-end" : "items-center";
@@ -1001,6 +1006,7 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
         <Avatar name={name} team={team} size={28} bot={bot} />
         {score.dealer && <DealerMark />}
       </span>
+      {sittingOut && <span className="text-xs text-chalk-faint">sitting out</span>}
       <span className={`truncate text-xs font-semibold ${compact ? "max-w-[88px]" : "max-w-[96px] sm:text-sm"}`}>{name}{score.dealer && <span className="sr-only">, dealer</span>}{active && <span className="sr-only">, their turn</span>}</span>
     </>
   );
@@ -1163,7 +1169,7 @@ function MySeat({ view, name, score }: { view: PlayerView; name: string; score: 
             <Avatar name={name} team={teamOf(view.seat)} size={28} />
             {score.dealer && <DealerMark />}
           </span>
-          <span className="text-xs font-semibold sm:text-sm">You{score.dealer && <span className="sr-only">, dealer</span>}{view.turn === view.seat && <span className="sr-only">, your turn</span>}</span>
+          <span className="text-xs font-semibold sm:text-sm">You{view.sittingOut === view.seat && <span className="ml-1 text-chalk-faint">sitting out</span>}{score.dealer && <span className="sr-only">, dealer</span>}{view.turn === view.seat && <span className="sr-only">, your turn</span>}</span>
         </div>
         {/* Above the side seats' cards, and opening up and over the cloth: below this seat the board ends. */}
         <div className="absolute left-full top-1/2 z-30 ml-1 -translate-y-1/2 whitespace-nowrap">
@@ -1190,12 +1196,16 @@ function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact, busy, 
   busy: boolean; claim: () => void;
 }) {
   const mine = view.turn === view.seat;
-  const done = !peek.last && !!trick && trick.plays.length === 4 && trick.winner !== null;
-  const took = done ? countersIn(trick, view.rules) : 0;
+  const done = !peek.last && !!trick && trick.winner !== null;
+  const took = done && view.sittingOut == null ? countersIn(trick, view.rules) : 0;
+  const shootStatus = view.sittingOut == null ? null : view.seat === view.sittingOut
+    ? "You are sitting out; your cards stay face down."
+    : view.seat === view.bidder ? "Shooting alone; take every trick."
+    : `${nameOf(view.bidder!)} is shooting alone; win one trick to win the game.`;
   const detail = peek.last ? null
-    : done ? <><Name name={nameOf(trick.winner!)} />{` took it${took > 0 ? `, ${took} ${took === 1 ? "counter" : "counters"}` : ", no counters"}.`}</>
-    : mine ? constraintSentence(view) ?? "Tap a card to play it."
-    : null;
+    : done ? <><Name name={nameOf(trick.winner!)} />{` took it${took > 0 ? `, ${took} ${took === 1 ? "counter" : "counters"}` : view.sittingOut == null ? ", no counters" : ""}.`}</>
+    : mine ? shootStatus ?? constraintSentence(view) ?? "Tap a card to play it."
+    : shootStatus;
   const link = "whitespace-nowrap text-xs text-chalk-faint underline underline-offset-4 hover:text-chalk";
   // Each line is a single row of text, so a name can shrink inside it while the words round it stay whole.
   const line = "flex min-w-0 max-w-full whitespace-pre";
@@ -1228,9 +1238,9 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
 }) {
   // Sideways on a phone the trick shrinks to fit between your hand and the seat across.
   const trickW = compact ? 42 : 56;
-  const done = !!trick && trick.plays.length === 4 && trick.winner !== null;
+  const done = !!trick && trick.winner !== null;
   const dim = trick !== view.currentTrick && (view.phase === "hand_over" || view.phase === "game_over");
-  const took = done ? countersIn(trick, view.rules) : 0;
+  const took = done && view.sittingOut == null ? countersIn(trick, view.rules) : 0;
   const spots: Record<0 | 1 | 2 | 3, string> = {
     0: "bottom-0 left-1/2 -translate-x-1/2", 1: "left-0 top-1/2 -translate-y-1/2", 2: "top-0 left-1/2 -translate-x-1/2", 3: "right-0 top-1/2 -translate-y-1/2",
   };
@@ -1301,7 +1311,7 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
         )}
         {done && (
           <p className="text-xs text-chalk-faint" style={{ opacity: dim ? 0.7 : 1 }}>
-            {nameOf(trick.winner!)} took it{took > 0 ? `, ${took} ${took === 1 ? "counter" : "counters"}` : ", no counters"}.
+            {nameOf(trick.winner!)} took it{took > 0 ? `, ${took} ${took === 1 ? "counter" : "counters"}` : view.sittingOut == null ? ", no counters" : ""}.
           </p>
         )}
         {stalled && <button type="button" onClick={nudge} className="text-xs text-chalk-faint underline hover:text-chalk">Nudge the computers</button>}
@@ -1397,12 +1407,6 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld }: {
         <button className="btn btn-ghost btn-compact" style={{ color: "var(--chalk-faint)" }} onClick={() => act({ type: "pass_bid" })} disabled={busy}>
           {stuck ? `Take it at ${view.rules.minBid}` : "Pass"}
         </button>
-        {L.canShoot && (
-          <button className="btn btn-ghost btn-compact" style={{ color: "var(--brass)", boxShadow: "inset 0 0 0 1.5px var(--brass)" }} disabled={busy} aria-label="Shoot the moon"
-            onClick={() => { void act({ type: "shoot" }); }}>
-            <span className="sm:hidden">Shoot</span><span className="hidden sm:inline">Shoot the moon</span>
-          </button>
-        )}
         {misdeal && <MisdealButton busy={busy} run={misdeal} />}
       </Bar>
     </>);
@@ -1415,7 +1419,6 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld }: {
         min={L.minBid ?? view.rules.minBid} step={view.rules.bidStep} busy={busy}
         onBid={(amount) => act({ type: "bid", amount })}
         pass={L.canPassBid ? { label: "Pass", run: () => act({ type: "pass_bid" }) } : null}
-        shoot={L.canShoot ? () => { void act({ type: "shoot" }); } : null}
         misdeal={misdeal}
       />
     </>);

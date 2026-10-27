@@ -35,7 +35,7 @@ async function boot(qs: URLSearchParams) {
     const res = await fetch(`/dev/states?name=${encodeURIComponent(name)}`);
     if (!res.ok) labStore.clearError();
     const parsed = parseImport(await res.json());
-    labStore.load(parsed.base, parsed.actions, { kind: "import", name }, { notes: [parsed.note], ...(seat !== undefined ? { view: seat } : {}) });
+    labStore.load(parsed.base, parsed.actions, { kind: "import", name }, { legacyShoots: parsed.legacyShoots, notes: [parsed.note], ...(seat !== undefined ? { view: seat } : {}) });
   } else if (!labStore.restore()) labStore.loadPreset("play-lead");
   if (seat !== undefined && labStore.get().view !== seat) labStore.setView(seat);
   const bots = qs.get("bots");

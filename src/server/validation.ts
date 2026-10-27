@@ -15,8 +15,7 @@ export const rulesSchema = z.object({
   lastTrickBonus: z.number().int().min(0).max(50).optional(),
   counterValue: z.union([z.literal(1), z.literal(10)]).optional(),
   counting: z.enum(["tens", "classic"]).optional(),
-  shoot: z.enum(["off", "game", "points"]).optional(),
-  shootPoints: z.number().int().min(10).max(5000).optional(),
+  shoot: z.enum(["off", "on"]).optional(),
   setPenaltyIsBid: z.literal(true).optional(),
   mustTakeTrickToSaveMeld: z.boolean().optional(),
   dealerStuck: z.boolean().optional(),
@@ -29,7 +28,7 @@ export const rulesSchema = z.object({
   const check = (ok: boolean, path: string, message: string) => {
     if (!ok) ctx.addIssue({ code: "custom", path: [path], message });
   };
-  for (const [key, min, max] of [["target", 300, 5000], ["minBid", 100, 1000], ["shootPoints", 100, 5000]] as const) {
+  for (const [key, min, max] of [["target", 300, 5000], ["minBid", 100, 1000]] as const) {
     check(rules[key] >= min * factor && rules[key] <= max * factor
       && (modern || rules[key] % 10 === 0), key, `Invalid ${key} for ${rules.scoring} scoring`);
   }

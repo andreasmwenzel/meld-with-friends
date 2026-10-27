@@ -12,7 +12,7 @@ describe("the bid grid", () => {
   it("walks with plain arrows, and leaves Alt, Ctrl and Meta arrows and handled keys to the browser", () => {
     // jsdom has no modal dialogs; opening one only needs it shown here.
     HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) { this.open = true; };
-    render(<BidPicker min={250} step={10} busy={false} onBid={() => {}} pass={null} shoot={null} />);
+    render(<BidPicker min={250} step={10} busy={false} onBid={() => {}} pass={null} />);
     fireEvent.click(screen.getByRole("button", { name: "Choose bid" }));
     const at = screen.getByRole("button", { name: "260" });
     act(() => { at.focus(); });

@@ -50,7 +50,7 @@ export function walk(replay: Replay, nameOf: (seat: SeatIndex) => string): Walk 
     // A player's "lay down" and "confirm" read as one move when nothing happened between them.
     if (step.action.type === "declare_meld" && next?.type === "confirm_meld" && next.seat === step.action.seat) return;
     const before = frames[i], after = frames[i + 1];
-    const completedTrick = step.action.type === "play_card" && before.currentTrick?.plays.length === 3;
+    const completedTrick = step.action.type === "play_card" && before.currentTrick?.plays.length === (before.sittingOut != null ? 2 : 3);
     const record = after.history.length > before.history.length ? after.history[after.history.length - 1] : null;
     // The pass or misdeal that throws a hand in belongs to the hand it ended, though the board already shows the redeal.
     const thrownIn = step.action.type === "misdeal" || (step.action.type === "pass_bid" && after.handNumber !== before.handNumber);

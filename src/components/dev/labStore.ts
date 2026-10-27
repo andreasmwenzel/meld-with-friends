@@ -1,8 +1,8 @@
 // State for the dev lab: a timeline of real engine actions over a base state, with undo, branching and bots.
-import { applyAction, cardLabel, IllegalAction, newGame, type Action, type GameState, type SeatIndex } from "@/engine";
+import { applyAction, cardLabel, IllegalAction, type Action, type GameState, type SeatIndex } from "@/engine";
 import { actors, botAction, buildScenario, SEATS, type ScenarioSpec } from "@/engine/scenario";
 import { presetById } from "@/engine/scenarios";
-import { replayLog } from "@/engine/replay";
+import { rebuildFromLog, replayLog } from "@/engine/replay";
 
 export interface LabFlags {
   /** Game's connection prop, to see the reconnecting banner */
@@ -18,6 +18,8 @@ export interface LabFlags {
 export interface LabSnapshot {
   base: GameState;
   actions: Action[];
+  /** Action indexes of archived four-player shoot declarations. */
+  legacyShoots: number[];
   /** how many actions are applied; actions past the cursor are the redo branch */
   cursor: number;
   view: SeatIndex;
@@ -39,9 +41,7 @@ const others = (view: SeatIndex) => SEATS.filter(s => s !== view);
 
 /** Expand base + actions into the state after each action. Index 0 is the base. */
 function replay(base: GameState, actions: Action[]): GameState[] {
-  const states = [base];
-  for (const action of actions) states.push(applyAction(states.at(-1)!, action));
-  return states;
+  return replayLog(base, actions).states;
 }
 
 export function describeAction(a: Action): string {
@@ -65,7 +65,7 @@ export function describeAction(a: Action): string {
 function fromSpec(spec: ScenarioSpec) {
   const built = buildScenario(spec);
   // Load at the target, keeping the route there as undoable history.
-  return { base: built.base, actions: built.actions, cursor: built.actions.length, notes: built.notes };
+  return { base: built.base, actions: built.actions, legacyShoots: [], cursor: built.actions.length, notes: built.notes };
 }
 
 function initial(): LabSnapshot {
@@ -99,8 +99,8 @@ export class LabStore {
 
   private persist() {
     try {
-      const { base, actions, cursor, view, bots, speed, source } = this.snap;
-      localStorage.setItem(STORAGE, JSON.stringify({ base, actions, cursor, view, bots, speed, source }));
+      const { base, actions, legacyShoots, cursor, view, bots, speed, source } = this.snap;
+      localStorage.setItem(STORAGE, JSON.stringify({ base, actions, legacyShoots, cursor, view, bots, speed, source }));
     } catch { /* storage full or blocked; the lab still works */ }
   }
 
@@ -110,11 +110,11 @@ export class LabStore {
       if (!raw) return false;
       const saved = JSON.parse(raw) as Partial<LabSnapshot>;
       if (!saved.base || !saved.actions) return false;
-      const played = replayLog(saved.base, saved.actions);
+      const played = replayLog(saved.base, saved.actions, undefined, saved.legacyShoots);
       // Map the old cursor through its prefix so inserted decisions keep undo/redo in place.
-      const cursor = replayLog(saved.base, saved.actions.slice(0, saved.cursor ?? 0)).actions.length;
+      const cursor = replayLog(saved.base, saved.actions.slice(0, saved.cursor ?? 0), undefined, saved.legacyShoots).actions.length;
       this.states = played.states;
-      this.set({ ...saved, actions: played.actions, cursor, notes: [], error: null } as LabSnapshot, { rewrite: true });
+      this.set({ ...saved, base: played.states[0], actions: played.actions, legacyShoots: played.legacyShoots, cursor, notes: [], error: null } as LabSnapshot, { rewrite: true });
       return true;
     } catch { return false; }
   }
@@ -122,8 +122,9 @@ export class LabStore {
   /** Start a new timeline from a base state and the actions that lead to the target. */
   load(base: GameState, actions: Action[], source: LabSnapshot["source"], extra: Partial<LabSnapshot> = {}) {
     try {
-      this.states = replay(base, actions);
-      this.set({ base, actions, cursor: actions.length, source, notes: [], error: null, flags: { ...this.snap.flags, ready: [] }, ...extra }, { rewrite: true });
+      const played = replayLog(base, actions, undefined, extra.legacyShoots);
+      this.states = played.states;
+      this.set({ base: played.states[0], actions: played.actions, cursor: played.actions.length, source, notes: [], error: null, flags: { ...this.snap.flags, ready: [] }, ...extra, legacyShoots: played.legacyShoots }, { rewrite: true });
     } catch (e) {
       this.set({ error: `Could not replay: ${(e as Error).message}` });
     }
@@ -149,10 +150,10 @@ export class LabStore {
   /** Apply an action at the cursor. A new move after an undo discards the old future, like an editor. */
   act(action: Action): GameState {
     const next = applyAction(this.state, action);
-    const { actions, cursor } = this.snap;
+    const { actions, legacyShoots, cursor } = this.snap;
     const rewrite = cursor < actions.length;
     this.states = [...this.states.slice(0, cursor + 1), next];
-    this.set({ actions: [...actions.slice(0, cursor), action], cursor: cursor + 1, error: null }, { rewrite });
+    this.set({ actions: [...actions.slice(0, cursor), action], legacyShoots: legacyShoots.filter(index => index < cursor), cursor: cursor + 1, error: null }, { rewrite });
     return next;
   }
 
@@ -206,37 +207,29 @@ export class LabStore {
 
 export const labStore = typeof window === "undefined" ? (null as unknown as LabStore) : new LabStore();
 
-/** Key-sorted JSON; Postgres jsonb does not keep key order. */
-const canonical = (value: unknown): string => JSON.stringify(value, (_k, v) => v && typeof v === "object" && !Array.isArray(v)
-  ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v);
+/** Export only the applied prefix, including each archived shoot declaration's identity. */
+export function exportTimeline(snap: LabSnapshot): string {
+  return JSON.stringify({ base: snap.base, actions: snap.actions.slice(0, snap.cursor), legacyShoots: snap.legacyShoots.filter(index => index < snap.cursor) }, null, 1);
+}
 
 /**
  * Accepts a lab export ({ base, actions }), a pulled production game ({ state, actions }), or a bare GameState.
  * Production games are rebuilt from their seed when the action log replays to the same state.
  */
-export function parseImport(data: unknown): { base: GameState; actions: Action[]; note: string } {
-  const obj = data as { base?: GameState; state?: GameState; actions?: Action[] } & Partial<GameState>;
+export function parseImport(data: unknown): { base: GameState; actions: Action[]; legacyShoots: number[]; note: string } {
+  const obj = data as { base?: GameState; state?: GameState; actions?: Action[]; legacyShoots?: number[] } & Partial<GameState>;
   if (obj.base && Array.isArray(obj.actions)) {
-    const played = replayLog(obj.base, obj.actions);
-    return { base: obj.base, actions: played.actions, note: `${played.actions.length} actions` };
+    const played = replayLog(obj.base, obj.actions, undefined, obj.legacyShoots);
+    return { base: played.states[0], actions: played.actions, legacyShoots: played.legacyShoots, note: `${played.actions.length} actions` };
   }
   const state = obj.state ?? (obj.phase && obj.players ? (obj as GameState) : null);
   if (!state) throw new Error("Expected a GameState, { state, actions } or { base, actions }");
   const actions = obj.actions ?? [];
   if (actions.length) {
-    for (const dealer of SEATS) {
-      try {
-        const start = newGame(state.seed, state.rules, dealer);
-        // Older logs lack the bidder's shoot decision after the pass; replayLog fills it in.
-        const played = replayLog(start, actions, state);
-        const end = played.states.at(-1)!;
-        if (end.rev - (played.actions.length - actions.length) === state.rev && end.phase === state.phase && canonical(end.players) === canonical(state.players) && canonical(end.score) === canonical(state.score)) {
-          return { base: start, actions: played.actions, note: `Rebuilt from seed with ${played.actions.length} actions` };
-        }
-      } catch { /* try the next dealer */ }
-    }
+    const rebuilt = rebuildFromLog(state, actions);
+    if (rebuilt) return { base: rebuilt.start, actions: rebuilt.actions, legacyShoots: rebuilt.legacyShoots, note: `Rebuilt from seed with ${rebuilt.actions.length} actions` };
   }
-  return { base: state, actions: [], note: actions.length ? "Action log did not replay; loaded the state alone" : "Loaded the state alone" };
+  return { base: state, actions: [], legacyShoots: [], note: actions.length ? "Action log did not replay; loaded the state alone" : "Loaded the state alone" };
 }
 
 /** URL-safe base64 of a spec, for ?spec= links. */

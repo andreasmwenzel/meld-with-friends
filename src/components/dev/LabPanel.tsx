@@ -5,7 +5,7 @@ import { buildDeck, cardLabel, sortHand, type CardId, type GameState, type Phase
 import { checkState, SEATS, type ScenarioSpec, type ScenarioTarget } from "@/engine/scenario";
 import { resolveRules, changeScoring } from "@/components/rules/rules";
 import { PRESETS, presetById } from "@/engine/scenarios";
-import { describeAction, encodeSpec, labStore, parseImport, type LabSnapshot } from "./labStore";
+import { describeAction, encodeSpec, exportTimeline, labStore, parseImport, type LabSnapshot } from "./labStore";
 
 const NAMES = ["South", "West", "North", "East"] as const;
 const SHORT = ["S", "W", "N", "E"] as const;
@@ -210,11 +210,11 @@ function Build({ snap }: { snap: LabSnapshot }) {
               <option value="">Bot picks</option><option value="S">♠ Spades</option><option value="H">♥ Hearts</option><option value="D">♦ Diamonds</option><option value="C">♣ Clubs</option>
             </select>
           </Field>
-          <label className="col-span-3 flex items-center gap-2"><input type="checkbox" checked={!!spec.shoot} onChange={e => set({ shoot: e.target.checked || undefined, rules: { ...rules, shoot: e.target.checked && (rules.shoot ?? "off") === "off" ? "points" : rules.shoot } })} /> Bidder shoots the moon</label>
+          <label className="col-span-3 flex items-center gap-2"><input type="checkbox" checked={!!spec.shoot} onChange={e => set({ shoot: e.target.checked || undefined, rules: { ...rules, shoot: e.target.checked && (rules.shoot ?? "off") === "off" ? "on" : rules.shoot } })} /> Bidder shoots the moon</label>
         </fieldset>
       )}
       {to === "bidding" && (
-        <Field label={`Auction so far (from the dealer's left: ${rules.minBid}, pass, shoot)`} span={3}>
+        <Field label={`Auction so far (from the dealer's left: ${rules.minBid}, pass)`} span={3}>
           <input className={field} value={(spec.bids ?? []).map(b => (b === null ? "pass" : b)).join(", ")} placeholder={`${rules.minBid}, pass, ${rules.minBid + rules.bidStep}`}
             onChange={e => set({ bids: e.target.value.split(",").map(x => x.trim()).filter(Boolean).map(x => (x === "pass" ? null : x === "shoot" ? "shoot" : Number(x))) })} />
         </Field>
@@ -246,8 +246,8 @@ function Build({ snap }: { snap: LabSnapshot }) {
         <Field label="Min bid"><input className={field} type="number" step={rules.bidStep} value={rules.minBid} onChange={e => setRules({ minBid: num(e.target.value) })} /></Field>
         <Field label="Pass"><input className={field} type="number" min={0} max={12} value={rules.passCount ?? ""} placeholder="4" onChange={e => setRules({ passCount: num(e.target.value) })} /></Field>
         <Field label="Shoot">
-          <select className={field} value={rules.shoot ?? "off"} onChange={e => setRules({ shoot: e.target.value as "off" | "game" | "points" })}>
-            <option value="off">Off</option><option value="game">Wins game</option><option value="points">Points</option>
+          <select className={field} value={rules.shoot ?? "off"} onChange={e => setRules({ shoot: e.target.value as "off" | "on" })}>
+            <option value="off">Off</option><option value="on">On</option>
           </select>
         </Field>
         <Field label="Counting">
@@ -377,12 +377,12 @@ function StateTab({ snap, state, problems }: { snap: LabSnapshot; state: GameSta
   const [msg, setMsg] = useState<string | null>(null);
   const refresh = () => fetch("/dev/states").then(r => r.json()).then((d: { names: string[] }) => setSaved(d.names)).catch(() => setSaved([]));
   useEffect(() => { void refresh(); }, []);
-  const exportData = () => JSON.stringify({ base: snap.base, actions: snap.actions.slice(0, snap.cursor) }, null, 1);
+  const exportData = () => exportTimeline(snap);
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(null), 2000); };
   const doImport = (raw: string, label: string) => {
     try {
       const parsed = parseImport(JSON.parse(raw));
-      labStore.load(parsed.base, parsed.actions, { kind: "import", name: label }, { notes: [parsed.note] });
+      labStore.load(parsed.base, parsed.actions, { kind: "import", name: label }, { legacyShoots: parsed.legacyShoots, notes: [parsed.note] });
       flash(parsed.note);
     } catch (e) { flash(`Import failed: ${(e as Error).message}`); }
   };

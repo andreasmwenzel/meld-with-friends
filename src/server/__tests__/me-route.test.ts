@@ -27,7 +27,7 @@ beforeEach(() => {
 });
 
 describe("profile rules API contract", () => {
-  it.each([{ revealHands: false }, {}, { passCount: 0, counting: "classic", shoot: "points", shootPoints: 1500 }])(
+  it.each([{ revealHands: false }, {}, { passCount: 0, counting: "classic", shoot: "on" }])(
     "resolves partial defaults before saving %j for the authenticated user", async defaultRules => {
       const response = await PATCH(request({ defaultRules }));
       expect(response.status).toBe(200);

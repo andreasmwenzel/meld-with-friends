@@ -92,7 +92,7 @@ describe('the game broadcast', () => {
     for (const id of ['hand-shoot-made', 'hand-shoot-missed']) {
       const { base, actions, state } = buildScenario(PRESETS.find(p => p.id === id)!.spec);
       const before = actions.slice(0, -1).reduce(applyAction, base);
-      expect(state.phase, id).toBe('hand_over');
+      expect(state.phase, id).toBe('game_over');
       expect(gameEvent(GAME, before, state, actions.at(-1)!), id).toEqual({ type: 'game', rev: state.rev });
     }
   });

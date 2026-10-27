@@ -16,9 +16,9 @@ const snap: Snapshot = {
 const qs = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
 /** ?ready lets the host exercise the optional countdown with everyone ready. */
 const ready: SeatIndex[] = qs.has("ready") ? [0, 1, 2, 3] : [];
-/** All-pass bidding variants: ?shoot=game (or points), optionally &redeal. */
+/** All-pass bidding variants: ?shoot=on, optionally &redeal. */
 const shoot = qs.get("shoot");
-const previewRules = { dealerStuck: !qs.has("redeal"), shoot: shoot === "game" || shoot === "points" ? shoot : "off" } as const;
+const previewRules = { dealerStuck: !qs.has("redeal"), shoot: shoot && shoot !== "off" ? "on" : "off" } as const;
 const fastForward = qs.has("end");
 /** ?play jumps to the play phase mid-trick (others have led, it is your turn); ?meld jumps to melding;
  *  ?return makes you the bidder holding 16 cards after your partner's four-card pass. */

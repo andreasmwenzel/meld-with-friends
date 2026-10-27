@@ -16,11 +16,11 @@ function allOthersPassed(rules: Partial<RulesConfig> = {}, dealer: SeatIndex = 0
 
 describe('all-pass dealer decision', () => {
   for (const dealerStuck of [true, false]) {
-    for (const shoot of ['off', 'game', 'points'] as const) {
+    for (const shoot of ['off', 'on'] as const) {
       it.each(seats)(`restricts dealer %s with dealerStuck=${dealerStuck}, shoot=${shoot}`, dealer => {
         const state = allOthersPassed({ dealerStuck, shoot }, dealer);
         const legal = legalActionsFor(state, dealer);
-        expect(legal).toMatchObject({ canBid: false, minBid: null, canPassBid: true, canShoot: shoot !== 'off' });
+        expect(legal).toMatchObject({ canBid: false, minBid: null, canPassBid: true, canShoot: false });
         expect(viewFor(state, dealer).legal).toEqual(legal);
         for (const amount of [250, 260, 1000]) {
           expect(() => applyAction(state, { type: 'bid', seat: dealer, amount })).toThrow(IllegalAction);
@@ -28,13 +28,7 @@ describe('all-pass dealer decision', () => {
         for (const seat of seats.filter(seat => seat !== dealer)) {
           expect(legalActionsFor(state, seat)).toMatchObject({ canBid: false, canPassBid: false, canShoot: false });
         }
-        if (shoot === 'off') {
-          expect(() => applyAction(state, { type: 'shoot', seat: dealer })).toThrow(IllegalAction);
-        } else {
-          const shot = applyAction(state, { type: 'shoot', seat: dealer });
-          expect(shot).toMatchObject({ phase: 'declaring_trump', bidder: dealer, turn: dealer,
-            highBid: { seat: dealer, amount: shoot === 'game' ? state.rules.target : state.rules.shootPoints, shoot: true } });
-        }
+        expect(() => applyAction(state, { type: 'shoot', seat: dealer })).toThrow(IllegalAction);
         const taken = applyAction(state, { type: 'pass_bid', seat: dealer });
         if (dealerStuck) {
           expect(taken).toMatchObject({ phase: 'declaring_trump', bidder: dealer, turn: dealer,
@@ -74,7 +68,7 @@ describe('all-pass dealer decision', () => {
   });
 
   it.each([true, false])('lets both bot policies resolve the dealer decision with dealerStuck=%s', dealerStuck => {
-    const state = allOthersPassed({ dealerStuck, shoot: 'game' });
+    const state = allOthersPassed({ dealerStuck, shoot: 'on' });
     const view = viewFor(state, 0);
     // Force the strategic bot to decline shooting; a bid must still never be selected.
     const actions = [chooseAction(view, { budgetMs: 0, config: { shootMinTrump: 12 } }),
