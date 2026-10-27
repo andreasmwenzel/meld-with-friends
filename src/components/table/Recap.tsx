@@ -15,7 +15,7 @@ const THREE_MINUTES = 3 * 60 * 1000;
  * Tells the server how far you have read: when the tab is hidden, when you leave, and at most
  * every three minutes while you watch. Pass null to stay silent (spectators).
  */
-export function useSeenReporting(code: string, rev: number | null) {
+export function useSeenReporting(code: string, rev: number | null, send: (path: string, init: Parameters<typeof api>[1]) => Promise<unknown> = api) {
   const latest = useRef<number | null>(rev);
   const sent = useRef<{ at: number; rev: number | null }>({ at: 0, rev: null });
   useEffect(() => { latest.current = rev; }, [rev]);
@@ -24,8 +24,8 @@ export function useSeenReporting(code: string, rev: number | null) {
     if (r === null || r === sent.current.rev) return;
     if (!force && Date.now() - sent.current.at < THREE_MINUTES) return;
     sent.current = { at: Date.now(), rev: r };
-    void api(`/api/tables/${code}/seen`, { body: { rev: r } }).catch(() => { sent.current = { at: 0, rev: null }; });
-  }, [code]);
+    void send(`/api/tables/${code}/seen`, { body: { rev: r } }).catch(() => { sent.current = { at: 0, rev: null }; });
+  }, [code, send]);
   useEffect(() => {
     const onVisibility = () => { if (document.hidden) report(true); };
     document.addEventListener("visibilitychange", onVisibility);

@@ -7,6 +7,7 @@ import { chooseAction } from "@/engine/ai";
 import { applyAction, viewFor } from "@/engine";
 import { publicMove } from "@/engine/publicMove";
 import { movePublicKey, signMove } from "./moveSigning";
+import { BUILD_ID } from "@/lib/staleClient";
 import type { Action, GameState, PlayerView, SeatIndex } from "@/engine/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ApiError, checkDb } from "./errors";
@@ -27,12 +28,13 @@ async function loadGame(code: string, userId: string) {
   return { table, seat: seat.seat as SeatIndex, game: game as { id: string; state: GameState; rev: number; ready?: SeatIndex[] } };
 }
 
-/** A seat's view plus table facts; `moveKey` is the public key that checks the moves broadcast for the game. */
-export type TablePlayerView = PlayerView & { ready: SeatIndex[]; moveKey: string };
+/** A seat's view plus table facts; `moveKey` is the public key that checks the moves broadcast for the game,
+ *  `build` the deploy that answered (see src/lib/staleClient.ts). */
+export type TablePlayerView = PlayerView & { ready: SeatIndex[]; moveKey: string; build: string };
 
 export async function getView(code: string, userId: string): Promise<TablePlayerView> {
   const { seat, game } = await loadGame(code, userId);
-  return { ...viewFor(game.state, seat), ready: game.ready ?? [], moveKey: movePublicKey() };
+  return { ...viewFor(game.state, seat), ready: game.ready ?? [], moveKey: movePublicKey(), build: BUILD_ID };
 }
 
 export async function act(code: string, userId: string, action: Action, expectedRev: number, requestId: string): Promise<TablePlayerView> {
@@ -46,7 +48,7 @@ export async function act(code: string, userId: string, action: Action, expected
   if (table.status !== "playing") throw new ApiError(409, "Table is not playing");
   if (expectedRev !== game.rev) {
     bump("act_conflict");
-    throw new ApiError(409, "Game changed", { ...viewFor(game.state, seat), ready: game.ready ?? [], moveKey: movePublicKey() });
+    throw new ApiError(409, "Game changed", { ...viewFor(game.state, seat), ready: game.ready ?? [], moveKey: movePublicKey(), build: BUILD_ID });
   }
   if (action.type === "next_hand" && game.state.phase === "hand_over" && table.host !== userId) {
     const result = await admin.from("seats").select("seat,user_id").eq("table_id", table.id);
@@ -75,7 +77,7 @@ export async function act(code: string, userId: string, action: Action, expected
     await runBotTick(code, true);
     return getView(code, userId);
   }
-  return { ...viewFor(next, seat), ready: next.phase === "hand_over" ? game.ready ?? [] : [], moveKey: movePublicKey() };
+  return { ...viewFor(next, seat), ready: next.phase === "hand_over" ? game.ready ?? [] : [], moveKey: movePublicKey(), build: BUILD_ID };
 }
 
 /**

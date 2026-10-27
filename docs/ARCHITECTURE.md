@@ -44,6 +44,12 @@ The server signs it with an Ed25519 key derived from its service-role secret
 A client applies a move only if the signature checks, it names the current game, and its revision is
 exactly one past the client's; anything else (a gap, out of order, no Ed25519 in the browser) fetches
 `/view`. The acting client takes its own move from the POST response.
+Every table view, fetched or returned by an action, also carries the deploy that answered (`build`, the
+Vercel commit set as `NEXT_PUBLIC_BUILD_ID` in `next.config.ts`, "dev" elsewhere). A board whose own
+bundle is from another build applies the view, shows "Updating the table…" and reloads once per build
+after outstanding mutations settle. While updating, the board ignores new actions. A separate
+`sessionStorage` key for each attempted build prevents loops even when deploys alternate; a view
+without `build` never reloads (`src/lib/staleClient.ts`).
 - `presence:lobby` — presence keyed by user id with `{ handle, tableCode | null }`.
 - `invites:{userId}` — broadcast event `invites` with an empty payload when a friend deals that player in; the lobby refetches `GET /api/invites` under its own session. Public like the table channels, so it carries nothing beyond the fact of a nudge.
 
