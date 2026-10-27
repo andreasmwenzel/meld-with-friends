@@ -17,7 +17,9 @@ it('maps aggression, partner bonus, and shoot threshold into bidding', () => {
   expect(projectedValue(view, 'S', { ...c, bidAggression: 2 })).toBeGreaterThan(projectedValue(view, 'S', c));
   view.bids = [{ seat: 3, amount: 250 }];
   expect(projectedValue(view, 'S', { ...c, partnerBidBonus: c.partnerBidBonus + 20 })).toBe(projectedValue(view, 'S', c) + 20);
-  view.hand = ['AS0','AS1','TS0','TS1','KS0','QS0','JS0','9S0','AH0','AD0','AC0','9H0'];
+  view.phase = 'deciding_shoot';
+  view.trump = 'S';
+  view.hand = ['AS0','AS1','TS0','TS1','KS0','QS0','JS0','9S0','AH0','AD0','AC0','AC1'];
   expect(overwhelming(view, { ...c, shootMinTrump: 8 })).toBe(true);
   expect(overwhelming(view, { ...c, shootMinTrump: 9 })).toBe(false);
 });

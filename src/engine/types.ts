@@ -15,7 +15,7 @@ export type Phase =
   | "declaring_trump"
   | "passing_to_bidder" // partner passes N cards to bidder
   | "passing_back" // bidder passes N cards back to partner
-  | "deciding_shoot" // the bidder, holding the passed cards, shoots the moon or plays the contract out (shooting on, not shot in the auction)
+  | "deciding_shoot" // the bidder, holding the passed cards, shoots the moon or plays the contract out
   | "melding" // each player chooses which cards to lay down as meld (any time before trick play starts)
   | "playing"
   | "hand_over"
@@ -47,13 +47,8 @@ export interface RulesConfig {
   mustTakeTrickToSaveMeld: boolean;
   /** when everyone passes, the dealer is forced to take the minimum bid (default true) */
   dealerStuck: boolean;
-  /**
-   * Shooting the moon: a bid to take all twelve tricks with your partner.
-   * "off": not allowed. "game": make it and you win the game; miss and you lose the game.
-   * "points": make it for +shootPoints, miss for -shootPoints.
-   */
-  shoot: "off" | "game" | "points";
-  shootPoints: number;
+  /** After passing, play alone and take every trick for +target; a miss loses the game. */
+  shoot: "off" | "on";
   /** show everyone all four hands once the hand is over (default true) */
   revealHands: boolean;
   /**
@@ -77,7 +72,6 @@ export const DEFAULT_RULES: RulesConfig = {
   mustTakeTrickToSaveMeld: true,
   dealerStuck: true,
   shoot: "off",
-  shootPoints: 150,
   revealHands: true,
   ninesMisdeal: true,
 };
@@ -109,7 +103,7 @@ export interface Bid {
   seat: SeatIndex;
   /** null means pass */
   amount: number | null;
-  /** true when this bid is a shoot (take every trick); amount is then the game's shoot stake */
+  /** true when the contract is a shoot; new solo shoots use the target as the amount */
   shoot?: boolean;
 }
 
@@ -178,6 +172,8 @@ export interface HandRecord {
   wentSet: boolean;
   /** present when the hand was a shoot; true if every trick was taken */
   shotMade?: boolean;
+  /** Present for the solo rule; archived partnership shoots have no sit-out seat. */
+  sittingOut?: SeatIndex;
 }
 
 export interface PlayerState {
@@ -204,6 +200,10 @@ export interface GameState {
   highBid: Bid | null;
   bidder: SeatIndex | null;
   trump: Suit | null;
+  /** Partner whose hand stays face down and unplayed on a solo shoot. Absent in old games. */
+  sittingOut?: SeatIndex | null;
+  /** Archived four-player shoot scoring, retained only to replay or finish old hands. */
+  legacyShootRules?: { mode: "game" | "points"; points: number };
   currentTrick: Trick | null;
   tricksTaken: Record<Team, CardId[][]>;
   /** running game score */
@@ -221,7 +221,7 @@ export interface GameState {
 export type Action =
   | { type: "bid"; seat: SeatIndex; amount: number }
   | { type: "pass_bid"; seat: SeatIndex }
-  | { type: "shoot"; seat: SeatIndex } // in the auction, or by the bidder after the pass
+  | { type: "shoot"; seat: SeatIndex } // by the bidder after the pass
   | { type: "decline_shoot"; seat: SeatIndex } // the bidder plays the contract out instead of shooting
   | { type: "misdeal"; seat: SeatIndex } // throw in five or more nines and no other meld; the same dealer redeals
   | { type: "declare_trump"; seat: SeatIndex; suit: Suit }
@@ -243,6 +243,7 @@ export interface PlayerView {
   rules: RulesConfig;
   hand: CardId[];
   handCounts: [number, number, number, number];
+  sittingOut?: SeatIndex | null;
   /** every seat's declared meld is public once declared */
   melds: Record<SeatIndex, MeldItem[]>;
   meldConfirmed: Record<SeatIndex, boolean>;
@@ -277,8 +278,7 @@ export interface LegalActions {
   minBid: number | null;
   canPassBid: boolean;
   /**
-   * may declare a shoot right now: rules.shoot !== "off", nobody has shot yet, and either bidding on
-   * turn or the bidder deciding after the pass
+   * may declare a shoot right now: shooting is on and the bidder is deciding after the pass
    */
   canShoot: boolean;
   /** the bidder may play the contract out instead of shooting (deciding_shoot) */

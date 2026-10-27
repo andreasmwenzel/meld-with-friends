@@ -5,8 +5,9 @@ import { ranks, seats, suits, suitOf } from './shared';
 export function knowledge(view: PlayerView) {
   const gone = new Set(view.playedCards.map(p => p.card));
   const voids = seats.map(() => new Set<Suit>());
-  for (let i = 0; i < view.playedCards.length; i += 4) {
-    const trick = view.playedCards.slice(i, i + 4);
+  const trickSize = view.sittingOut != null ? 3 : 4;
+  for (let i = 0; i < view.playedCards.length; i += trickSize) {
+    const trick = view.playedCards.slice(i, i + trickSize);
     const led = suitOf(trick[0].card);
     for (const play of trick.slice(1)) if (suitOf(play.card) !== led) {
       voids[play.seat].add(led);

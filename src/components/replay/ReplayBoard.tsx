@@ -2,7 +2,7 @@
 
 import type { CardId, GameState, SeatIndex, Team, Trick } from "@/engine/types";
 import { sortHand } from "@/engine/hand";
-import { PlayingCard, SUIT_GLYPH } from "@/components/cards/PlayingCard";
+import { CardBack, PlayingCard, SUIT_GLYPH } from "@/components/cards/PlayingCard";
 import { Avatar } from "@/components/site/Avatar";
 import { useCardPrefs } from "@/lib/cardPrefs";
 import { teamOf } from "@/components/table/types";
@@ -89,7 +89,7 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit, ani
   const flying: CardId | null = animate && move.kind === "play" ? move.cards[0] ?? null : null;
   const view = viewFor(frame, 0);
   const facts = {
-    phase: frame.phase, handNumber: frame.handNumber, dealer: frame.dealer, bidder: frame.bidder, highBid: frame.highBid, trump: frame.trump, bids: frame.bids,
+    sittingOut: frame.sittingOut, phase: frame.phase, handNumber: frame.handNumber, dealer: frame.dealer, bidder: frame.bidder, highBid: frame.highBid, trump: frame.trump, bids: frame.bids,
     meldPoints: { 0: frame.players[0].meldPoints, 1: frame.players[1].meldPoints, 2: frame.players[2].meldPoints, 3: frame.players[3].meldPoints },
     counters: view.recap.counters, history: view.history,
   };
@@ -97,7 +97,7 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit, ani
   // A bidder holds 16 cards after the pass; fans tighten to stay inside the row.
   const sizes = phone ? { south: 44, north: 34, side: 30, budget: 340 } : { south: 60, north: 44, side: 38, budget: 680 };
 
-  const chair = (seat: SeatIndex) => ({ seat, info: seats[seat], score: scoreOf(seat), mine: seat === viewerSeat, active: move.trick ? move.trick.winner === seat : move.actor === seat, cards: hand(seat), meld: meldOf(seat), lit, raised: raised(seat), prefs, atBottom: seat === bottom, onSit, flights });
+  const chair = (seat: SeatIndex) => ({ sittingOut: frame.sittingOut === seat, hidden: frame.sittingOut === seat && frame.phase !== "hand_over" && frame.phase !== "game_over", seat, info: seats[seat], score: scoreOf(seat), mine: seat === viewerSeat, active: move.trick ? move.trick.winner === seat : move.actor === seat, cards: hand(seat), meld: meldOf(seat), lit, raised: raised(seat), prefs, atBottom: seat === bottom, onSit, flights });
   return (
     <div ref={root} className={`mx-auto w-full max-w-[760px] ${turn.className}`} data-motion={motion}
       style={{ ...turn.style, "--pm": `${slideMs}ms`, "--sd": `${holdMs}ms`, "--sm": `${sweepMs}ms` } as CSSProperties}>
@@ -112,8 +112,8 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit, ani
   );
 }
 
-function SeatRow({ seat, info, score, mine, active, cards, meld, lit, raised, prefs, width, align, big = false, budget = Infinity, atBottom, onSit, flights }: {
-  seat: SeatIndex; info: SeatInfo; score: SeatScore; mine: boolean; active: boolean; cards: CardId[];
+function SeatRow({ sittingOut, hidden, seat, info, score, mine, active, cards, meld, lit, raised, prefs, width, align, big = false, budget = Infinity, atBottom, onSit, flights }: {
+  sittingOut: boolean; hidden: boolean; seat: SeatIndex; info: SeatInfo; score: SeatScore; mine: boolean; active: boolean; cards: CardId[];
   /** cards lying on the table as meld, shown between the hand and the middle */
   meld: CardId[]; lit: Set<CardId>; raised: Set<CardId>;
   prefs: ReturnType<typeof useCardPrefs>["prefs"]; width: number; align: "left" | "center" | "right"; big?: boolean;
@@ -169,7 +169,10 @@ function SeatRow({ seat, info, score, mine, active, cards, meld, lit, raised, pr
           <ScoreTag score={score} name={info.name} align={align} />
         </div>
       </div>
-      {cards.length === 0 ? (
+      {sittingOut && <span className="text-xs text-chalk-faint">sitting out</span>}
+      {hidden ? <div className="flex" role="img" aria-label={`${cards.length} cards face down, sitting out`}>
+        {cards.map((_, i) => <CardBack key={i} width={width} team={team} style={{ marginLeft: i ? -width * .7 : 0 }} />)}
+      </div> : cards.length === 0 ? (
         <span className="text-xs text-chalk-faint" style={{ minHeight: vertical ? undefined : h + 8 }}>{big || !vertical ? "No cards left" : ""}</span>
       ) : vertical ? (
         <div className={`flex items-start ${align === "right" ? "flex-row-reverse" : "flex-row"}`}>
@@ -220,7 +223,7 @@ function Centre({ frame, trick, rel, nameOf, compact, flying, sweep }: {
   const spots: Record<0 | 1 | 2 | 3, string> = {
     0: "bottom-0 left-1/2 -translate-x-1/2", 1: "left-0 top-1/2 -translate-y-1/2", 2: "top-0 left-1/2 -translate-x-1/2", 3: "right-0 top-1/2 -translate-y-1/2",
   };
-  const done = !!trick && trick.plays.length === 4 && trick.winner !== null;
+  const done = !!trick && trick.winner !== null;
 
   return (
     <div className="mx-auto w-full max-w-[300px]">

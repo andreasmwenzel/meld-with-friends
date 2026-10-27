@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applyAction, newGame, viewFor } from "@/engine/game";
+import archived from "@/engine/__tests__/fixtures/legacy-shoot.json";
+import { expandReplay } from "@/engine/replay";
 import { randomAction } from "@/engine/ai/arena";
 import { random } from "@/engine/ai/shared";
 import type { Action, GameState, SeatIndex } from "@/engine/types";
@@ -127,4 +129,12 @@ describe("GET /api/replay/[id]", () => {
     mocks.enforce.mockRejectedValue(new ApiError(429, "Slow down"));
     expect((await GET(new Request("http://localhost/api/replay"), context)).status).toBe(429);
   });
+});
+
+it.each(archived)('serves an archived $mode $timing shoot through the replay endpoint', async fixture => {
+  const state = fixture.final as unknown as GameState;
+  database({ games: gameRow(state), game_actions: log(fixture.actions as Action[]),
+    game_results: { code: 'BCDFGH', seats: snapshot, finished_at: 'x' } });
+  const replay = await getReplay(GAME, 'alice');
+  expect(expandReplay(replay).at(-1)!.score).toEqual(state.score);
 });

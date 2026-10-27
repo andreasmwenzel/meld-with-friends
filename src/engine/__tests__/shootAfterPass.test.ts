@@ -12,7 +12,7 @@ const name = (seat: SeatIndex) => ['South', 'West', 'North', 'East'][seat];
 
 /** West takes the bid at 25 and names spades; with passing on, East (West's partner) and West swap cards. */
 function toDecision(rules: Partial<RulesConfig>): GameState {
-  let state = newGame('after-pass', { scoring: 'modern', shoot: 'points', shootPoints: 100, ...rules });
+  let state = newGame('after-pass', { scoring: 'modern', shoot: 'on', ...rules });
   state = applyAction(state, { type: 'bid', seat: 1, amount: 25 });
   for (const seat of [2, 3, 0] as const) state = applyAction(state, { type: 'pass_bid', seat });
   state = applyAction(state, { type: 'declare_trump', seat: 1, suit: 'S' });
@@ -26,7 +26,7 @@ function toDecision(rules: Partial<RulesConfig>): GameState {
 
 /** Everyone lays down nothing and confirms, then the bots play the hand out. */
 function playOut(state: GameState): GameState {
-  for (const seat of seats) state = applyAction(state, { type: 'confirm_meld', seat });
+  for (const seat of state.phase === 'melding' ? seats : []) state = applyAction(state, { type: 'confirm_meld', seat });
   while (state.phase === 'playing') state = applyAction(state, chooseAction(viewFor(state, state.turn!), { seed: `${state.rev}`, config: { samples: 4, budgetMs: 2 } }));
   return state;
 }
@@ -49,20 +49,20 @@ describe('the bidder decides on a shoot after the pass', () => {
     expect(viewFor(state, 0).recap.passing.done).toBe(true);
   });
 
-  it('turns the contract into a shoot at the same stake as the auction, then melds and scores it as one', () => {
+  it('turns the contract into a shoot and skips meld to play alone', () => {
     const decided = toDecision({ passCount: 4 });
     let state = applyAction(decided, { type: 'shoot', seat: 1 });
-    expect(state.highBid).toEqual({ seat: 1, amount: 100, shoot: true });
+    expect(state.highBid).toEqual({ seat: 1, amount: 150, shoot: true });
     expect(state.bids).toEqual(decided.bids);
-    expect(state).toMatchObject({ phase: 'melding', turn: null });
-    expect(state.log.at(-1)).toBe('West shoots the moon');
-    expect(legalActionsFor(state, 1)).toMatchObject({ canShoot: false, canDeclineShoot: false, canDeclareMeld: true, canConfirmMeld: true });
-    expect(describeStep({ type: 'shoot', seat: 1 }, decided, state, name)).toBe('West shoots the moon after the pass');
+    expect(state).toMatchObject({ phase: 'playing', turn: 1, sittingOut: 3 });
+    expect(state.log).toContain('West shoots the moon');
+    expect(legalActionsFor(state, 1)).toMatchObject({ canShoot: false, canDeclineShoot: false, canDeclareMeld: false, canConfirmMeld: false });
+    expect(describeStep({ type: 'shoot', seat: 1 }, decided, state, name)).toBe('West shoots the moon after the pass. East sits out; no meld');
     expect(viewFor(state, 0).highBid?.shoot).toBe(true);
     state = playOut(state);
     const record = state.history.at(-1)!;
     expect(record.shotMade).toBeDefined();
-    expect(record.breakdown.blue.shoot).toBe(record.shotMade ? 100 : -100);
+    expect(record.breakdown.blue.shoot).toBe(record.shotMade ? 150 : 0);
   });
 
   it('plays the contract out on a decline, and the shoot is gone for the hand', () => {
@@ -77,20 +77,14 @@ describe('the bidder decides on a shoot after the pass', () => {
     expect(state.history.at(-1)!.shotMade).toBeUndefined();
   });
 
-  it('is skipped with shooting off, and after a shoot in the auction', () => {
+  it('is skipped with shooting off', () => {
     expect(toDecision({ shoot: 'off', passCount: 4 }).phase).toBe('melding');
     expect(toDecision({ shoot: 'off', passCount: 0 }).phase).toBe('melding');
-    let state = newGame('auction-shoot', { scoring: 'modern', shoot: 'game', passCount: 0 });
-    state = applyAction(state, { type: 'shoot', seat: 1 });
-    for (const seat of [2, 3, 0] as const) state = applyAction(state, { type: 'pass_bid', seat });
-    state = applyAction(state, { type: 'declare_trump', seat: 1, suit: 'H' });
-    expect(state.phase).toBe('melding');
-    expect(legalActionsFor(state, 1)).toMatchObject({ canShoot: false, canDeclineShoot: false });
   });
 
-  it('lets bots decide with the auction test, in the named trump', () => {
+  it('lets bots decide on playing alone, in the named trump', () => {
     const strong = ['AS', 'AS', 'TS', 'TS', 'KS', 'KS', 'QS', 'QS', 'JS', 'AH', 'AD', 'AC'];
-    const spec = { dealer: 0 as const, bidder: 1 as const, bid: 25, rules: { scoring: 'modern' as const, shoot: 'points' as const, passCount: 0 }, hands: { 1: strong }, to: 'deciding_shoot' as const };
+    const spec = { dealer: 0 as const, bidder: 1 as const, bid: 25, rules: { scoring: 'modern' as const, shoot: 'on' as const, passCount: 0 }, hands: { 1: strong }, to: 'deciding_shoot' as const };
     const inSpades = buildScenario({ ...spec, trump: 'S' }).state;
     expect(chooseAction(viewFor(inSpades, 1))).toEqual({ type: 'shoot', seat: 1 });
     // The same cards with hearts named are no shoot: the long suit is not trump.
@@ -99,11 +93,12 @@ describe('the bidder decides on a shoot after the pass', () => {
     expect(chooseAction(viewFor(inHearts, 1))).toEqual({ type: 'decline_shoot', seat: 1 });
   });
 
-  it('broadcasts both decisions as public moves', () => {
+  it('fetches fresh private views on a shoot and broadcasts a decline', () => {
     const decided = toDecision({ passCount: 4 });
     for (const action of [{ type: 'shoot', seat: 1 }, { type: 'decline_shoot', seat: 1 }] as Action[]) {
       const next = applyAction(decided, action);
       const move = publicMove(decided, next, action);
+      if (action.type === 'shoot') { expect(move).toBeNull(); continue; }
       expect(move?.action).toEqual(action);
       for (const seat of seats) expect(applyPublicMove(viewFor(decided, seat), move!)).toEqual(viewFor(next, seat));
     }
@@ -118,7 +113,7 @@ describe('the bidder decides on a shoot after the pass', () => {
 
 describe('replays with the decision', () => {
   function game(shootAfterPass: boolean): { start: GameState; actions: Action[]; final: GameState } {
-    const start = newGame('replay-decision', { scoring: 'modern', shoot: 'points', shootPoints: 100, target: 120 }, 3);
+    const start = newGame('replay-decision', { scoring: 'modern', shoot: 'on', target: 120 }, 3);
     let state = start;
     const actions: Action[] = [];
     while (state.history.length < 2 && state.phase !== 'game_over') {
@@ -154,7 +149,7 @@ describe('replays with the decision', () => {
   });
   it.each([4, 0])('replays an older log that ends on the pass into meld (passCount %i)', passCount => {
     // Logged before the decision existed: the last action took the hand straight to meld.
-    let state = newGame('after-pass', { scoring: 'modern', shoot: 'points', shootPoints: 100, passCount }, 0);
+    let state = newGame('after-pass', { scoring: 'modern', shoot: 'on', passCount }, 0);
     const older: Action[] = [{ type: 'bid', seat: 1, amount: 25 }, ...[2, 3, 0].map(seat => ({ type: 'pass_bid', seat }) as Action), { type: 'declare_trump', seat: 1, suit: 'S' }];
     for (const action of older) state = applyAction(state, action);
     if (passCount) {

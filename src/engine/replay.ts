@@ -1,12 +1,13 @@
 // Game replay: rebuild a game from its action log, cut it at the last completed hand, and strip
 // everything a browser could use to deal the hand still in progress. Pure; no I/O.
 import { cardLabel } from './deck';
-import { applyAction, newGame, viewFor } from './game';
+import { legacyShootRules } from './scoring';
+import { applyAction, applyLegacyAction, newGame, viewFor } from './game';
 import type { Action, CardId, GameState, HandRecord, SeatIndex, Suit, Trick } from './types';
 
 /** One logged action. `state` is present when the action dealt new cards (next hand or a redeal): the
  *  client cannot deal without the seed, so it takes the dealt position from here instead. */
-export interface ReplayStep { action: Action; state?: GameState }
+export interface ReplayStep { action: Action; state?: GameState; legacyShoot?: boolean }
 
 export interface Replay {
   version: 1;
@@ -49,6 +50,7 @@ export function rebuildFromLog(final: GameState, actions: Action[]): { start: Ga
   for (const dealer of dealers) {
     try {
       const start = newGame(final.seed, final.rules, dealer);
+      start.legacyShootRules = final.legacyShootRules ?? legacyShootRules(final.rules);
       const played = replayLog(start, actions, final);
       // Each decision the older log lacks adds a revision the stored game never had.
       const added = played.actions.length - actions.length;
@@ -67,18 +69,26 @@ export function rebuildFromLog(final: GameState, actions: Action[]): { start: Ga
  * actually applied; each inserted decision adds a revision the stored game never had.
  */
 export function replayLog(start: GameState, actions: readonly Action[], final?: Pick<GameState, 'phase'>): { states: GameState[]; actions: Action[] } {
+  const rawMode = (start.rules as unknown as Record<string, unknown>).shoot;
+  if (rawMode === 'game' || rawMode === 'points') start = { ...start, legacyShootRules: legacyShootRules(start.rules) };
   const states = [start];
   const applied: Action[] = [];
-  const apply = (action: Action) => { states.push(applyAction(states[states.length - 1], action)); applied.push(action); };
+  const apply = (action: Action, legacy = false) => { states.push((legacy ? applyLegacyAction : applyAction)(states[states.length - 1], action)); applied.push(action); };
   const declineIfSkipped = (next?: Action) => {
     const at = states[states.length - 1];
     if (at.phase === 'deciding_shoot' && at.bidder !== null && next?.type !== 'shoot' && next?.type !== 'decline_shoot') {
       apply({ type: 'decline_shoot', seat: at.bidder });
     }
   };
-  for (const action of actions) {
+  for (let i = 0; i < actions.length; i++) {
+    const action = actions[i];
     declineIfSkipped(action);
-    apply(action);
+    const at = states[states.length - 1];
+    const next = actions[i + 1];
+    const oldDecision = action.type === 'shoot' && (at.phase === 'bidding'
+      || next?.type === 'declare_meld' || next?.type === 'confirm_meld'
+      || !next && (final?.phase === 'melding' || rawMode === 'game' || rawMode === 'points'));
+    apply(action, oldDecision);
   }
   if (final && final.phase !== 'deciding_shoot') declineIfSkipped();
   return { states, actions: applied };
@@ -103,7 +113,8 @@ export function buildReplay(states: readonly GameState[], actions: readonly Acti
   const steps: ReplayStep[] = [];
   for (let i = 0; i < cut; i++) {
     const before = states[i], after = states[i + 1];
-    steps.push(after.handNumber !== before.handNumber ? { action: actions[i], state: sealed(after) } : { action: actions[i] });
+    steps.push(after.handNumber !== before.handNumber ? { action: actions[i], state: sealed(after) }
+      : { action: actions[i], ...(actions[i].type === 'shoot' && after.sittingOut == null ? { legacyShoot: true } : {}) });
   }
   return { version: 1, start: sealed(states[0]), steps, hands: states[cut].history.length, finished };
 }
@@ -111,7 +122,7 @@ export function buildReplay(states: readonly GameState[], actions: readonly Acti
 /** Every position in a replay: index 0 is the opening deal, index i the position after step i. */
 export function expandReplay(replay: Replay): GameState[] {
   const frames = [replay.start];
-  for (const step of replay.steps) frames.push(step.state ?? applyAction(frames[frames.length - 1], step.action));
+  for (const step of replay.steps) frames.push(step.state ?? (step.legacyShoot || step.action.type === 'shoot' && frames[frames.length - 1].phase === 'bidding' ? applyLegacyAction : applyAction)(frames[frames.length - 1], step.action));
   return frames;
 }
 
@@ -123,7 +134,7 @@ export function describeStep(action: Action, before: GameState, after: GameState
   const who = nameOf(action.seat);
   switch (action.type) {
     case 'bid': return `${who} bids ${action.amount}`;
-    case 'shoot': return before.phase === 'deciding_shoot' ? `${who} shoots the moon after the pass` : `${who} shoots the moon`;
+    case 'shoot': return before.phase === 'deciding_shoot' ? `${who} shoots the moon after the pass${after.sittingOut != null ? `. ${nameOf(after.sittingOut)} sits out; no meld` : ''}` : `${who} shoots the moon`;
     case 'decline_shoot': return `${who} plays it out`;
     case 'misdeal': return `${who} throws in ${before.players[action.seat].hand.filter(card => card[0] === '9').length} nines and no meld, so ${nameOf(after.dealer)} redeals`;
     case 'pass_bid': {
@@ -148,7 +159,7 @@ export function describeStep(action: Action, before: GameState, after: GameState
     }
     case 'play_card': {
       const line = `${who} plays ${cardLabel(action.card)}`;
-      const winner = before.currentTrick?.plays.length === 3 ? trickWinnerOf(after) : null;
+      const winner = before.currentTrick?.plays.length === (before.sittingOut != null ? 2 : 3) ? trickWinnerOf(after) : null;
       if (winner === null) return line;
       const record = after.history.length > before.history.length ? after.history[after.history.length - 1] : null;
       return `${line}. ${nameOf(winner)} takes the trick${record ? `. ${handOutcome(record, nameOf)}` : ''}`;
@@ -168,7 +179,7 @@ export function handOutcome(record: HandRecord, nameOf: (seat: SeatIndex) => str
   const who = nameOf(record.bidder);
   const change = (team: string, n: number) => n < 0 ? `${team} loses ${-n}` : `${team} scores ${n}`;
   const totals = `${change('Red', record.delta.red)}, ${change('Blue', record.delta.blue)}`;
-  if (record.shotMade !== undefined) return `${who} ${record.shotMade ? 'shot the moon' : 'missed the moon'}. ${totals}`;
+  if (record.shotMade !== undefined) return `${who} ${record.shotMade ? 'shot the moon' : record.sittingOut != null ? 'missed the moon; shooting side loses the game' : 'missed the moon'}. ${totals}`;
   return `${who} ${record.wentSet ? `went set on ${record.bid}` : `made ${record.bid}`} in ${SUIT_SIGN[record.trump]}. ${totals}`;
 }
 

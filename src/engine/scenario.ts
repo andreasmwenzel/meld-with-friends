@@ -3,7 +3,7 @@
 // Not exported from the engine index; only dev pages, scripts and tests import it.
 import { chooseAction } from './ai';
 import { buildDeck, seededShuffle } from './deck';
-import { applyAction, newGame, viewFor } from './game';
+import { applyAction, applyLegacyAction, newGame, viewFor } from './game';
 import { DEFAULT_RULES } from './types';
 import type {
   Action, CardId, GameState, HandRecord, Phase, Rank, RulesConfig, SeatIndex, Suit, Team, TrickPlay,
@@ -31,13 +31,13 @@ export interface ScenarioSpec {
   /** where to stop (default "bidding") */
   to?: ScenarioTarget;
   /**
-   * The auction, one entry per turn from the dealer's left: a number bids, null passes, "shoot" shoots.
+   * The auction, one entry per turn from the dealer's left: a number bids, null passes. "shoot" is legacy-only.
    * When omitted, `bidder` takes the contract at `bid` and everyone else passes.
    */
   bids?: (number | null | 'shoot')[];
   bidder?: SeatIndex;
   bid?: number;
-  /** the bidder shoots in the auction */
+  /** the bidder shoots after the pass */
   shoot?: boolean;
   /** the bidder shoots after the pass (default: plays it out once past deciding_shoot) */
   shootAfterPass?: boolean;
@@ -192,7 +192,7 @@ export function buildScenario(spec: ScenarioSpec): Scenario {
 
   const contractBid = spec.bid ?? state.rules.minBid;
   // The dealer cannot open against three passes, so someone opens for them first.
-  const opener = spec.bidder !== undefined && spec.bidder === state.dealer && !spec.shoot && contractBid > state.rules.minBid
+  const opener = spec.bidder !== undefined && spec.bidder === state.dealer && contractBid > state.rules.minBid
     ? (((state.dealer + 1) % 4) as SeatIndex) : null;
   const playQueue = spec.play ? [...spec.play] : [];
 
@@ -216,13 +216,12 @@ export function buildScenario(spec: ScenarioSpec): Scenario {
     if (state.phase === 'bidding') {
       if (auction) {
         const next = auction.length ? auction.shift()! : null;
-        if (next === 'shoot') apply({ type: 'shoot', seat });
+        if (next === 'shoot') { const action: Action = { type: 'shoot', seat }; state = applyLegacyAction(state, action); actions.push(action); }
         else if (next === null || !legal.canBid) apply({ type: 'pass_bid', seat });
         else apply({ type: 'bid', seat, amount: next });
       } else if (spec.bidder === undefined) apply(botAction(state, seat));
       else if (seat === spec.bidder) {
-        if (spec.shoot) apply({ type: 'shoot', seat });
-        else if (legal.canBid) apply({ type: 'bid', seat, amount: Math.max(contractBid, legal.minBid ?? 0) });
+        if (legal.canBid) apply({ type: 'bid', seat, amount: Math.max(contractBid, legal.minBid ?? 0) });
         else apply({ type: 'pass_bid', seat }); // stuck dealer takes the minimum
       } else if (seat === opener && !state.bids.some(b => b.seat === seat)) apply({ type: 'bid', seat, amount: state.rules.minBid });
       else apply({ type: 'pass_bid', seat });
@@ -239,7 +238,7 @@ export function buildScenario(spec: ScenarioSpec): Scenario {
       continue;
     }
     if (state.phase === 'deciding_shoot') {
-      apply({ type: spec.shootAfterPass ? 'shoot' : 'decline_shoot', seat });
+      apply({ type: spec.shootAfterPass || spec.shoot ? 'shoot' : 'decline_shoot', seat });
       continue;
     }
     if (state.phase === 'playing') {
@@ -290,13 +289,17 @@ export function checkState(input: GameState): string[] {
   const inTrick = state.currentTrick?.plays.length ?? 0;
   if (['playing', 'hand_over', 'game_over'].includes(state.phase) || state.phase === 'melding') {
     const sizes = state.players.map(p => p.hand.length + (state.currentTrick?.plays.some(x => x.seat === p.seat) ? 1 : 0));
-    if (state.phase === 'playing' && sizes.some(n => n !== 12 - tricks)) problems.push(`Hand sizes ${state.players.map(p => p.hand.length).join('/')} do not fit ${tricks} tricks and ${inTrick} cards in play`);
+    if (state.phase === 'playing' && sizes.some((n, seat) => n !== (seat === state.sittingOut ? 12 : 12 - tricks))) problems.push(`Hand sizes ${state.players.map(p => p.hand.length).join('/')} do not fit ${tricks} tricks and ${inTrick} cards in play`);
   }
   if (state.phase === 'bidding' && state.players.some(p => p.hand.length !== 12)) problems.push('Every hand should hold 12 cards while bidding');
   const onTurn = state.turn;
   if (['bidding', 'declaring_trump', 'passing_to_bidder', 'passing_back', 'deciding_shoot', 'playing'].includes(state.phase) && onTurn === null) problems.push(`Nobody is on turn in ${state.phase}`);
   if (state.phase === 'playing' && state.currentTrick && onTurn !== null) {
-    const expected = ((state.currentTrick.leader + inTrick) % 4) as SeatIndex;
+    let expected = state.currentTrick.leader;
+    for (let i = 0; i < inTrick; i++) {
+      expected = ((expected + 1) % 4) as SeatIndex;
+      if (expected === state.sittingOut) expected = ((expected + 1) % 4) as SeatIndex;
+    }
     if (expected !== onTurn) problems.push(`Seat ${onTurn} is on turn but seat ${expected} should play next`);
   }
   if (['declaring_trump', 'passing_to_bidder', 'passing_back', 'deciding_shoot', 'melding', 'playing'].includes(state.phase) && state.bidder === null) problems.push('No bidder after the auction');
@@ -311,6 +314,14 @@ export function checkState(input: GameState): string[] {
     const owned = new Set([...p.hand, ...played.filter(c => c.seat === p.seat).map(c => c.card)]);
     const stray = p.meld.flatMap(m => m.cards).filter(c => !owned.has(c));
     if (stray.length) problems.push(`Seat ${p.seat} melds cards it never held: ${stray.join(' ')}`);
+  }
+  if (state.sittingOut != null) {
+    if (!state.highBid?.shoot || state.bidder === null || state.sittingOut !== (state.bidder + 2) % 4) problems.push('Invalid sit-out seat');
+    if (state.turn === state.sittingOut || played.some(p => p.seat === state.sittingOut)) problems.push('The sitting-out partner played');
+    if (state.players[state.sittingOut].hand.length !== 12) problems.push('The set-aside hand must stay intact');
+    if (state.players.some(p => p.meld.length || p.meldPoints)) problems.push('Meld on a solo shoot');
+    if ([...state.tricksTaken.red, ...state.tricksTaken.blue].some(t => t.length !== 3)) problems.push('A solo shoot trick must hold three cards');
+    if (inTrick >= 3) problems.push('Unresolved three-card trick');
   }
   if (state.phase === 'game_over' && !state.winner) problems.push('Game over without a winner');
   if (state.winner && state.phase !== 'game_over') problems.push('A winner is set but the game is not over');

@@ -101,7 +101,7 @@ function stateFromView(view: PlayerView): GameState & Pick<PlayerView, 'playedCa
       seat, hand: seat === view.seat ? view.hand : [], meld: view.melds[seat], meldPoints: view.recap.melds[seat]?.points ?? 0,
       meldConfirmed: view.meldConfirmed[seat], passBuffer: [],
     })) as unknown as GameState['players'],
-    bids: view.bids, highBid: view.highBid, bidder: view.bidder, trump: view.trump, currentTrick: view.currentTrick,
+    sittingOut: view.sittingOut, bids: view.bids, highBid: view.highBid, bidder: view.bidder, trump: view.trump, currentTrick: view.currentTrick,
     tricksTaken: { red: [], blue: [] }, score: view.score, history: [], winner: view.winner, seed: '', rev: view.rev, log: [],
     playedCards: view.playedCards,
   };

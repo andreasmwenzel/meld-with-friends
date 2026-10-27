@@ -6,6 +6,7 @@ import { chooseAction } from "@/engine/ai";
 import { autoMeldSelection } from "@/engine/hand";
 import { buildScenario } from "@/engine/scenario";
 import { PRESETS } from "@/engine/scenarios";
+import { Recap } from "../Recap";
 import { Game } from "../Game";
 import type { Snapshot } from "../types";
 
@@ -63,7 +64,7 @@ async function table(state: GameState, { autoMeld = true, frozen = false } = {})
     return Response.json(view());
   }) as typeof fetch;
   render(<Game code={CODE} me={me} snap={snap} rev={state.rev} onTableChange={() => {}} />);
-  await vi.waitFor(() => { if (!document.querySelector("[data-hand-card]")) throw new Error("hand not rendered"); });
+  await vi.waitFor(() => { if (!document.querySelector(`[aria-label="Your hand"]`)) throw new Error("hand not rendered"); });
 }
 
 /** Your meld as automatic meld would lay it down. */
@@ -76,7 +77,7 @@ describe("the shoot decision after the pass", () => {
     const { state } = buildScenario(spec);
     await table(state);
     expect(screen.getByText("Shoot the moon?")).toBeTruthy();
-    expect(screen.getByText(/Take every trick for 100, or play out the 29\./)).toBeTruthy();
+    expect(screen.getByText(/Your partner sits out; take every trick to win the game/)).toBeTruthy();
     // Automatic meld is on, yet nothing is laid down while the decision is open.
     await act(() => new Promise((r) => setTimeout(r, 700)));
     expect(sent).toEqual([]);
@@ -133,8 +134,20 @@ describe("the shoot decision after the pass", () => {
     await table(state);
     await act(() => { fireEvent.click(screen.getByRole("button", { name: "Shoot the moon" })); });
     await vi.waitFor(() => expect(sent[0]).toMatchObject({ type: "shoot" }));
-    await vi.waitFor(() => expect(server.phase).toBe("melding"));
+    await vi.waitFor(() => expect(server.phase).toBe("playing"));
+    expect(server.sittingOut).toBe(2);
+    expect(screen.getByText("sitting out")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Lay down/ })).toBeNull();
     expect(server.highBid).toMatchObject({ shoot: true });
+  });
+
+  it("shows your own sitting-out hand face down without playable cards", async () => {
+    const { state } = buildScenario({ dealer: 1, bidder: 2, trump: 'S', shoot: true, rules: { shoot: 'on', passCount: 0 }, to: 'playing' });
+    await table(state, { frozen: true });
+    expect(screen.getByText("sitting out")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "12 cards face down, sitting out" })).toBeTruthy();
+    expect(document.querySelectorAll("[data-hand-card]")).toHaveLength(0);
+    expect(document.querySelector("[data-play-status]")?.textContent).toContain("You are sitting out; your cards stay face down.");
   });
 
   it("tells the other seats who they are waiting on", async () => {
@@ -142,7 +155,18 @@ describe("the shoot decision after the pass", () => {
     expect(state.phase).toBe("deciding_shoot");
     await table(state, { frozen: true });
     expect(screen.getAllByText(/Waiting on Robo/).length).toBeGreaterThan(0);
-    expect(screen.getByText("Robo may shoot the moon for 100.")).toBeTruthy();
+    expect(screen.getByText("Robo may shoot the moon. Their partner sits out; they must take every trick.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Play it out" })).toBeNull();
   });
+});
+
+it.each(['hand-shoot-made', 'hand-shoot-missed'])('explains %s in the recap and result', async id => {
+  const { state } = buildScenario(PRESETS.find(p => p.id === id)!.spec);
+  const nameOf = (seat: 0 | 1 | 2 | 3) => ['You', 'West', 'North', 'East'][seat];
+  const recap = render(<Recap view={viewFor(state, 0)} nameOf={nameOf} lastSeenRev={null} />);
+  expect(screen.getByText(/North sits out with cards face down/)).toBeTruthy();
+  expect(screen.getByText(id === 'hand-shoot-made' ? /shoot was made for 150 points/ : /shoot missed; the shooting side loses the game/)).toBeTruthy();
+  recap.unmount();
+  await table(state, { frozen: true });
+  expect(screen.getByText(id === 'hand-shoot-made' ? /Every trick taken alone adds 150 points/ : /The first lost trick ends the game/)).toBeTruthy();
 });

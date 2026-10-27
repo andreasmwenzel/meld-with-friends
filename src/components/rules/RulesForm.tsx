@@ -24,9 +24,7 @@ const FIELDS: { k: Key; label: string; options: Opt[] | ((r: RulesConfig) => Opt
   { k: "dealerStuck", label: "Everyone passes", options: opts([[true, "Dealer is stuck"], [false, "Redeal"]]) },
   { k: "ninesMisdeal", label: "Five nines, no meld", options: opts([[true, "May throw the hand in"], [false, "Must play it"]]) },
   { k: "revealHands", label: "After each hand", options: opts([[true, "Show everyone's cards"], [false, "Keep hands hidden"]]) },
-  { k: "shoot", label: "Shooting the moon", options: opts([["off", "Not allowed"], ["game", "Wins or loses the game"], ["points", "Fixed points"]]) },
   { k: "pace", label: "Pace", options: opts([["live", "Live"], ["leisurely", "Leisurely (a trick a day is fine)"]]) },
-  { k: "shootPoints", label: "Shoot is worth", options: pointOptions("shootPoints"), when: (r) => r.shoot === "points" },
 ];
 
 /** Decode the select's string back into the typed rule value. */
@@ -42,6 +40,10 @@ export function RulesForm({ value, onChange, compact = false }: { value: RulesPa
   const r = resolveRules(value);
   return (
     <div className={`grid gap-3 ${compact ? "grid-cols-1 min-[480px]:grid-cols-2" : "grid-cols-1 min-[480px]:grid-cols-2 sm:grid-cols-3"}`}>
+      <label className="flex min-h-11 items-center gap-2 text-sm text-ink-soft">
+        <input type="checkbox" checked={r.shoot === "on"} onChange={(e) => onChange(changeRule(value, "shoot", e.target.checked ? "on" : "off"))} />
+        Shooting the moon
+      </label>
       {FIELDS.filter((f) => !f.when || f.when(r)).map((f) => (
         <label key={f.k} className="min-w-0 text-sm text-ink-soft">
           {f.label}

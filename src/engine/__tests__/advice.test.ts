@@ -171,7 +171,7 @@ describe('bid advice when passing is the only call', () => {
     expect(adviseBid(viewFor(stuck, 0))?.headline).toMatch(/^Take it at/);
     const redeal = buildScenario({ dealer: 0, rules: { dealerStuck: false }, bids: [null, null, null] }).state;
     expect(adviseBid(viewFor(redeal, 0))).toMatchObject({ headline: 'Pass', reason: expect.stringMatching(/redeal/) });
-    const shot = buildScenario({ dealer: 0, rules: { shoot: 'points' }, bids: ['shoot', null, null] }).state;
+    const shot = buildScenario({ dealer: 0, rules: { shoot: 'on' }, bids: ['shoot', null, null] }).state;
     expect(adviseBid(viewFor(shot, 0))).toMatchObject({ headline: 'Pass', reason: expect.stringMatching(/shot the moon/) });
   });
 });

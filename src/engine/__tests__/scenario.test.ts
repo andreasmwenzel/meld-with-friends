@@ -87,7 +87,7 @@ describe('fuzz', () => {
     expect(new Set(rules.map(rule => rule.scoring))).toEqual(new Set(['modern', 'classic']));
     for (const rule of rules) {
       if (rule.scoring === 'modern') expect(rule.counting).toBe('tens');
-      for (const key of ['target', 'minBid', 'bidStep', 'lastTrickBonus', 'shootPoints', 'counterValue'] as const) {
+      for (const key of ['target', 'minBid', 'bidStep', 'lastTrickBonus', 'counterValue'] as const) {
         if (rule[key] !== undefined) expect(Number.isInteger(rule[key])).toBe(true);
       }
     }

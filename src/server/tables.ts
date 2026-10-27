@@ -26,7 +26,7 @@ export async function tableByCode(code: string): Promise<TableRow> {
   const { data, error } = await createAdminClient().from("tables").select("*").eq("code", codeSchema.parse(code)).maybeSingle();
   checkDb(error);
   if (!data) throw new ApiError(404, "Table not found");
-  return data as TableRow;
+  return { ...data, rules: resolveRules(data.rules) } as TableRow;
 }
 
 /**

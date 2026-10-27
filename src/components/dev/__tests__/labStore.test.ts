@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import archived from '@/engine/__tests__/fixtures/legacy-shoot.json';
+import type { Action, GameState } from '@/engine/types';
 import { applyAction } from '@/engine';
 import { buildScenario } from '@/engine/scenario';
 import { decodeSpec, encodeSpec, LabStore, parseImport } from '../labStore';
@@ -28,7 +30,7 @@ describe('lab import', () => {
 });
 
 describe.each([4, 0])('legacy lab timelines with passCount=%i', passCount => {
-  const built = buildScenario({ bidder: 0, trump: 'S', rules: { shoot: 'game', passCount }, to: 'melding', confirmed: [0] });
+  const built = buildScenario({ bidder: 0, trump: 'S', rules: { shoot: 'on', passCount }, to: 'melding', confirmed: [0] });
   const actions = built.actions.filter(action => action.type !== 'decline_shoot');
   const meldIndex = actions.findIndex(action => action.type === 'declare_meld');
 
@@ -89,4 +91,22 @@ describe.each([4, 0])('legacy lab timelines with passCount=%i', passCount => {
     expect(store.get().actions).toEqual(pending);
     expect(store.state.phase).toBe('deciding_shoot');
   });
+});
+
+it.each(archived)('imports and navigates an archived $mode $timing shoot', fixture => {
+  const parsed = parseImport({ state: fixture.final, actions: fixture.actions });
+  expect(parsed.note).toMatch(/Rebuilt from seed/);
+  const store = new LabStore();
+  store.load(parsed.base, parsed.actions, { kind: 'import', name: 'archived-shoot' }, { running: false });
+  expect(store.get().error).toBeNull();
+  expect(store.state.players).toEqual(fixture.final.players);
+  expect(store.state.score).toEqual(fixture.final.score);
+  const shootIndex = (fixture.actions as Action[]).findIndex(action => action.type === 'shoot');
+  store.goto(shootIndex + 1);
+  expect(store.state.sittingOut).toBeNull();
+  const rawBase = { ...parsed.base, rules: fixture.final.rules } as unknown as GameState;
+  const exported = parseImport({ base: rawBase, actions: fixture.actions });
+  store.load(exported.base, exported.actions, { kind: 'import', name: 'export' }, { running: false });
+  expect(store.get().error).toBeNull();
+  expect(store.state.score).toEqual(fixture.final.score);
 });

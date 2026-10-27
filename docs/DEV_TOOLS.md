@@ -64,8 +64,8 @@ meld.spec({...})                         // encode a spec for ?spec=
 **replays real engine actions** up to the target. Choices you leave open are made by a fast bot, and
 the same spec always gives the same position. Every position it produces is one the engine can
 actually reach. Card names can be `AS0`, `AS` (first free copy), `10S` or `A♠`. Fields: `seed`,
-`rules`, `dealer`, `handNumber`, `score`, `hands`, `to`, `bids` (`[25, null, "shoot"]` from the
-dealer's left), `bidder`/`bid`/`shoot`, `shootAfterPass` (the bidder's decision after the pass; plays it out
+`rules`, `dealer`, `handNumber`, `score`, `hands`, `to`, `bids` (`[25, null]` from the
+dealer's left), `bidder`/`bid`, `shoot` or `shootAfterPass` (the bidder's decision after the pass; plays it out
 when omitted), `trump`, `passToBidder`/`passBack`, `meld` per seat
 (`"full"`, `"none"`, or cards), `confirmed`, `tricks`, `plays`, `turn`, `play` (scripted cards in order).
 
@@ -108,7 +108,7 @@ stored state on its own.
 node scripts/fuzz.mjs 500 [prefix]
 ```
 
-Plays full games with random rules (target, min bid, step, pass count, counting, shoot mode, dealer
+Plays full games with random rules (target, min bid, step, pass count, counting, shooting on/off, dealer
 stuck, meld saving) and the real bots. After every move it runs `checkState` and checks that no seat's
 `viewFor` contains a card that seat shouldn't see (`leakedCards`). Each failure is saved
 to `.dev/states/fuzz-*.json`; open it with `/dev/lab?state=<name>` and walk back to the move that

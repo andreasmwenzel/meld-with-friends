@@ -37,6 +37,10 @@ describe('scoring compatibility', () => {
     expect(state.rules.scoring).toBeUndefined();
   });
 
+  it('keeps the inferred classic scale of a legacy shoot stake preference', () => {
+    expect(resolveRules({ shoot: 'points', shootPoints: 1500 })).toMatchObject({ scoring: 'classic', shoot: 'on', target: 1500 });
+  });
+
   it('forces even empty stored rule objects to classic', () => {
     expect(resolveRules({}, true)).toEqual(resolveRules({ scoring: 'classic' }));
   });

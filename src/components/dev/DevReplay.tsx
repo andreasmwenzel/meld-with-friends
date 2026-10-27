@@ -16,7 +16,7 @@ function generate(qs: URLSearchParams): ReplayPayload {
   const seed = qs.get("seed") ?? "dev-replay";
   const stopAt = qs.has("hands") ? Number(qs.get("hands")) : null;
   const target = qs.has("target") ? Number(qs.get("target")) : 100;
-  let state = newGame(seed, { scoring: "modern", target, shoot: "points" }, 1);
+  let state = newGame(seed, { scoring: "modern", target, shoot: "on" }, 1);
   const states: GameState[] = [state];
   const actions: Action[] = [];
   let extra = 0;

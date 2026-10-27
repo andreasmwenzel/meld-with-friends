@@ -13,6 +13,26 @@ The engine is game-agnostic at the storage layer (`games.state` is jsonb keyed b
 | Server | `src/app/api/**/route.ts` and `src/server/` | Route handlers run with the service role after verifying the user's session. They validate, call the engine, write state, then broadcast `{ rev }` on the table's Realtime channel; a move that changes nothing private also carries its public part, signed (see Realtime channels). |
 | Client | `src/app/**`, `src/components/**` | `TableRoom` holds the tab's one subscription to the table channel. Seat, trade and control events refetch the table snapshot; seat events (ready checks among them) also make the board refetch its view once; `game` events go to the board, which applies a signed public move for the next revision locally and otherwise refetches its own `PlayerView` from `/api/tables/[code]/view` at most once per event (none for its own move, whose POST response carries the view). Events arriving together share one fetch, and so does the seat event echoing this player's own ready check (see `src/components/table/viewSync.ts`). Presence on a global `lobby` channel gives "friends online / at a table". |
 
+## Shooting the moon
+
+With `rules.shoot: "on"`, the bid winner decides after passing and before meld. A shoot skips meld
+and sets `sittingOut` to the partner's seat. The engine retains that hand for card conservation and
+the optional hand-end reveal; `viewFor` hides it even from its owner and filters those cards from
+pass histories while play continues. Counts stay at twelve so the seat can show face-down cards.
+The other three seats follow the ordinary follow, head, trump and overtrump rules. The first trick
+the declarer loses ends the game with the opponents winning, regardless of score. Winning all twelve
+tricks adds exactly the target to the declaring side. A negative starting score can leave the game
+unfinished. Neither side scores meld, counters or the last trick.
+
+New auction shoots are illegal. Trusted log replay uses `applyLegacyAction` for archived auction
+shoots and old post-pass shoots followed by meld. Those hands keep their four-player play and stored
+stake through `legacyShootRules`, including when continuing an old stored hand. Replay steps mark
+legacy declarations so browser playback uses the same rules. The server rebuild and lab import share
+`rebuildFromLog`. Stored rule preferences `"game"` and `"points"` normalize to `"on"`, and migration
+0019 removes the old stake from table and profile preferences. Stored game states and logs remain
+intact for replay. A solo shoot changes the sitting-out player's private view, so its broadcast sends
+only the revision and every seat refetches its view.
+
 ## Data model (Postgres)
 
 - `profiles` (id = auth.users.id, handle unique, display_name, avatar_seed, created_at)

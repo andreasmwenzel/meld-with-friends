@@ -5,7 +5,7 @@ export type RulesPatch = Partial<RulesConfig>;
 export { resolveRules } from "@/engine/scoring";
 import { resolveRules } from "@/engine/scoring";
 
-type PointField = "target" | "minBid" | "bidStep" | "lastTrickBonus" | "shootPoints";
+type PointField = "target" | "minBid" | "bidStep" | "lastTrickBonus";
 
 /** Available point values in each scoring scale, shared by the form and conversion. */
 export const POINT_OPTIONS: Record<RulesConfig["scoring"], Record<PointField, number[]>> = {
@@ -14,14 +14,12 @@ export const POINT_OPTIONS: Record<RulesConfig["scoring"], Record<PointField, nu
     minBid: [20, 25, 30],
     bidStep: [1, 2, 5],
     lastTrickBonus: [0, 1, 2],
-    shootPoints: [50, 100, 150, 200],
   },
   classic: {
     target: [1000, 1500, 2000, 2500],
     minBid: [200, 250, 300],
     bidStep: [10, 20, 25, 50],
     lastTrickBonus: [0, 10, 20],
-    shootPoints: [500, 1000, 1500, 2000],
   },
 };
 
@@ -73,8 +71,7 @@ export function describeRules(patch: RulesPatch | Record<string, unknown> | unde
     ...r.ninesMisdeal ? ["Five or more nines and no other meld: you may throw the hand in before you bid, and the same dealer redeals."] : [],
   ];
   lines.push(r.revealHands ? "Everyone's cards are shown after each hand." : "Hands stay hidden after each hand.");
-  if (r.shoot === "game") lines.push("Shooting the moon wins or loses the game.");
-  if (r.shoot === "points") lines.push(`Shooting the moon is worth ${r.shootPoints.toLocaleString()} points, made or set.`);
+  if (r.shoot === "on") lines.push(`Shoot after passing: partner sits out, no meld. Take every trick for ${r.target.toLocaleString()} points; miss and lose the game.`);
   if (r.pace === "leisurely") lines.push("Leisurely pace: the table waits for you for weeks.");
   return lines;
 }

@@ -68,7 +68,7 @@ export function coachLines(view: PlayerView, autoMeld = true): string[] {
 
     case "deciding_shoot":
       return L.canShoot
-        ? ["You hold the passed cards. Shooting the moon promises your side every trick; playing it out keeps your bid."]
+        ? ["You hold the passed cards. Shoot alone while your partner sits out, with no meld. Take every trick for the target; miss and lose the game. Playing it out keeps your bid."]
         : [`${bidder !== null ? nm(bidder) : "The bidder"} is deciding whether to shoot the moon.`];
 
     case "melding": {

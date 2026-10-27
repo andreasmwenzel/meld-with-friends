@@ -32,7 +32,7 @@ describe("updating table rules", () => {
     expect(update.update).toHaveBeenCalledWith({ rules: resolveRules({ counting: "classic" }) });
     expect(update.eq.mock.calls).toEqual([["id", table.id], ["host", "host"], ["status", "open"]]);
     expect(mocks.broadcast).toHaveBeenCalledWith(table.code, { type: "seats" });
-    expect(snapshot).toEqual({ table: refreshed, seats: [], offers: [], mySeat: null, ready: [], paused: null, lastSeenRev: null });
+    expect(snapshot).toEqual({ table: { ...refreshed, rules: resolveRules(refreshed.rules) }, seats: [], offers: [], mySeat: null, ready: [], paused: null, lastSeenRev: null });
   });
 
   it.each([
@@ -80,4 +80,12 @@ it.each([null, { last_rev: 17 }])("returns the caller's last seen revision %j", 
   const snapshot = await getTableSnapshot(table.code, 'human');
   expect(snapshot.lastSeenRev).toBe(visit?.last_rev ?? null);
   expect(visitQuery.eq.mock.calls).toEqual([['table_id', table.id], ['user_id', 'human']]);
+});
+
+it.each(['game', 'points'])('normalizes stored %s shooting rules before a table is read', async shoot => {
+  mocks.from.mockReturnValueOnce(query({ data: { ...table, rules: { scoring: 'modern', shoot, shootPoints: 100 } }, error: null }));
+  const { tableByCode } = await import('@/server/tables');
+  const read = await tableByCode(table.code);
+  expect(read.rules.shoot).toBe('on');
+  expect(read.rules).not.toHaveProperty('shootPoints');
 });

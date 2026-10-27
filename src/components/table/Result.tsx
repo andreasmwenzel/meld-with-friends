@@ -142,6 +142,9 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
         className="panel outline-none max-h-[78dvh] w-full max-w-md overflow-y-auto rounded-b-none short:max-h-[calc(100dvh-1rem)] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:rounded-b-[inherit] sm:p-5">
         <p id={titleId} className="display" style={{ fontSize: 26, lineHeight: 1.1 }}>{title}</p>
         {view.claim && <p className="mt-1 text-sm text-ink-soft">{nameOf(view.claim.seat)} {nameOf(view.claim.seat) === "You" ? "claim" : "claims"} the rest. {13 - view.claim.fromTrick} remaining tricks.</p>}
+        {h?.sittingOut != null && <p className="mt-2 text-sm text-ink-soft">
+          {headline(view, nameOf)} {h.shotMade ? `Every trick taken alone adds ${view.rules.target} points.` : "The first lost trick ends the game; the shooting side loses."} {nameOf(h.sittingOut)} sat out. No meld or counters count.
+        </p>}
         {over && <p className="mt-1 text-sm tabular-nums text-ink-soft">
           Final: <span style={{ color: teamColor(myTeam) }}>Us {view.score[myTeam].toLocaleString()}</span>, <span style={{ color: teamColor(them) }}>Them {view.score[them].toLocaleString()}</span>
         </p>}

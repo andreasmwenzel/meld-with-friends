@@ -32,7 +32,10 @@ export function leakedCards(state: GameState, seat: SeatIndex): string[] {
   const { revealed, claim, ...rest } = { ...view, misdeal: null };
   if (revealed && !(state.rules.revealHands && (state.phase === 'hand_over' || state.phase === 'game_over'))) return ['revealed hands outside the reveal'];
   if (claim && !['hand_over', 'game_over'].includes(state.phase)) return ['claimed hands before hand over'];
-  return [...cardsIn(rest)].filter(card => !allowed.has(card));
+  const seen = cardsIn(rest);
+  const hidden = state.sittingOut != null && !['hand_over', 'game_over'].includes(state.phase)
+    ? state.players[state.sittingOut].hand : [];
+  return [...seen].filter(card => !allowed.has(card) || hidden.includes(card as CardId));
 }
 
 function pick<T>(seed: number, options: readonly T[]): T { return options[Math.abs(seed) % options.length]; }
@@ -45,7 +48,7 @@ export function fuzzRules(n: number): Partial<RulesConfig> {
     scoring,
     target: pick(n, [50, 100, 150]) * unit, minBid: pick(n >> 2, [15, 25]) * unit, bidStep: pick(n >> 3, [1, 2]) * unit,
     passCount: pick(n >> 4, [0, 3, 4, 5]), counting: scoring === 'classic' ? pick(n >> 5, ['tens', 'classic'] as const) : 'tens',
-    shoot: pick(n >> 6, ['off', 'game', 'points'] as const), shootPoints: 50 * unit,
+    shoot: pick(n >> 6, ['off', 'on'] as const),
     dealerStuck: pick(n >> 7, [true, false]), mustTakeTrickToSaveMeld: pick(n >> 8, [true, false]),
     ninesMisdeal: pick(n >> 14, [true, false]),
     ...(n >> 9) % 3 === 0 ? {

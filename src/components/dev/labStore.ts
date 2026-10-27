@@ -1,8 +1,8 @@
 // State for the dev lab: a timeline of real engine actions over a base state, with undo, branching and bots.
-import { applyAction, cardLabel, IllegalAction, newGame, type Action, type GameState, type SeatIndex } from "@/engine";
+import { applyAction, cardLabel, IllegalAction, type Action, type GameState, type SeatIndex } from "@/engine";
 import { actors, botAction, buildScenario, SEATS, type ScenarioSpec } from "@/engine/scenario";
 import { presetById } from "@/engine/scenarios";
-import { replayLog } from "@/engine/replay";
+import { rebuildFromLog, replayLog } from "@/engine/replay";
 
 export interface LabFlags {
   /** Game's connection prop, to see the reconnecting banner */
@@ -39,9 +39,7 @@ const others = (view: SeatIndex) => SEATS.filter(s => s !== view);
 
 /** Expand base + actions into the state after each action. Index 0 is the base. */
 function replay(base: GameState, actions: Action[]): GameState[] {
-  const states = [base];
-  for (const action of actions) states.push(applyAction(states.at(-1)!, action));
-  return states;
+  return replayLog(base, actions).states;
 }
 
 export function describeAction(a: Action): string {
@@ -122,8 +120,9 @@ export class LabStore {
   /** Start a new timeline from a base state and the actions that lead to the target. */
   load(base: GameState, actions: Action[], source: LabSnapshot["source"], extra: Partial<LabSnapshot> = {}) {
     try {
-      this.states = replay(base, actions);
-      this.set({ base, actions, cursor: actions.length, source, notes: [], error: null, flags: { ...this.snap.flags, ready: [] }, ...extra }, { rewrite: true });
+      const played = replayLog(base, actions);
+      this.states = played.states;
+      this.set({ base: played.states[0], actions: played.actions, cursor: played.actions.length, source, notes: [], error: null, flags: { ...this.snap.flags, ready: [] }, ...extra }, { rewrite: true });
     } catch (e) {
       this.set({ error: `Could not replay: ${(e as Error).message}` });
     }
@@ -206,10 +205,6 @@ export class LabStore {
 
 export const labStore = typeof window === "undefined" ? (null as unknown as LabStore) : new LabStore();
 
-/** Key-sorted JSON; Postgres jsonb does not keep key order. */
-const canonical = (value: unknown): string => JSON.stringify(value, (_k, v) => v && typeof v === "object" && !Array.isArray(v)
-  ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v);
-
 /**
  * Accepts a lab export ({ base, actions }), a pulled production game ({ state, actions }), or a bare GameState.
  * Production games are rebuilt from their seed when the action log replays to the same state.
@@ -224,17 +219,8 @@ export function parseImport(data: unknown): { base: GameState; actions: Action[]
   if (!state) throw new Error("Expected a GameState, { state, actions } or { base, actions }");
   const actions = obj.actions ?? [];
   if (actions.length) {
-    for (const dealer of SEATS) {
-      try {
-        const start = newGame(state.seed, state.rules, dealer);
-        // Older logs lack the bidder's shoot decision after the pass; replayLog fills it in.
-        const played = replayLog(start, actions, state);
-        const end = played.states.at(-1)!;
-        if (end.rev - (played.actions.length - actions.length) === state.rev && end.phase === state.phase && canonical(end.players) === canonical(state.players) && canonical(end.score) === canonical(state.score)) {
-          return { base: start, actions: played.actions, note: `Rebuilt from seed with ${played.actions.length} actions` };
-        }
-      } catch { /* try the next dealer */ }
-    }
+    const rebuilt = rebuildFromLog(state, actions);
+    if (rebuilt) return { base: rebuilt.start, actions: rebuilt.actions, note: `Rebuilt from seed with ${rebuilt.actions.length} actions` };
   }
   return { base: state, actions: [], note: actions.length ? "Action log did not replay; loaded the state alone" : "Loaded the state alone" };
 }
