@@ -4,7 +4,7 @@ import { useEffect, useEffectEvent, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { normalizeCode } from "@/lib/codes";
 
-export type TableEvent = { type: "seats" | "trade" | "resync" } | { type: "game"; rev: number } | { type: "chat"; [key: string]: unknown };
+export type TableEvent = { type: "seats" | "trade" | "resync" } | { type: "game"; rev: number; move?: string; sig?: string } | { type: "chat"; [key: string]: unknown };
 
 export function useTableChannel(code: string | null | undefined, onEvent: (event: TableEvent) => void) {
   const [subscription, setSubscription] = useState<{ code: string; status: "connecting" | "subscribed" | "closed" } | null>(null);

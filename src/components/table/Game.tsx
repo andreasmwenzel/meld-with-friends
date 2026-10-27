@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError, isTransientError, type Profile } from "@/lib/api";
 import { ViewSync, type GameFeed } from "./viewSync";
+import { applyPublicMove, type PublicMove } from "@/engine/publicMove";
+import { openMove } from "@/lib/moveAuth";
 import type { Action, CardId, PlayerView, SeatIndex, Suit, Team } from "@/engine/types";
 import { PlayingCard, CardBack, SUIT_GLYPH, SUIT_NAME, RANK_LABEL, splitCard, cardName } from "@/components/cards/PlayingCard";
 import { Avatar } from "@/components/site/Avatar";
@@ -47,12 +49,14 @@ function countersIn(trick: NonNullable<PlayerView["currentTrick"]>, rules: Playe
   }, 0);
 }
 
-export function Game({ code, me, snap, rev, feed, onTableChange, connection = "ok", local = false, suggested, chat }: {
+export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connection = "ok", local = false, suggested, chat }: {
   code: string; me: Profile; snap: Snapshot; onTableChange: () => void; connection?: "ok" | "reconnecting"; local?: boolean;
   /** boards without a channel (lab, practice) reload whenever this changes */
   rev?: number;
   /** the table room's channel events; the board fetches once per game event */
   feed?: GameFeed;
+  /** lab only: sees every view the board applies, fetched or built from a broadcast move */
+  inspect?: (view: PlayerView) => void;
   /** cards a coach suggests, outlined in the hand (practice) */
   suggested?: CardId[];
   /** table talk for the menu's Talk tab, and how many messages are unread */
@@ -78,9 +82,10 @@ export function Game({ code, me, snap, rev, feed, onTableChange, connection = "o
   const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (hintTimer.current) clearTimeout(hintTimer.current); }, []);
   const [degraded, setDegraded] = useState(false);
-  const [sync] = useState(() => new ViewSync<PlayerView>({
+  const [sync] = useState(() => new ViewSync<PlayerView, PublicMove>({
     fetchView: () => api<PlayerView>(`/api/tables/${code}/view`),
-    apply: (next) => { setView(next); setDegraded(false); },
+    applyMove: applyPublicMove,
+    apply: (next) => { inspect?.(next); setView(next); setDegraded(false); },
     onError: (e) => {
       if (isTransientError(e)) setDegraded(true);
       else setError(e instanceof ApiError && e.status === 404 ? "No table has this code." : (e as Error).message);
@@ -107,9 +112,20 @@ export function Game({ code, me, snap, rev, feed, onTableChange, connection = "o
   // Leaving the board (or a rematch remounting it) cancels its grace timers and late answers.
   useEffect(() => { sync.start(); return () => sync.dispose(); }, [sync]);
   useEffect(() => { void load(); }, [load, rev]);
-  // One fetch per game event at most; seat events (ready checks) and resyncs (reconnect, tab shown,
-  // polling) always fetch.
-  useEffect(() => feed?.subscribe((event) => sync.handle(event)), [feed, sync]);
+  // Public moves apply locally, other game events fetch once at most; seat events (ready checks) and
+  // resyncs (reconnect, tab shown, polling) always fetch.
+  const opening = useRef<Promise<void>>(Promise.resolve());
+  const gameId = snap.table.current_game_id;
+  useEffect(() => feed?.subscribe((event) => {
+    if (event.type !== "game") { sync.handle(event); return; }
+    // Check signatures in arrival order; a move that does not check out counts as a bare revision.
+    opening.current = opening.current.then(async () => {
+      // The server's public key for broadcast moves comes with the view.
+      const key = (sync.latest as (PlayerView & { moveKey?: string }) | null)?.moveKey;
+      const move = key && gameId && event.move ? await openMove(key, gameId, event.move, event.sig) : null;
+      sync.event(event.rev, move ?? undefined);
+    }).catch(() => sync.event(event.rev)); // never let one bad event stop the ones after it
+  }), [feed, sync, gameId]);
   const live = !!feed && connection === "ok";
   // The game ending also finishes the table; game events no longer refetch the table, so ask once.
   const tableEnding = view?.phase === "game_over" && snap.table.status === "playing";
