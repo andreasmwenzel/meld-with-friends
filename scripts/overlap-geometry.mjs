@@ -4,10 +4,13 @@
 /**
  * @typedef {{ x: number, y: number, w: number, h: number }} Box
  * `clip` is what can show of an element: the screen cut down by ancestors that hide overflow. Defaults to the screen.
- * @typedef {{ hand: string, cards: (Box & { label?: string })[], scrolls?: boolean, clip?: Box }} Hand
- * @typedef {Box & { name: string, coveredBy?: string[], clip?: Box }} Overlay
- * @typedef {{ vw: number, vh: number, hands: Hand[], overlays: Overlay[], plates?: Overlay[] }} Snapshot
- * @typedef {{ kind: "control" | "hands" | "clipped" | "covered" | "edge", a: string, b: string, cards: number, area: number }} Hit
+ * A hand's cards carry their id as `label`; `declared` is how many cards the page says the hand holds (data-hand-cards).
+ * A control's `own` is a card it is meant to sit on (the Play button on the card it plays).
+ * @typedef {{ hand: string, cards: (Box & { label?: string })[], scrolls?: boolean, clip?: Box, declared?: number | null }} Hand
+ * @typedef {Box & { name: string, coveredBy?: string[], clip?: Box, own?: string | null }} Overlay
+ * `expected` lists the hands the page says it draws (data-hands); `sittingOut` is the seat set aside for a shoot, if any.
+ * @typedef {{ vw: number, vh: number, hands: Hand[], overlays: Overlay[], plates?: Overlay[], expected?: string[] | null, sittingOut?: string | null }} Snapshot
+ * @typedef {{ kind: "control" | "controls" | "hands" | "clipped" | "covered" | "edge", a: string, b: string, cards: number, area: number }} Hit
  */
 
 /** Overlaps thinner than this (px, either way) are shadows and rounding, not one thing covering another. */
@@ -40,6 +43,15 @@ export const ALLOW_COVER = [
   { over: /^chat-popover$/, why: "the open talk popover lies over whatever it opens on" },
 ];
 
+/**
+ * Controls whose boxes may overlap. Every other pair of controls that overlaps fails.
+ * @type {{ a: RegExp, b: RegExp, why: string }[]}
+ */
+export const ALLOW_CONTROLS = [
+  { a: /^chat-popover$/, b: /./, why: "the open talk popover lies over whatever it opens on" },
+  { a: /^chat-badge$/, b: /^chat$/, why: "the unread count sits on the corner of the talk button" },
+];
+
 /** Whether `b` shows whole inside `clip` (sideways too unless `across` is false: a hand that scrolls). */
 export function inside(/** @type {Box} */ b, /** @type {Box} */ clip, across = true, tol = TOLERANCE) {
   const down = b.y >= clip.y - tol && b.y + b.h <= clip.y + clip.h + tol;
@@ -60,19 +72,30 @@ export function allowed(overlay, hand, allow = ALLOW) {
  * @param {Snapshot} snap
  * @returns {{ failures: Hit[], allowed: (Hit & { why: string })[] }}
  */
-export function findOverlaps(snap, allow = ALLOW, allowCover = ALLOW_COVER) {
+export function findOverlaps(snap, allow = ALLOW, allowCover = ALLOW_COVER, allowControls = ALLOW_CONTROLS) {
   /** @type {Hit[]} */ const failures = [];
   /** @type {(Hit & { why: string })[]} */ const ok = [];
   for (const o of snap.overlays) {
     for (const hand of snap.hands) {
       let cards = 0, area = 0;
       for (const c of hand.cards) {
+        if (o.own && c.label === o.own) continue;
         const i = intersect(o, c);
         if (i) { cards++; area = Math.max(area, Math.round(i.w * i.h)); }
       }
       if (!cards) continue;
       const hit = /** @type {Hit} */ ({ kind: "control", a: o.name, b: hand.hand, cards, area });
       const rule = allowed(o.name, hand.hand, allow);
+      if (rule) ok.push({ ...hit, why: rule.why }); else failures.push(hit);
+    }
+  }
+  for (let i = 0; i < snap.overlays.length; i++) {
+    for (let j = i + 1; j < snap.overlays.length; j++) {
+      const A = snap.overlays[i], B = snap.overlays[j];
+      const x = intersect(A, B);
+      if (!x) continue;
+      const hit = /** @type {Hit} */ ({ kind: "controls", a: A.name, b: B.name, cards: 0, area: Math.round(x.w * x.h) });
+      const rule = allowControls.find((r) => (r.a.test(A.name) && r.b.test(B.name)) || (r.a.test(B.name) && r.b.test(A.name)));
       if (rule) ok.push({ ...hit, why: rule.why }); else failures.push(hit);
     }
   }
@@ -105,4 +128,34 @@ export function findOverlaps(snap, allow = ALLOW, allowCover = ALLOW_COVER) {
     if (!inside(o, o.clip ?? screen, true, 0.5)) failures.push({ kind: "edge", a: "edge", b: o.name, cards: 0, area: 0 });
   }
   return { failures, allowed: ok };
+}
+
+/**
+ * Whether the screen holds what it should, so a check cannot pass by measuring nothing. Fails when the page does not
+ * say which hands it draws, when a hand it names is missing or holds a different number of cards than it says, when a
+ * hand is measured with no cards, when your own hand's row is missing, and, in a hand shown face up (`faceUp`), when any of
+ * the four hands is missing (but for a seat that sat out a shoot: a shooter's claim shows no cards for it).
+ * @param {Snapshot} snap
+ * @param {{ faceUp?: boolean }} [opts]
+ * @returns {string[]} what is wrong, one line each
+ */
+export function checkPresence(snap, { faceUp = false } = {}) {
+  const problems = [];
+  // A hand the page says is empty (all your meld on the table, say) and that is empty is simply not drawn.
+  const byName = new Map(snap.hands.filter((h) => h.hand !== "table" && !(h.declared === 0 && !h.cards.length)).map((h) => [h.hand, h]));
+  if (!snap.expected) problems.push("the board does not say which hands it draws (data-hands)");
+  // Your hand's row is always there, even empty (every card laid down as meld); its cards are needed when it says so.
+  if (!snap.hands.some((h) => h.hand === "mine")) problems.push("mine hand not found");
+  const need = new Set([...(snap.expected ?? []), ...(faceUp ? ["west", "north", "east"].filter((s) => s !== snap.sittingOut || byName.has(s)) : [])]);
+  for (const name of need) {
+    const h = byName.get(name);
+    if (!h) problems.push(`${name} hand not found`);
+    else if (!h.cards.length) problems.push(`${name} hand found with no cards measured`);
+  }
+  for (const h of byName.values()) {
+    if (h.declared == null) problems.push(`${h.hand} hand does not say how many cards it holds (data-hand-cards)`);
+    else if (h.cards.length !== h.declared) problems.push(`${h.hand} hand: ${h.declared} cards declared, ${h.cards.length} measured`);
+    if (snap.expected && !snap.expected.includes(h.hand)) problems.push(`${h.hand} hand drawn but not declared in data-hands`);
+  }
+  return problems;
 }

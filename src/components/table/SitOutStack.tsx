@@ -13,7 +13,7 @@ export const FOLD_MS = 600;
  * `orient` follows the seat: a row across the table or at the bottom, or a column of cards turned
  * sideways at the left or right. `step` is the distance between neighbouring cards in the fan.
  */
-export function SitOutStack({ n, team, cardW, step, orient, fold, label, token = 22, pad = 0, style, hand }: {
+export function SitOutStack({ n, team, cardW, step, orient, fold, label, token = 22, pad = 0, style, hand, handCards }: {
   n: number; team: "red" | "blue"; cardW: number; step: number; orient: "row" | "left" | "right";
   fold: boolean; label: string;
   /** width of a card in the settled stack */
@@ -23,6 +23,8 @@ export function SitOutStack({ n, team, cardW, step, orient, fold, label, token =
   style?: CSSProperties;
   /** `data-hand` for scripts/overlap.mjs */
   hand?: string;
+  /** `data-hand-cards`: how many cards scripts/overlap.mjs should find in the stack */
+  handCards?: number;
 }) {
   const cardH = (cardW * 7) / 5;
   const across = orient === "row";
@@ -34,7 +36,7 @@ export function SitOutStack({ n, team, cardW, step, orient, fold, label, token =
   // A tidy stack shows a little depth: the bottom few cards peek out down and to the left, about 1.5px each.
   const depth = (i: number) => Math.min(n - 1 - i, 3) * (1.5 / scale);
   return (
-    <span role="img" aria-label={label} data-hand={hand} className={`relative block shrink-0 ${fold ? "sit-out-fold" : ""}`} style={{ width: w, height: h, ...style }}>
+    <span role="img" aria-label={label} data-hand={hand} data-hand-cards={handCards} className={`relative block shrink-0 ${fold ? "sit-out-fold" : ""}`} style={{ width: w, height: h, ...style }}>
       <span className="sit-out-stack absolute left-1/2 top-1/2" style={{ width: cardW, height: cardH, marginLeft: -cardW / 2, marginTop: -cardH / 2,
         "--fold-s": scale, transform: `scale(${scale}) rotate(-4deg)`, opacity: 0.6 } as CSSProperties}>
         {Array.from({ length: n }, (_, i) => {

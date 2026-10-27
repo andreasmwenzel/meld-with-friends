@@ -52,6 +52,7 @@ export function PlayingCard({ card, width = 96, selected, dimmed, className, sty
   const h = (width * 7) / 5;
   return (
     <svg
+      data-card={card}
       viewBox="0 0 100 140"
       width={width}
       height={h}
@@ -137,7 +138,7 @@ export function CardBack({ width = 96, team = "blue", className, style }: {
   const fill = team === "red" ? "var(--deck-red)" : "var(--deck-blue)";
   const id = `lattice-${team}`;
   return (
-    <svg viewBox="0 0 100 140" width={width} height={h} aria-hidden className={className}
+    <svg data-card="back" viewBox="0 0 100 140" width={width} height={h} aria-hidden className={className}
       style={{ display: "block", borderRadius: `${Math.max(4, width * 0.085)}px`, boxShadow: "var(--shadow-card)", ...style }}>
       <defs>
         <pattern id={id} width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">

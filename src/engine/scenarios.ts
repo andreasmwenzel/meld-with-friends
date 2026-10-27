@@ -89,6 +89,8 @@ export const PRESETS: Preset[] = [
 
   { id: 'hand-made', group: 'Hand over', title: 'Bid made', note: 'Hand over with every hand revealed.',
     spec: { dealer: 3, bidder: 0, bid: 25, hands: { 0: BIG_MELD }, trump: 'S', to: 'hand_over' } },
+  { id: 'hand-played-out', group: 'Hand over', title: 'Played to the last trick', note: 'No claim, so the hands show after passing or as dealt.',
+    spec: { dealer: 3, bidder: 0, bid: 25, hands: { 0: BIG_MELD }, trump: 'S', noClaims: true, to: 'hand_over' } },
   { id: 'hand-set', group: 'Hand over', title: 'Went set', note: 'You bid 65 on nothing and paid for it.',
     spec: { dealer: 3, bidder: 0, bid: 65, hands: { 0: ['9H', '9H', '9D', '9D', '9C', '9C', 'JH', 'JC', 'JC', 'QH', 'QD', 'QC'] }, trump: 'H', to: 'hand_over' } },
   { id: 'hand-meld-lost', group: 'Hand over', title: 'Meld lost, no tricks', note: 'The defence took no trick, so its meld does not count.',

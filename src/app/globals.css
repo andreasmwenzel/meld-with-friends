@@ -217,7 +217,6 @@ body {
     padding-bottom: .25rem;
   }
   .board-action::-webkit-scrollbar { display: none; }
-  .board-armed { grid-area: hand; align-self: start; z-index: 30; }
   /* Table talk keeps to the bottom-right corner: the foot of the action column. */
   .board-talk { grid-area: action; align-self: end; justify-self: end; margin-bottom: var(--board-bottom); }
   .board:has(.board-talk) .board-action { padding-bottom: 3.5rem; }

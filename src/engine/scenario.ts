@@ -41,6 +41,8 @@ export interface ScenarioSpec {
   shoot?: boolean;
   /** the bidder shoots after the pass (default: plays it out once past deciding_shoot) */
   shootAfterPass?: boolean;
+  /** play every trick out: bots never claim the rest (a hand that ends by a claim shows no "as dealt" hands) */
+  noClaims?: boolean;
   trump?: Suit;
   /** cards the bidder's partner passes over, and the bidder passes back; the bot picks when omitted */
   passToBidder?: string[];
@@ -250,7 +252,7 @@ export function buildScenario(spec: ScenarioSpec): Scenario {
       } else {
         // A position requested mid-play must stay there even if a bot could end it by claiming.
         const view = viewFor(state, seat);
-        if (to === 'playing') view.legal.canClaim = false;
+        if (to === 'playing' || spec.noClaims) view.legal.canClaim = false;
         apply(chooseAction(view, { seed: `${state.seed}:${state.rev}`, config: { samples: 6, budgetMs: 4 } }));
       }
       continue;

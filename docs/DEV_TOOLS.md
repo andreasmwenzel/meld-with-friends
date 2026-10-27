@@ -11,7 +11,7 @@ browser, so you can put the table in any position, play from any seat, and rewin
 - **Positions**: about 40 named edge cases (`src/engine/scenarios.ts`): dealer stuck, all-pass redeal,
   shoot available or already declared, every passing phase, double run, no meld, waiting on others,
   must trump / head / overtrump, last trick, went set, meld lost with no tricks, shoot made, missed or declared after passing,
-  game won or lost, negative scores, classic counting, leisurely pace, short games.
+  a hand played to the last trick, game won or lost, negative scores, classic counting, leisurely pace, short games.
 - **Build**: make your own position. Pick where to stop (any phase, so many tricks in, whose turn),
   the dealer, hand number and scores (earlier hands are synthesised so the scorepad adds up), the
   contract, rules, and the deal. In the 48-card grid, tap a card to give it to a seat; cards you
@@ -75,7 +75,7 @@ actually reach. Card names can be `AS0`, `AS` (first free copy), `10S` or `A♠`
 `rules`, `dealer`, `handNumber`, `score`, `hands`, `to`, `bids` (`[25, null]` from the
 dealer's left), `bidder`/`bid`, `shoot` or `shootAfterPass` (the bidder's decision after the pass; plays it out
 when omitted), `trump`, `passToBidder`/`passBack`, `meld` per seat
-(`"full"`, `"none"`, or cards), `confirmed`, `tricks`, `plays`, `turn`, `play` (scripted cards in order).
+(`"full"`, `"none"`, or cards), `confirmed`, `tricks`, `plays`, `turn`, `play` (scripted cards in order), `noClaims` (bots play every trick out).
 
 When you add a preset, `src/engine/__tests__/scenario.test.ts` builds it and checks that it reaches
 its target with no broken invariants. Forced-play and outcome presets also have assertions there.
@@ -107,30 +107,43 @@ node scripts/overlap.mjs --url "/dev/lab?spec=...&chrome=0&run=0" --shots .dev/s
 ```
 
 Needs `pnpm dev` running (`--base` as for shots.mjs). Headless Chrome, driven over the DevTools protocol, opens
-every preset with table talk on (`chat=1&unread=3`) at 360x640, 375x667, 390x844, 393x852, 414x896, 430x932,
-844x390, 932x430, 768x1024 and 1280x800, with motion reduced, and waits for the layout to stop moving. It measures:
+every preset with table talk on (`chat=1&unread=3`) and "Tap twice to play" on at 360x640, 375x667, 390x844,
+393x852, 414x896, 430x932, 844x390, 932x430, 768x1024 and 1280x800 (phone sizes as touch screens), with motion
+reduced, and waits for the layout to stop moving. The screens:
 
 - **table**: the position as it loads;
-- **peek**: at hand end, "Look at the table" (every hand face up, the result's buttons along the bottom); the result
-  sheet itself is skipped, since the board is behind its scrim;
-- **talk** / **peek+talk**: the same with the talk popover open.
+- **talk**: the same with the talk popover open;
+- **armed**: on your turn in trick play, a playable card lifted by a first tap, with its Play button;
+- **peek** / **peek+talk**: at hand end, "Look at the table" (every hand face up, the result's buttons along the
+  bottom), without and with the popover. The result sheet itself is skipped, since the board is behind its scrim;
+- **peek-dealt**: the face-up hands switched to "As dealt", where passing was played and the hand was not claimed.
 
-On each screen it reads the boxes of every card of every hand (`data-hand`: `mine`, `west`, `north`, `east`, also the
-set-aside stack after a shoot), the cards on the cloth (trick and meld, as `table`), the controls (`data-overlay`: the
-talk button, its badge and popover, Menu, the peek buttons; every button in the action bar, `data-overlay-zone`) and
-the seat plates with their turn ring (`data-seat-plate`). It fails on:
+Each screen a position should reach is required. A missing "Look at the table", Play button, "As dealt" toggle or
+popover fails with the position, size and step. Which positions end the hand and play with passing is read from
+`src/engine/scenarios.ts`, not from the page. The run also fails if fewer than two screens per position and size
+were checked.
 
-- a control on a hand card, or two hands' cards on each other (the cloth counts as a hand);
+On each screen it reads the boxes of every card (`data-card`) of every hand (`data-hand`: `mine`, `west`, `north`,
+`east`, also the set-aside stack after a shoot), the cards on the cloth (trick and meld, as `table`), the controls
+(`data-overlay`: the talk button, its badge and popover, Menu, the peek buttons, the Play button; every button in
+the action bar, `data-overlay-zone`) and the seat plates with their turn ring (`data-seat-plate`). It fails on:
+
+- a hand that is not all there. The board says which hands it draws (`data-hands`) and each hand how many cards it
+  holds (`data-hand-cards`); each named hand must be found with exactly that many cards, your hand's row must
+  exist, and a face-up view needs all four hands, except a seat that sat out a shoot when the shooter claimed;
+- a control on a hand card, two hands' cards on each other (the cloth counts as a hand), or two controls on each other;
 - a control drawn over by another control;
 - a hand card, control or seat plate cut off by the screen edge or a box that hides overflow (your hand may run
   off sideways, since it scrolls).
 
-Intended overlaps, listed in `scripts/overlap-geometry.mjs` (`ALLOW`, `ALLOW_COVER`): cards of one hand overlap
-each other; the open talk popover may lie over the other seats, the cloth and any control, but never your hand.
-It prints one line per failure (position, size, screen, what lies on what) and exits 1; `--shots <dir>` saves a
+Intended overlaps, listed in `scripts/overlap-geometry.mjs` (`ALLOW`, `ALLOW_COVER`, `ALLOW_CONTROLS`): cards of
+one hand overlap each other; the open talk popover may lie over the other seats, the cloth and any control, but
+never your hand; the unread count sits on the talk button; the Play button may touch the card it plays.
+It prints one line per failure (position, size, screen, what is wrong) and exits 1; `--shots <dir>` saves a
 PNG of every screen measured, and the boxes go to `meld-overlap-report.json` in the temp directory. The rules
-themselves are unit-tested on fixture boxes (`src/lib/__tests__/overlapGeometry.test.ts`). Add a `data-hand`,
-`data-overlay` or `data-seat-plate` when you add a hand, a floating control or a seat to the table.
+themselves are unit-tested on fixture boxes (`src/lib/__tests__/overlapGeometry.test.ts`). When you add a hand, a
+floating control or a seat to the table, give it `data-hand` and `data-hand-cards`, `data-overlay` or
+`data-seat-plate`; cards drawn without `PlayingCard` or `CardBack` need `data-card`.
 
 ## Production games: `scripts/pull-game.mjs`
 

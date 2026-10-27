@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 // The pure half of scripts/overlap.mjs; the script measures the boxes in Chrome, this checks the rules on fixtures.
-import { ALLOW, findOverlaps, intersect } from '../../../scripts/overlap-geometry.mjs';
+import { ALLOW, checkPresence, findOverlaps, intersect } from '../../../scripts/overlap-geometry.mjs';
 
 const card = (x: number, y: number, w = 36, h = 50) => ({ x, y, w, h });
 const snap = (over: Partial<Parameters<typeof findOverlaps>[0]>) => ({ vw: 390, vh: 844, hands: [], overlays: [], ...over });
@@ -63,5 +63,46 @@ describe('findOverlaps', () => {
       plates: [{ name: 'seat east', x: 336, y: 300, w: 50, h: 60, clip }, { name: 'seat west', x: 14, y: 300, w: 50, h: 60, clip }],
     }));
     expect(failures.map((f) => [f.kind, f.b])).toEqual([['edge', 'seat east']]);
+  });
+  it('lets the Play button sit on the card it plays, and nothing else', () => {
+    const play = { name: 'play', x: 300, y: 700, w: 84, h: 44, own: 'AS0' };
+    const hand = { hand: 'mine', cards: [{ ...card(310, 690), label: 'AS0' }, { ...card(340, 690), label: 'KS0' }] };
+    expect(findOverlaps(snap({ hands: [hand], overlays: [play] })).failures).toEqual([{ kind: 'control', a: 'play', b: 'mine', cards: 1, area: expect.any(Number) }]);
+    expect(findOverlaps(snap({ hands: [{ ...hand, cards: [hand.cards[0]] }], overlays: [play] })).failures).toEqual([]);
+  });
+  it('reports two controls on each other, but for the badge on its button and the open popover', () => {
+    const { failures, allowed } = findOverlaps(snap({ overlays: [
+      { name: 'chat', x: 330, y: 50, w: 44, h: 44 }, { name: 'chat-badge', x: 362, y: 46, w: 20, h: 20 },
+      { name: 'play', x: 300, y: 700, w: 84, h: 44 }, { name: 'action: Pass', x: 330, y: 710, w: 60, h: 40 },
+    ] }));
+    expect(allowed.map((a) => [a.a, a.b])).toEqual([['chat', 'chat-badge']]);
+    expect(failures.map((f) => [f.kind, f.a, f.b])).toEqual([['controls', 'play', 'action: Pass']]);
+  });
+});
+
+describe('checkPresence', () => {
+  const hand = (name: string, n: number, declared: number | null = n) => ({ hand: name, declared, cards: Array.from({ length: n }, (_, i) => ({ ...card(i * 20, 0), label: `c${i}` })) });
+  it('passes when every declared hand is there with the cards it declares', () => {
+    expect(checkPresence(snap({ expected: ['west', 'north', 'east', 'mine'], hands: [hand('west', 12), hand('north', 12), hand('east', 12), hand('mine', 12)] }))).toEqual([]);
+  });
+  it('fails when nothing was measured, as when the cards cannot be found', () => {
+    expect(checkPresence(snap({ expected: ['west', 'mine'], hands: [hand('west', 0, 12), hand('mine', 0, 12)] }))).toEqual([
+      'west hand found with no cards measured', 'mine hand found with no cards measured',
+      'west hand: 12 cards declared, 0 measured', 'mine hand: 12 cards declared, 0 measured',
+    ]);
+  });
+  it('fails when the board does not declare its hands, or a hand is missing or undeclared', () => {
+    expect(checkPresence(snap({ expected: null, hands: [] }))).toEqual(['the board does not say which hands it draws (data-hands)', 'mine hand not found']);
+    expect(checkPresence(snap({ expected: ['mine'], hands: [hand('mine', 3), hand('east', 2, null)] }))).toEqual([
+      'east hand does not say how many cards it holds (data-hand-cards)', 'east hand drawn but not declared in data-hands',
+    ]);
+  });
+  it('accepts your hand empty when it says so (all of it laid down as meld)', () => {
+    expect(checkPresence(snap({ expected: ['west'], hands: [hand('west', 12), hand('mine', 0, 0)] }))).toEqual([]);
+  });
+  it('needs all four hands face up, but for a seat that sat out a shoot', () => {
+    const three = [hand('west', 12), hand('east', 12), hand('mine', 12)];
+    expect(checkPresence(snap({ expected: ['west', 'east', 'mine'], hands: three }), { faceUp: true })).toEqual(['north hand not found']);
+    expect(checkPresence(snap({ expected: ['west', 'east', 'mine'], hands: three, sittingOut: 'north' }), { faceUp: true })).toEqual([]);
   });
 });
