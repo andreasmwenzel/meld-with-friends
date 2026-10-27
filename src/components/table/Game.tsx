@@ -29,6 +29,7 @@ import { describeConstraint } from "@/engine/rules";
 import { cardLabel } from "@/engine/deck";
 import { motionTimings, flyFrom, sweepTo } from "./motion";
 import { ClaimButton, useClaimReveal } from "./Claim";
+import { ChatDock, type TableChat } from "./ChatDock";
 import { newLogLines, speakLine } from "./announce";
 import { DOUBLE_TAP_MS, isRealPress, isTimedActivation, releasePress, secondPress, type Armed, type Press } from "./tapTwice";
 
@@ -38,7 +39,7 @@ const CHIME_KEY = "meld.chime";
 const WIDE = "(min-width: 64rem)";
 const subscribeWide = (cb: () => void) => { const mq = window.matchMedia(WIDE); mq.addEventListener("change", cb); return () => mq.removeEventListener("change", cb); };
 const readWide = () => window.matchMedia(WIDE).matches;
-type MenuTab = "score" | "hand" | "talk" | "options";
+type MenuTab = "score" | "hand" | "options";
 const TURN_PREFIX = "Your turn · ";
 /** How far a lifted card rises out of the hand. */
 const LIFT_PX = 14;
@@ -61,8 +62,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   inspect?: (view: PlayerView) => void;
   /** cards a coach suggests, outlined in the hand (practice) */
   suggested?: CardId[];
-  /** table talk for the menu's Talk tab, and how many messages are unread */
-  chat?: { unread: number; render: (visible: boolean) => React.ReactNode };
+  /** table talk, behind the round button in the corner; only real tables pass it (not practice) */
+  chat?: TableChat;
 }) {
   const [view, setView] = useState<PlayerView | null>(null);
   const push = usePushNotifications();
@@ -428,7 +429,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   }
 
   const lastSeenRev = (snap as Snapshot & { lastSeenRev?: number | null }).lastSeenRev ?? null;
-  // Everything that is not the table (scorepad, this hand, table talk, options) lives behind Menu.
+  // Everything that is not the table (scorepad, this hand, options) lives behind Menu; table talk has its own button.
   const [menu, setMenu] = useState(false);
   const [tab, setTab] = useState<MenuTab>("score");
   const wide = useSyncExternalStore(subscribeWide, readWide, () => false);
@@ -448,7 +449,11 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     return () => document.removeEventListener("keydown", key);
   }, [menu]);
   const recapOpen = menu && tab === "hand";
-  const unread = chat?.unread ?? 0;
+  // Table talk's popover and draft belong to the board, so they survive the button moving onto the result sheet.
+  const [talkOpen, setTalkOpen] = useState(false);
+  // The menu covers the chat popover, so opening it closes talk: hidden messages then count as unread again.
+  if (menu && talkOpen) setTalkOpen(false);
+  const [talkDraft, setTalkDraft] = useState("");
   const autoRecap = useRef(false);
   const sendSeen = useCallback((path: string, init: Parameters<typeof api>[1]) => {
     if (updatingRef.current) return Promise.resolve(null);
@@ -739,7 +744,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     e.preventDefault();
     cards[to].focus();
   };
-  const tabs: [MenuTab, string][] = [["score", "Score"], ["hand", "This hand"], ...(chat ? [["talk", unread > 0 ? `Talk (${unread})` : "Talk"] as [MenuTab, string]] : []), ["options", "Options"]];
+  const tabs: [MenuTab, string][] = [["score", "Score"], ["hand", "This hand"], ["options", "Options"]];
+  const talk = chat && <ChatDock chat={chat} open={talkOpen} setOpen={setTalkOpen} text={talkDraft} setText={setTalkDraft} />;
   const linkCls = "tap-link text-left text-sm text-chalk-faint underline underline-offset-4 hover:text-chalk disabled:opacity-60";
 
   return (
@@ -759,9 +765,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
             <span className={them === "red" ? "text-deck-red-soft" : "text-deck-blue-soft"}>Them</span> {hidePoints ? "Hidden" : view.score[them].toLocaleString()}
           </p>
           <button ref={menuButton} type="button" onClick={() => setMenu((o) => !o)} aria-expanded={menu} aria-controls="table-menu"
-            aria-label={unread > 0 ? `Menu, ${unread} unread ${unread === 1 ? "message" : "messages"}` : undefined}
             className="tap-link -mr-1 text-sm text-chalk-faint underline underline-offset-4 hover:text-chalk">
-            Menu{unread > 0 && <span aria-hidden className="ml-1 rounded-full bg-brass px-1.5 text-xs font-semibold text-ink no-underline">{unread}</span>}
+            Menu
           </button>
         </div>
         {paused && (
@@ -771,7 +776,13 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
                 ? <>Paused by {paused.by === me.id ? "you" : paused.name}{paused.reason ? `: ${paused.reason}` : ""}.</>
                 : <>Paused by {paused.name}{paused.reason ? `: ${paused.reason}` : ""}. Waiting for {paused.name} to come back.</>}
             </p>
-            {canResume && <button type="button" className="btn btn-ink" style={{ height: "2.25rem" }} onClick={resumeTable}>Resume</button>}
+            {(canResume || (talk && !resultModal)) && (
+              <div className="flex items-center gap-3">
+                {canResume && <button type="button" className="btn btn-ink" style={{ height: "2.25rem" }} onClick={resumeTable}>Resume</button>}
+                {/* The paused board is out of reach, but a pause is when the table talks; table talk waits here. */}
+                {!resultModal && talk}
+              </div>
+            )}
           </div>
         )}
         {updating ? <p role="status" className="board-note mb-1 shrink-0 text-center text-xs text-chalk-faint">Updating the table…</p>
@@ -794,6 +805,15 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           </div>
         </div>
 
+        {/* Table talk sits on the cloth's bottom-right corner, just above the action bar: clear of the hand, the bid and
+            play controls, and the Play button (which rises out of the hand). Sideways phones put it at the foot of the
+            action column (globals.css). At hand end it moves onto the result sheet. */}
+        {talk && !resultModal && !paused && (
+          <div className="board-talk relative z-20 h-0 shrink-0">
+            {/* Wide screens centre a narrow hand, which leaves the screen's own corner free. */}
+            <div className={`absolute bottom-1 right-0 lg:fixed lg:bottom-[max(1.25rem,env(safe-area-inset-bottom))] ${menu ? "lg:right-[400px]" : "lg:right-5"}`}>{talk}</div>
+          </div>
+        )}
         {/* action bar */}
         <div ref={actionRef} {...keepFocus} className="board-action mt-1 min-h-[64px] shrink-0 sm:mt-2 sm:min-h-[88px]">
           <ActionBar key={view.rev} view={view} selected={selected} busy={busy || updating} act={act} nameOf={nameOf} autoMeld={cardPrefs.autoMeld} />
@@ -878,7 +898,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           busy={busy || updating} onNext={() => act({ type: "next_hand" })} onRematch={rematch} readyInfo={readyInfo}
           countdown={{ handKey: `${snap.table.id}-${code}-${key}`, blocked: !!paused || !!error || reconnecting || snap.table.status !== "playing",
             onNext: countdownNext }}
-          which={which} setWhich={setWhich} peek={peekKey === key} setPeek={(p) => setPeekKey(p ? key : null)} replayHref={replayHref} /></div>;
+          which={which} setWhich={setWhich} peek={peekKey === key} setPeek={(p) => setPeekKey(p ? key : null)} replayHref={replayHref}
+          talk={resultModal ? talk : undefined} /></div>;
       })()}
       <Announcer view={view} nameOf={nameOf} seats={snap.seats} paused={paused} myId={me.id} peek={peekSpoken} />
 
@@ -915,11 +936,6 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           {recapOpen && (
             <div role="tabpanel" id="menu-panel-hand" aria-labelledby="menu-tab-hand">
               <Recap view={view} nameOf={nameOf} lastSeenRev={lastSeenRev} />
-            </div>
-          )}
-          {chat && (
-            <div role="tabpanel" id="menu-panel-talk" aria-labelledby="menu-tab-talk" hidden={tab !== "talk"} className="panel h-full min-h-[18rem] overflow-hidden">
-              {chat.render(menu && tab === "talk")}
             </div>
           )}
           {tab === "options" && (

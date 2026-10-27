@@ -61,12 +61,12 @@ export function TableRoom({ code, me, guest = false }: { code: string; me: Profi
   if (!snap) return <main className="flex-1"><Header code={code} /><p className="px-6 text-chalk-faint">Finding the table.</p></main>;
 
   const atBoard = snap.table.status === "playing" || snap.table.status === "finished";
-  // At the board the table is the whole screen: the table code, chat and the way out live in its menu.
+  // At the board the table is the whole screen: the table code and the way out live in its menu, table talk in its corner button.
   if (atBoard) {
     return (
       <main className="flex h-dvh flex-col overflow-hidden">
         <Game key={snap.table.current_game_id ?? ""} connection={connection} code={code} me={me} snap={snap} feed={feed} onTableChange={refresh}
-          chat={snap.mySeat !== null ? { unread: chat.unread, render: (visible) => <Chat chat={chat} embedded={{ visible }} /> } : undefined} />
+          chat={snap.mySeat !== null ? chat : undefined} />
       </main>
     );
   }

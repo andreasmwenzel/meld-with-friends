@@ -37,6 +37,8 @@ URL parameters:
 | `run=0` | start with bots paused |
 | `speed=<ms>` | ms between bot moves |
 | `chrome=0` | hide the lab panel and the Next.js badge, for screenshots |
+| `chat=1` | give the board a local stand-in for table talk (the lab has none otherwise): its corner button and popover, with sample messages from the other seats. Nothing leaves the browser |
+| `unread=N` | with `chat=1`: how many sample messages arrive unread (default 3, `0` for none) |
 | `broadcast=1` | send the board game events as a live table does, with signed public moves (key made in the browser); every view the board applies is checked against the engine |
 | `autoplay=1` | with `broadcast=1`: play every seat, the viewer's too, through to the end of the hand |
 
@@ -56,7 +58,12 @@ meld.act({ type: "play_card", seat: 0, card: "AS0" })
 meld.step(); meld.undo(); meld.goto(12); meld.seat(2)
 meld.check()                             // invariant problems, [] when healthy
 meld.spec({...})                         // encode a spec for ?spec=
+meld.say("Nice hand", 1)                 // with ?chat=1: a message from seat 1, unread while the talk is closed
 ```
+
+Table talk at phone size, for example: `/dev/lab?preset=play-lead&chat=1&chrome=0` (button with its unread count);
+open it with a tap, or headless with `document.querySelector("[aria-haspopup=dialog]").click()`. At hand end
+(`?preset=hand-made&chat=1`) the button sits on the result sheet.
 
 ### Scenario specs
 
@@ -122,8 +129,14 @@ The signed-out front door at `/`, without signing out.
 ## Lobby: `/dev/home`
 
 The signed-in lobby at `/` with sample tables. `?tables=N` limits them (`?tables=0` is the
-empty lobby), `?as=guest` shows a guest's lobby and `?new=1` the open deal panel. Friends and past games
-fetch from the API, so without a session they show their loading or error notes.
+empty lobby), `?as=guest` shows a guest's lobby and `?new=1` the open deal panel. Friends fetch from the
+API, so without a session they show their loading or error notes.
+
+## Past games: `/dev/history`
+
+The past games page at `/history` with sample finished games: won and lost, long names, one hand and
+many, one from an earlier year. `?rows=N` limits them (`?rows=0` is the empty list). The real page
+fetches `/api/history`; this one passes the sample rows straight to the list.
 
 ## Groups: `/dev/groups`
 
