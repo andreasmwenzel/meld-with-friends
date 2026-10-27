@@ -67,6 +67,8 @@ Everything committed, and every issue, PR and comment, is world-readable. Before
 - App env lives in `.env.local` (see `.env.example`). Never print or commit it. It holds production
   credentials: agent worktrees must not copy it from another checkout. Unit tests and `/dev/lab` run without
   Supabase; start `pnpm dev` with placeholder values (`NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co`,
-  any string for the anon key) when you only need the lab. Never point a script, a dev server or a load
-  measurement at the production project; `scripts/smoke.mjs` against production is a maintainer step that
-  runs once, after a merge. A stray run has taken production down (#67).
+  any string for the anon key) when you only need the lab. Never point a dev server, a load measurement or
+  a script of your own at the production project; a stray run has taken production down (#67). The only
+  production operations are the maintainer steps named in this file, run from the main checkout by the
+  orchestrating session, not by a delegated agent: `scripts/smoke.mjs` once after a merge,
+  `scripts/pull-game.mjs CODE` to copy one game read-only into the lab, and `scripts/deploy.sh`.
