@@ -37,6 +37,12 @@ URL parameters:
 | `run=0` | start with bots paused |
 | `speed=<ms>` | ms between bot moves |
 | `chrome=0` | hide the lab panel and the Next.js badge, for screenshots |
+| `broadcast=1` | send the board game events as a live table does, with signed public moves (key made in the browser); every view the board applies is checked against the engine |
+| `autoplay=1` | with `broadcast=1`: play every seat, the viewer's too, through to the end of the hand |
+
+`broadcast=1` writes its tally to a hidden `<pre id="lab-broadcast">`: events sent, how many carried
+a move, `/view` fetches, views applied and any that differ from the engine. Read it headless with
+`google-chrome --headless --virtual-time-budget=60000 --dump-dom "http://localhost:3000/dev/lab?preset=bid-open&broadcast=1&autoplay=1&speed=150&chrome=0" | grep -o '{"events[^<]*'`.
 
 With no position parameter the lab reopens where you left it (localStorage).
 
