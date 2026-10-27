@@ -46,7 +46,7 @@ it("sends signed bot chat on the normalized transient topic", async () => {
   const message = { id: "bot:game:hand:3", from: "bot:table:1", name: "Otto", text: "Nice set, Margaret.", at: 123 };
   const signed = signChat("BCDFGH", message);
   await broadcastChat(" bcdfgh ", signed);
-  expect(await openChat(movePublicKey(), "BCDFGH", signed.message, signed.sig)).toEqual(message);
+  expect(await openChat(movePublicKey(), "BCDFGH", signed.message, signed.sig, 123)).toEqual(message);
   expect(JSON.parse(send.mock.calls[0][1].body)).toEqual({ messages: [
     { topic: "chat:BCDFGH", event: "chat", payload: signed, private: false },
   ] });

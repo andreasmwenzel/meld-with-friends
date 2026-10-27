@@ -40,7 +40,7 @@ describe("updating table rules", () => {
     expect(update.update).toHaveBeenCalledWith({ rules: resolveRules({ counting: "classic" }) });
     expect(update.eq.mock.calls).toEqual([["id", table.id], ["host", "host"], ["status", "open"]]);
     expect(mocks.broadcast).toHaveBeenCalledWith(table.code, { type: "seats" });
-    expect(snapshot).toEqual({ table: { ...refreshed, rules: resolveRules(refreshed.rules) }, seats: [], offers: [], mySeat: null, ready: [], paused: null, lastSeenRev: null, moveKey: movePublicKey() });
+    expect(snapshot).toEqual({ table: { ...refreshed, rules: resolveRules(refreshed.rules) }, seats: [], offers: [], mySeat: null, ready: [], paused: null, lastSeenRev: null, moveKey: movePublicKey(), serverNow: expect.any(Number) });
   });
 
   it.each([

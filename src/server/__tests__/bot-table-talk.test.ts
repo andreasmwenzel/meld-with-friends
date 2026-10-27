@@ -58,7 +58,7 @@ it("only the winning scoring commit schedules one chat despite concurrent ticks"
   expect(mocks.chat).toHaveBeenCalledTimes(1);
   expect(mocks.chat.mock.calls[0][0]).toBe("ABC234");
   const signed = mocks.chat.mock.calls[0][1];
-  expect(await openChat(movePublicKey(), "ABC234", signed.message, signed.sig)).toEqual({
+  expect(await openChat(movePublicKey(), "ABC234", signed.message, signed.sig, Date.now())).toEqual({
     id: `bot:game-id:hand:${state.handNumber}`, from: "bot:table-id:1", name: "Otto", text: expect.any(String), at: expect.any(Number),
   });
 });

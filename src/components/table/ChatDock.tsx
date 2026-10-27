@@ -43,11 +43,17 @@ export function ChatBody({ chat, open, text, setText, inputRef, compact = false 
     if (open && list) list.scrollTop = list.scrollHeight;
   }, [open, messages.length]);
 
+  // The latest draft, for a send that fails after the player has started typing again.
+  const draft = useRef(text);
+  useEffect(() => { draft.current = text; }, [text]);
+
   const send = (e: FormEvent, reaction?: string) => {
     e.preventDefault();
     if (!reaction) setText("");
-    void Promise.resolve(chat.send(reaction ?? text)).catch(() => {
-      if (!reaction) setText(text);
+    const sent = text;
+    void Promise.resolve(chat.send(reaction ?? sent)).catch(() => {
+      // Put the message back only if nothing new was typed while it was on its way.
+      if (!reaction && (draft.current === "" || draft.current === sent)) setText(sent);
     });
   };
 

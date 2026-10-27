@@ -3,7 +3,7 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import { POST } from "@/app/api/tables/[code]/chat/route";
 import { ApiError } from "../errors";
 import { movePublicKey, signChat, signMove } from "../moveSigning";
-import { openChat } from "@/lib/chatAuth";
+import { openChat, CHAT_FRESH_MS } from "@/lib/chatAuth";
 import { openMove } from "@/lib/moveAuth";
 import type { PublicMove } from "@/engine/publicMove";
 
@@ -43,7 +43,7 @@ it("stamps the seated user's identity and returns the same signed message it bro
   const res = await POST(request({ text: "  Hello  " }), context);
   expect(res.status).toBe(200);
   const signed = await res.json();
-  const opened = await openChat(movePublicKey(), "BCDFGH", signed.message, signed.sig);
+  const opened = await openChat(movePublicKey(), "BCDFGH", signed.message, signed.sig, Date.now());
   expect(opened).toMatchObject({ from: "player", name: "Server name", text: "Hello" });
   expect(opened!.id).toMatch(/^[a-f0-9-]{36}$/);
   expect(opened!.at).toBeGreaterThanOrEqual(start);
@@ -85,19 +85,25 @@ it("does not broadcast after a database error", async () => {
 });
 it("opens only unchanged signed talk for the same table", async () => {
   const signed = signChat("BCDFGH", line);
-  expect(await openChat(movePublicKey(), "BCDFGH", signed.message, signed.sig)).toEqual(line);
-  expect(await openChat(movePublicKey(), "JKLMNP", signed.message, signed.sig)).toBeNull();
-  expect(await openChat(movePublicKey(), "BCDFGH", signed.message.replace("Server name", "Other"), signed.sig)).toBeNull();
-  expect(await openChat(movePublicKey(), "BCDFGH", signed.message, undefined)).toBeNull();
+  expect(await openChat(movePublicKey(), "BCDFGH", signed.message, signed.sig, 123)).toEqual(line);
+  expect(await openChat(movePublicKey(), "JKLMNP", signed.message, signed.sig, 123)).toBeNull();
+  expect(await openChat(movePublicKey(), "BCDFGH", signed.message.replace("Server name", "Other"), signed.sig, 123)).toBeNull();
+  expect(await openChat(movePublicKey(), "BCDFGH", signed.message, undefined, 123)).toBeNull();
   const { privateKey } = generateKeyPairSync("ed25519");
   const sig = sign(null, Buffer.from(signed.message), privateKey).toString("base64url");
-  expect(await openChat(movePublicKey(), "BCDFGH", signed.message, sig)).toBeNull();
+  expect(await openChat(movePublicKey(), "BCDFGH", signed.message, sig, 123)).toBeNull();
+});
+it("refuses a signed message replayed long after it was sent", async () => {
+  const signed = signChat("BCDFGH", line);
+  expect(await openChat(movePublicKey(), "BCDFGH", signed.message, signed.sig, line.at + CHAT_FRESH_MS)).toEqual(line);
+  expect(await openChat(movePublicKey(), "BCDFGH", signed.message, signed.sig, line.at + CHAT_FRESH_MS + 1)).toBeNull();
+  expect(await openChat(movePublicKey(), "BCDFGH", signed.message, signed.sig, line.at - CHAT_FRESH_MS - 1)).toBeNull();
 });
 it("keeps chat and move signatures distinct in both directions", async () => {
   const chat = signChat("BCDFGH", line);
   const move = signMove("BCDFGH", { rev: 1 } as PublicMove);
   expect(await openMove(movePublicKey(), "BCDFGH", chat.message, chat.sig)).toBeNull();
-  expect(await openChat(movePublicKey(), "BCDFGH", move.move, move.sig)).toBeNull();
+  expect(await openChat(movePublicKey(), "BCDFGH", move.move, move.sig, 123)).toBeNull();
   expect(await openMove(movePublicKey(), "BCDFGH", move.move, move.sig)).not.toBeNull();
 });
 
@@ -108,5 +114,5 @@ it("continues to open the previous untagged move format", async () => {
   const message = JSON.stringify({ game: "BCDFGH", build: "previous", move });
   const sig = sign(null, Buffer.from(message), privateKey).toString("base64url");
   expect(await openMove(key, "BCDFGH", message, sig)).toEqual({ move, build: "previous" });
-  expect(await openChat(key, "BCDFGH", message, sig)).toBeNull();
+  expect(await openChat(key, "BCDFGH", message, sig, 123)).toBeNull();
 });

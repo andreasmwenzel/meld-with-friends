@@ -13,7 +13,10 @@ export type { TableChat } from "./ChatDock";
  * room holds this for the whole visit: the talk from the seating screen is still there at the board.
  * `setVisible` says whether the talk is on screen; messages from others count as unread while it is not.
  */
-export function useTableChat(code: string, me: Profile, enabled: boolean, publicKey?: string): TableChat {
+export function useTableChat(code: string, me: Profile, enabled: boolean, publicKey?: string, serverNow?: number): TableChat {
+  // How far this device's clock is from the server's, from the snapshot: freshness is judged on the server's clock.
+  const offset = useRef(0);
+  useEffect(() => { if (serverNow) offset.current = serverNow - Date.now(); }, [serverNow]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [unread, setUnread] = useState(0);
   const visibleRef = useRef(false);
@@ -30,7 +33,7 @@ export function useTableChat(code: string, me: Profile, enabled: boolean, public
     const seen = new Set<string>();
     const receive = async (payload: Partial<SignedChat>) => {
       if (!payload || typeof payload !== "object") return;
-      const m = await openChat(publicKey, code, payload.message, payload.sig);
+      const m = await openChat(publicKey, code, payload.message, payload.sig, Date.now() + offset.current);
       if (!active || !m || seen.has(m.id)) return;
       seen.add(m.id);
       setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev.slice(-99), m]));

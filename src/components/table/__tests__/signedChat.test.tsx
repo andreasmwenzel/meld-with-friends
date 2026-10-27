@@ -12,7 +12,7 @@ vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({ channel: mocks.
 vi.mock("@/lib/api", () => ({ api: mocks.api }));
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ format: "der", type: "spki" }).subarray(-32).toString("base64url");
-const line = { id: "one", from: "other", name: "Server name", text: "Hello table", at: 123 };
+const line = { id: "one", from: "other", name: "Server name", text: "Hello table", at: Date.now() };
 const signed = (code = "BCDFGH", privateKey = keys.privateKey): SignedChat => {
   const message = chatMessage(code, line);
   return { message, sig: sign(null, Buffer.from(message), privateKey).toString("base64url") };
