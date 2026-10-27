@@ -9,7 +9,7 @@ vi.mock("@/lib/supabase/server", () => ({
 beforeEach(() => { exchange.mockReset().mockResolvedValue({ error: null }); });
 
 describe("auth callback", () => {
-  it.each(["/t/BCDFGH", "/home?new=1"])("exchanges the PKCE code and keeps %s", async next => {
+  it.each(["/t/BCDFGH", "/?new=1"])("exchanges the PKCE code and keeps %s", async next => {
     const response = await GET(new Request(`https://meld.example/auth/callback?code=pkce-code&next=${encodeURIComponent(next)}`));
     expect(exchange).toHaveBeenCalledWith("pkce-code");
     expect(response.headers.get("location")).toBe(`https://meld.example${next}`);
@@ -17,7 +17,7 @@ describe("auth callback", () => {
 
   it.each(["//evil.example", "/\\evil.example", "/\t/evil.example", "https://evil.example", "//["])("rejects unsafe next %j", async next => {
     const response = await GET(new Request(`https://meld.example/auth/callback?code=pkce-code&next=${encodeURIComponent(next)}`));
-    expect(response.headers.get("location")).toBe("https://meld.example/home");
+    expect(response.headers.get("location")).toBe("https://meld.example/");
   });
 
   it("does not redirect a failed code exchange", async () => {

@@ -127,7 +127,7 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
                       <button className="tap text-xs text-deck-blue underline" onClick={() => addFriend(p.id)}>Add friend</button>
                     )}
                     {!mine && mates?.[p.id] === "pending_out" && <span className="text-xs text-ink-soft">Request sent</span>}
-                    {!mine && mates?.[p.id] === "pending_in" && <Link href="/home" className="tap text-xs text-deck-blue underline">Accept in lobby</Link>}
+                    {!mine && mates?.[p.id] === "pending_in" && <Link href="/" className="tap text-xs text-deck-blue underline">Accept in lobby</Link>}
                     {!mine && mates?.[p.id] === "guest" && <span className="text-xs text-ink-soft" title="Guests can be added once they save an account">guest</span>}
                     {isHost && !mine && (
                       <button className="tap text-xs text-deck-blue underline" onClick={() => makeHost(p.id, p.display_name)} disabled={busy}>Make host</button>
@@ -193,7 +193,7 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
                 </button>
               )}
               {seated < 4 && guest && (
-                <p className="mt-4 text-xs text-ink-soft">Computer players are for saved accounts. <Link href="/home" className="text-deck-blue underline">Add an email</Link> to seat one.</p>
+                <p className="mt-4 text-xs text-ink-soft">Computer players are for saved accounts. <Link href="/" className="text-deck-blue underline">Add an email</Link> to seat one.</p>
               )}
               <button className="btn btn-brass mt-2 w-full" onClick={start} disabled={busy || seated < 4 || humans < 1}>Deal the first hand</button>
             </>

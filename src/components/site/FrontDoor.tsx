@@ -8,11 +8,6 @@ import { AuthPanel } from "@/components/site/AuthPanel";
 import { GuestStart } from "@/components/site/GuestStart";
 import { SignInToggle } from "@/components/site/SignInToggle";
 import { HowToPlay } from "@/components/site/HowToPlay";
-import { TableList } from "@/components/lobby/TableList";
-import { NameChange } from "@/components/site/NameChange";
-import { LiveRefresh } from "@/components/lobby/LiveRefresh";
-import type { TableSummary } from "@/lib/tableStatus";
-import type { RulesPatch } from "@/components/rules/rules";
 
 /** The front door frame: one screen tall, never scrolls; only the table list scrolls inside it. */
 export function FrontDoor({ children }: { children: ReactNode }) {
@@ -29,10 +24,10 @@ export function FrontDoor({ children }: { children: ReactNode }) {
 }
 
 /** Your hand, held at the bottom edge of the screen. Purely decorative; it crops when space runs short. */
-function HeldHand({ centred = false }: { centred?: boolean }) {
+function HeldHand() {
   return (
     <div aria-hidden className="pointer-events-none relative min-h-0 flex-1 overflow-hidden">
-      <div className={`absolute left-1/2 -translate-x-1/2 ${centred ? "top-1/2 -translate-y-1/2" : "top-3"}`}>
+      <div className="absolute left-1/2 top-3 -translate-x-1/2">
         <Fan cards={["AS0", "TS0", "KS0", "QS0", "JS0", "JD0"]} width={80} spread={8} />
       </div>
     </div>
@@ -56,40 +51,6 @@ export function Welcome() {
         <GitHubLink />
       </Foot>
       <HeldHand />
-    </>
-  );
-}
-
-export function Returning({ name, fullName, guest, tables, defaults, live = true }: {
-  name: string | null; fullName?: string | null; guest: boolean; tables: TableSummary[]; defaults: RulesPatch | null; live?: boolean;
-}) {
-  const waiting = tables.filter((t) => t.yours).length;
-  const lede = !tables.length
-    ? "You are not sitting at a table yet. Deal one and send the code, or type the code a friend sent you."
-    : waiting === 0 ? "Nothing is waiting on you right now."
-    : waiting === 1 ? "One table is waiting on you." : `${waiting} tables are waiting on you.`;
-  return (
-    <>
-      <section className="shrink-0">
-        <h1 className="display" style={{ fontSize: "clamp(38px, 10.5vw, 60px)" }}>Evening, {name ?? "friend"}.</h1>
-        <p className="mt-1.5 text-chalk-faint">{lede}</p>
-        {fullName && <div className="mt-1"><NameChange name={fullName} /></div>}
-      </section>
-      {tables.length ? (
-        <section aria-label="Your tables" className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-chalk-ghost">
-          <TableList tables={tables} />
-        </section>
-      ) : <HeldHand centred />}
-      <div className="-mx-2 mt-4 max-h-[62dvh] shrink-0 overflow-y-auto overscroll-contain px-2 pt-1">
-        <GuestStart signedIn defaults={defaults} />
-      </div>
-      <Foot>
-        <Link href="/practice" className="tap-link text-chalk-faint hover:text-chalk">Practice hand</Link>
-        <Link href="/home" className="tap-link text-chalk-faint hover:text-chalk">
-          {guest ? "Keep your account" : "Friends and past games"}
-        </Link>
-      </Foot>
-      {live && <LiveRefresh />}
     </>
   );
 }

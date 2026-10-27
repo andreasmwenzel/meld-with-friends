@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useCaptcha } from "@/lib/captcha";
 import { authRetrySeconds, startAuthRetry } from "./authRetry";
 
-export function AuthPanel({ next = "/home" }: { next?: string }) {
+export function AuthPanel({ next = "/" }: { next?: string }) {
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [message, setMessage] = useState("");

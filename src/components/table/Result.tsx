@@ -180,7 +180,7 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
               {host === null
                 ? <button className="btn btn-brass" disabled={busy} onClick={onRematch}>Play again</button>
                 : <span className="text-sm text-ink-soft">Waiting for {host} to deal again.</span>}
-              <Link href="/home" className={host === null ? "text-sm text-ink-soft underline hover:text-ink" : "btn btn-ink"}>Back to your tables</Link>
+              <Link href="/" className={host === null ? "text-sm text-ink-soft underline hover:text-ink" : "btn btn-ink"}>Back to your tables</Link>
               {replayHref && <Link href={replayHref} className="text-sm text-ink-soft underline hover:text-ink">Review every hand</Link>}
             </>
           ) : view.legal.canAdvanceHand ? next : <span className="text-sm text-ink-soft">Waiting for the next deal.</span>}

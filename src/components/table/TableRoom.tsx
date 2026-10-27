@@ -86,7 +86,7 @@ function Header({ code }: { code: string }) {
       <div className="flex items-center gap-2 text-sm sm:gap-3 text-chalk-faint">
         <span className="hidden min-[400px]:inline">Table</span>
         <span className="code text-chalk" style={{ fontSize: 22, letterSpacing: ".14em" }}>{code}</span>
-        <Link href="/home" className="tap hover:text-chalk">Leave</Link>
+        <Link href="/" className="tap hover:text-chalk">Leave</Link>
       </div>
     </header>
   );

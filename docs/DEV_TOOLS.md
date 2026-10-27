@@ -117,13 +117,11 @@ shoots about one time in ten, since bots rarely hold a shooting hand. A small fu
 
 ## Front door: `/dev/welcome`
 
-The landing page with sample tables, so the returning-player view can be checked without signing in.
-`?tables=N` shows the first N sample tables (`?tables=0` is the empty lobby), `?as=guest` shows a guest's
-footer, and `?as=new` shows the signed-out welcome.
+The signed-out front door at `/`, without signing out.
 
 ## Lobby: `/dev/home`
 
-The signed-in lobby at `/home` with the same sample tables. `?tables=N` limits them (`?tables=0` is the
+The signed-in lobby at `/` with sample tables. `?tables=N` limits them (`?tables=0` is the
 empty lobby), `?as=guest` shows a guest's lobby and `?new=1` the open deal panel. Friends and past games
 fetch from the API, so without a session they show their loading or error notes.
 
