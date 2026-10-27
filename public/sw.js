@@ -17,7 +17,7 @@ function safeUrl(value) {
     const url = new URL(value, self.location.origin);
     if (url.origin === self.location.origin && /^\/t\/[A-Za-z0-9]+$/.test(url.pathname)) return url.href;
   } catch { /* Fall back to the lobby for malformed payloads. */ }
-  return new URL("/home", self.location.origin).href;
+  return new URL("/", self.location.origin).href;
 }
 
 self.addEventListener("notificationclick", event => {
