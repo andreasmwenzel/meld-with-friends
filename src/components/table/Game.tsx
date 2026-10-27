@@ -26,6 +26,7 @@ import { describeConstraint } from "@/engine/rules";
 import { cardLabel } from "@/engine/deck";
 import { motionTimings, flyFrom, sweepTo } from "./motion";
 import { newLogLines, speakLine } from "./announce";
+import { DOUBLE_TAP_MS, isRealPress, isTimedActivation, releasePress, secondPress, type Armed, type Press } from "./tapTwice";
 
 type ClientAction = Action extends infer A ? (A extends Action ? Omit<A, "seat"> : never) : never;
 
@@ -35,8 +36,6 @@ const subscribeWide = (cb: () => void) => { const mq = window.matchMedia(WIDE); 
 const readWide = () => window.matchMedia(WIDE).matches;
 type MenuTab = "score" | "hand" | "talk" | "options";
 const TURN_PREFIX = "Your turn · ";
-/** With tap twice to play, a second tap on a lifted card within this long plays it; a later one puts it down. */
-const DOUBLE_TAP_MS = 500;
 /** How far a lifted card rises out of the hand. */
 const LIFT_PX = 14;
 
@@ -64,7 +63,9 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   const [busy, setBusy] = useState(false);
   /** Card lifted awaiting a second tap; only valid for the view revision it was lifted in.
    *  While `open`, a second tap plays it (the card wears its ring); once the window closes a tap puts it down. */
-  const [armed, setArmed] = useState<{ card: CardId; rev: number; open: boolean; timed: boolean } | null>(null);
+  const [armed, setArmed] = useState<Armed | null>(null);
+  /** The last pointer press on a hand card; a click not just after it was let go is a keyboard or screen-reader press. */
+  const lastPress = useRef<Press | null>(null);
   /** The card you just played, held up in your hand while the play is sent. */
   const [sending, setSending] = useState<CardId | null>(null);
   /** Where that card sat in your hand, so it flies to the table from there. */
@@ -548,11 +549,12 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
     if (view!.phase === "playing") {
       if (!view!.legal.playableCards.includes(card)) return;
       if (cardPrefs.confirmPlay) {
-        const again = armed && armed.card === card && armed.rev === view!.rev;
         // A quick second tap plays the card; coming back to it later puts it down. Keyboard and screen-reader
-        // presses (untimed) can't be quick, so for them any second press plays. The Play button always plays.
-        if (!again) { setArmed({ card, rev: view!.rev, open: true, timed }); return; }
-        if (!armed.open && timed) { setArmed(null); return; }
+        // presses (untimed, see isTimedActivation) can't be quick, so for them any second press plays.
+        // The Play button always plays.
+        const next = secondPress(armed, card, view!.rev, timed);
+        if (next === "arm") { setArmed({ card, rev: view!.rev, open: true, timed }); return; }
+        if (next === "put-back") { setArmed(null); return; }
       }
       play(card);
       return;
@@ -729,7 +731,11 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
               const ringed = (sel && !isArmed) || (isArmed && armed!.open);
               return (
                 <span key={c} data-keep-armed={isArmed || armedCard ? "" : undefined} className="shrink-0" style={{ marginLeft: -overlap }} onClick={() => { if (view.phase === "playing" && isMyTurn && !playable) showHint(); }}>
-                  <button data-hand-card={c} onClick={(e) => toggle(c, e.detail !== 0)} disabled={busy || !playable} aria-pressed={sel}
+                  <button data-hand-card={c}
+                    onPointerDown={(e) => { lastPress.current = { card: c, pointerId: e.pointerId, real: isRealPress(e.pointerType, window.matchMedia("(any-pointer: fine)").matches), upAt: null }; }}
+                    onPointerUp={(e) => { lastPress.current = releasePress(lastPress.current, c, e.pointerId, e.timeStamp); }}
+                    onPointerCancel={() => { lastPress.current = null; }}
+                    onClick={(e) => { const timed = isTimedActivation(lastPress.current, c, e.timeStamp, e.detail); lastPress.current = null; toggle(c, timed); }} disabled={busy || !playable} aria-pressed={sel}
                     className="group relative block touch-manipulation rounded-[10px] focus-visible:z-20 disabled:pointer-events-none"
                     style={{ transform: sel || lit?.includes(c) ? `translateY(-${LIFT_PX}px)` : undefined, transition: "transform .14s ease" }}>
                     {suggested?.includes(c) && <SuggestedMark />}
