@@ -109,8 +109,11 @@ export class LabStore {
       if (!raw) return false;
       const saved = JSON.parse(raw) as Partial<LabSnapshot>;
       if (!saved.base || !saved.actions) return false;
-      this.states = replay(saved.base, saved.actions);
-      this.set({ ...saved, cursor: Math.min(saved.cursor ?? 0, saved.actions.length), notes: [], error: null } as LabSnapshot, { rewrite: true });
+      const played = replayLog(saved.base, saved.actions);
+      // Map the old cursor through its prefix so inserted decisions keep undo/redo in place.
+      const cursor = replayLog(saved.base, saved.actions.slice(0, saved.cursor ?? 0)).actions.length;
+      this.states = played.states;
+      this.set({ ...saved, actions: played.actions, cursor, notes: [], error: null } as LabSnapshot, { rewrite: true });
       return true;
     } catch { return false; }
   }
@@ -212,7 +215,10 @@ const canonical = (value: unknown): string => JSON.stringify(value, (_k, v) => v
  */
 export function parseImport(data: unknown): { base: GameState; actions: Action[]; note: string } {
   const obj = data as { base?: GameState; state?: GameState; actions?: Action[] } & Partial<GameState>;
-  if (obj.base && Array.isArray(obj.actions)) return { base: obj.base, actions: obj.actions, note: `${obj.actions.length} actions` };
+  if (obj.base && Array.isArray(obj.actions)) {
+    const played = replayLog(obj.base, obj.actions);
+    return { base: obj.base, actions: played.actions, note: `${played.actions.length} actions` };
+  }
   const state = obj.state ?? (obj.phase && obj.players ? (obj as GameState) : null);
   if (!state) throw new Error("Expected a GameState, { state, actions } or { base, actions }");
   const actions = obj.actions ?? [];
