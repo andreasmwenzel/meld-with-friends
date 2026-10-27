@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { viewFor, type Action, type GameState, type SeatIndex } from "@/engine";
 import { buildScenario, checkState, SEATS, type ScenarioSpec } from "@/engine/scenario";
 import { PRESETS } from "@/engine/scenarios";
 import { Game } from "@/components/table/Game";
+import type { ChatMessage, TableChat } from "@/components/table/ChatDock";
 import type { Snapshot } from "@/components/table/types";
 import { decodeSpec, encodeSpec, labStore, parseImport, type LabSnapshot } from "./labStore";
 import { LabPanel } from "./LabPanel";
@@ -69,12 +70,53 @@ function exposeConsole() {
   });
 }
 
+const SAMPLE_TALK: [SeatIndex, string][] = [
+  [1, "Who dealt this mess?"],
+  [2, "Partner, I have nothing. Good luck."],
+  [3, "Nice pinochle last hand."],
+  [1, "Ready when you are"],
+  [2, "👍"],
+];
+
+/**
+ * ?chat=1: a local stand-in for table talk, so the board's talk button and popover can be checked without a
+ * Realtime channel. Sample messages from the other seats arrive unread (`?unread=N`, default 3); what you send
+ * stays in the browser. `meld.say("text", seat)` posts a message from another seat.
+ */
+function useLabChat(enabled: boolean, view: SeatIndex): TableChat | undefined {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [unread, setUnread] = useState(0);
+  const visible = useRef(false);
+  useEffect(() => {
+    if (!enabled) return;
+    const n = Math.max(0, Math.min(SAMPLE_TALK.length, Number(new URLSearchParams(window.location.search).get("unread") ?? 3)));
+    const others = SAMPLE_TALK.filter(([seat]) => seat !== view);
+    const sample = others.map(([seat, text], i) => ({ id: `lab-${i}`, from: `lab${seat}`, name: NAMES[seat], text, at: i }));
+    setMessages(sample); // eslint-disable-line react-hooks/set-state-in-effect -- seeds the sample talk once from the URL
+    setUnread(Math.min(n, sample.length));
+  }, [enabled, view]);
+  const setVisible = useCallback((v: boolean) => { visible.current = v; if (v) setUnread(0); }, []);
+  const add = useCallback((from: SeatIndex, text: string) => {
+    setMessages((prev) => [...prev.slice(-99), { id: crypto.randomUUID(), from: `lab${from}`, name: NAMES[from], text: text.trim().slice(0, 300), at: Date.now() }]);
+    if (from !== view && !visible.current) setUnread((u) => u + 1);
+  }, [view]);
+  const send = useCallback((text: string) => { if (text.trim()) add(view, text); }, [add, view]);
+  useEffect(() => {
+    if (!enabled) return;
+    const meld = (window as unknown as { meld?: Record<string, unknown> }).meld;
+    if (meld) meld.say = (text: string, seat: SeatIndex = ((view + 1) % 4) as SeatIndex) => add(seat, text);
+  });
+  return enabled ? { messages, unread, setVisible, send, me: `lab${view}` } : undefined;
+}
+
 export function Lab() {
   const [ready, setReady] = useState(false);
   // ?broadcast=1: game events reach the board as on a live table (see labBroadcast.ts); ?autoplay=1 plays the hand out.
   const [broadcast] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("broadcast") === "1" ? createLabBroadcast() : null);
   const [chrome, setChrome] = useState(true);
   const snap = useSyncExternalStore(labStore?.subscribe ?? (() => () => {}), () => labStore?.get(), () => null);
+  const [talk] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("chat") === "1");
+  const chat = useLabChat(talk, snap?.view ?? 0);
 
   useEffect(() => {
     const real = window.fetch;
@@ -144,7 +186,7 @@ export function Lab() {
     <div className={`flex h-dvh flex-col overflow-hidden ${chrome ? "lg:pr-[360px]" : ""}`}>
       <Game key={`${snap.epoch}:${snap.view}:${snap.bots.join("")}`} local={snap.flags.local} code={CODE} me={me} snap={table}
         {...broadcast ? { feed: broadcast.feed, inspect: broadcast.inspect } : { rev: state.rev }}
-        connection={snap.flags.reconnecting ? "reconnecting" : "ok"} onTableChange={() => {}} />
+        connection={snap.flags.reconnecting ? "reconnecting" : "ok"} onTableChange={() => {}} chat={chat} />
       {broadcast && <pre id="lab-broadcast" hidden />}
       {chrome ? <LabPanel snap={snap} state={state} /> : <style>{"nextjs-portal{display:none}"}</style>}
     </div>
