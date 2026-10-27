@@ -42,3 +42,8 @@ export async function broadcastTable(code: string, payload: TableEvent) {
 export async function notifyInvited(userIds: string[]) {
   await broadcast(userIds.map(id => ({ topic: `invites:${id}`, event: "invites", payload: { type: "invites" } })), "Invitation", { count: userIds.length });
 }
+
+/** Matches useTableChat's existing transient channel and message shape. */
+export async function broadcastChat(code: string, message: { id: string; from: string; name: string; text: string; at: number }) {
+  await broadcast([{ topic: `chat:${normalizeCode(code)}`, event: "message", payload: message }], "Bot chat", { code });
+}

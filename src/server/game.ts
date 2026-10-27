@@ -14,6 +14,7 @@ import { ApiError, checkDb } from "./errors";
 import { tableByCode } from "./tables";
 import { broadcastTable, type GameEvent } from "./realtime";
 import { recordGameResult } from "./history";
+import { scheduleHandTalk } from "./botTableTalk";
 
 async function loadGame(code: string, userId: string) {
   const table = await tableByCode(code);
@@ -70,6 +71,7 @@ export async function act(code: string, userId: string, action: Action, expected
   }
   checkDb(error);
   if (committed === null) return getView(code, userId);
+  scheduleHandTalk(table, game.id, game.state, next, action);
   scheduleTurnNotification(game.id);
   if (next.phase === "game_over") void recordGameResult(game.id).catch(error => console.error("Game result recording failed", error));
   await broadcastTable(table.code, gameEvent(game.id, game.state, next, action));
@@ -150,6 +152,7 @@ async function performBotTick(code: string, meldingOnly: boolean): Promise<{ act
       return { acted: false, rev: current.data!.rev };
     }
     checkDb(error);
+    scheduleHandTalk(table, game.id, state, next, action);
     if (next.phase === "game_over") void recordGameResult(game.id).catch(error => console.error("Game result recording failed", error));
     scheduleTurnNotification(game.id);
     await broadcastTable(table.code, gameEvent(game.id, state, next, action));

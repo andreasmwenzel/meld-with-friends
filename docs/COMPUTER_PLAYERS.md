@@ -64,6 +64,29 @@ Bots occupy `seats.bot`, with a null `user_id`. The six names are Mabel, Otto, P
 
 Each bot action uses `commit_bot_action`. That service-role-only transaction verifies bot ownership, compares the old revision, updates the game, and appends the seat and action to `game_actions`. A stale revision returns a null commit result without updating the game or inserting an audit row. The worker translates that result to `acted: false` with the current revision. Migration `0004_bot_conflict_noop.sql` makes this an ordinary return rather than raising `40001`: the live database API retried that serialization error until an upstream timeout during concurrent ticks. The winner broadcasts the committed revision. Melding uses one transaction per declaration or confirmation; concurrent workers may split progress across those actions, but cannot duplicate any revision. A dedicated melding-only path prevents the human action hook from accidentally playing a bot turn if another request has already finished melding.
 
+## Table talk
+
+A seated bot offers a short comment every three or four deals, alternating those gaps with a
+starting offset derived from the table id. The first deal stays quiet. Throw-ins and all-pass
+redeals count as deals too. One bot speaks per event, even when several bots are seated.
+A successful rematch also gets a greeting, separately from the hand cadence.
+
+The pure, seeded picker in `src/lib/bots/tableTalk.ts` uses only the scored hand record, public
+scores and seat names. It reacts to made or set contracts, big opposing bids, moon attempts,
+big meld, score gaps and game results. It receives no hands, passes, private views or deal seed.
+Display names in lines are bounded to keep comments under 80 characters.
+
+Both human and bot scoring actions schedule a comment only after winning the revision-guarded
+commit. Losing ticks and duplicate human actions schedule nothing. `src/server/botTableTalk.ts`
+uses Next.js `after()` for seat-name lookup and delivery, so chat cannot delay the action response;
+lookup, scheduling and delivery failures are logged. There are no retries or stored messages.
+Delivery is best effort, with at most one send attempt per committed event. A disconnected player
+may miss a line, just as with human chat.
+
+Bot messages use the existing `chat:{code}` channel's `message` event and
+`{ id, from, name, text, at }` shape. `from` is `bot:{tableId}:{seat}`, distinct from human UUIDs;
+the stable event id also lets the client deduplicate delivery. No chat UI changes are needed.
+
 ## Measured results
 
 Measured results are recorded below after running `node scripts/bot-arena.mjs 50 3` and `node scripts/bot-arena.mjs 50 60`. Those arena runs alternated the bot team's seats and used complete games to the former default 1500 target with classic scoring. The random team chooses random legal trump, passes, and plays, declares full meld, and randomly bids one legal increment with 25% probability rather than selecting arbitrary unbounded bid amounts. These results measure performance against that baseline, not against skilled humans.

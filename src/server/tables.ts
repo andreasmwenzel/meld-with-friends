@@ -9,6 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { generateTableCode } from "@/lib/codes";
 import { ApiError, checkDb } from "./errors";
 import { broadcastTable } from "./realtime";
+import { scheduleRematchTalk } from "./botTableTalk";
 import { codeSchema, rulesSchema } from "./validation";
 
 export interface PausedTable { by: string; name: string; reason: string | null; at: string }
@@ -180,6 +181,7 @@ export async function rematch(code: string, userId: string) {
     p_table: table.id, p_user: userId, p_previous: game.id, p_rules: table.rules, p_state: state,
   });
   checkDb(error);
+  scheduleRematchTalk(table, game.id);
   await broadcastTable(table.code, { type: "seats" });
   await broadcastTable(table.code, { type: "game", rev: state.rev });
   return { code: table.code, rev: state.rev };

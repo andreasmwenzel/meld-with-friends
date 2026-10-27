@@ -1,5 +1,7 @@
 vi.mock("@/server/bans", () => ({ isBanned: async () => false }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { scheduleRematchTalk } from "../botTableTalk";
+vi.mock("../botTableTalk", () => ({ scheduleRematchTalk: vi.fn() }));
 import { resolveRules } from "@/engine/scoring";
 import { newGame } from "@/engine";
 import { rematch, standIn, leaveSeat } from "@/server/tables";
@@ -37,6 +39,7 @@ beforeEach(() => {
 describe("rematch", () => {
   it("creates a fresh game using current rules and the next dealer, then broadcasts both events", async () => {
     expect(await rematch(table.code, "host")).toEqual({ code: table.code, rev: 0 });
+    expect(scheduleRematchTalk).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id: "table", code: table.code }), "old-game");
     expect(filters).toEqual([["id", "old-game"]]);
     expect(mocks.rpc).toHaveBeenCalledWith("rematch_game", {
       p_table: "table", p_user: "host", p_previous: "old-game", p_rules: resolveRules({ target: 300 }),
@@ -76,6 +79,7 @@ describe("rematch", () => {
     mocks.rpc.mockResolvedValue({ error: { code, message: "Table changed" } });
     expect((await rematchRoute(request(), context)).status).toBe(409);
     expect(mocks.broadcast).not.toHaveBeenCalled();
+    expect(scheduleRematchTalk).not.toHaveBeenCalled();
   });
 });
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { broadcastTable, notifyInvited } from "@/server/realtime";
+import { broadcastTable, broadcastChat, notifyInvited } from "@/server/realtime";
 
 const send = vi.fn();
 beforeEach(() => {
@@ -38,4 +38,12 @@ it("nudges each invited player's lobby in one request, with nothing in the paylo
   ] });
   await notifyInvited([]);
   expect(send).toHaveBeenCalledTimes(1);
+});
+
+it("sends bot chat with the existing client topic, event and message shape", async () => {
+  const message = { id: "bot:game:hand:3", from: "bot:table:1", name: "Otto", text: "Nice set, Margaret.", at: 123 };
+  await broadcastChat(" bcdfgh ", message);
+  expect(JSON.parse(send.mock.calls[0][1].body)).toEqual({ messages: [
+    { topic: "chat:BCDFGH", event: "message", payload: message, private: false },
+  ] });
 });
