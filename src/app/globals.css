@@ -240,6 +240,8 @@ body {
 }
 .sit-out-fold .sit-out-card { animation: sit-out-gather 360ms cubic-bezier(.3,.7,.2,1) both; }
 .sit-out-fold .sit-out-stack { animation: sit-out-settle 260ms cubic-bezier(.4,0,.2,1) 340ms both; }
+[data-motion="quick"] .sit-out-fold .sit-out-card { animation-duration: 200ms; }
+[data-motion="quick"] .sit-out-fold .sit-out-stack { animation-duration: 150ms; animation-delay: 190ms; }
 [data-motion="off"] .sit-out-fold .sit-out-card, [data-motion="off"] .sit-out-fold .sit-out-stack { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   .sit-out-fold .sit-out-card, .sit-out-fold .sit-out-stack { animation: none; }
