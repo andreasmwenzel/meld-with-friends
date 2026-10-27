@@ -11,8 +11,8 @@ export async function createClient() {
   const bearer = (await headers()).get("authorization");
   const global = bearer?.toLowerCase().startsWith("bearer ") ? { headers: { Authorization: bearer } } : undefined;
   // auth-js starts loading the session (and reads Date.now() for token expiry) as soon as the client is
-  // built. With Cache Components a prerender can see cookies but must not see the clock, so building it
-  // waits for a real request. Request handlers and server actions resolve this immediately.
+  // built. With Cache Components a prerender can see cookies but must not see the clock, so io() suspends
+  // the prerender here (prefetches still work). Request handlers and server actions resolve it immediately.
   await io();
   return createServerClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
     global,
