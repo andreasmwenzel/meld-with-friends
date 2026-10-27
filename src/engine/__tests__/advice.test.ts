@@ -35,21 +35,21 @@ function follow(state: GameState, stop: (s: GameState) => boolean, seen: string[
 }
 
 describe('coach advice on the curated practice deal', () => {
-  it('suggests a bid with a limit that wins the auction at 31', () => {
+  it('suggests a bid with a limit that wins the auction at 26', () => {
     const state = practiceToSouth();
     const view = viewFor(state, 0);
     const est = bidEstimate(view);
     expect(est).toMatchObject({ trump: 'H', meld: 11, ceiling: 31 });
     expect(est.near?.needs).toBe('JH');
     const advice = adviseBid(view, { nameOf })!;
-    expect(advice.action).toEqual({ type: 'bid', seat: 0, amount: 27 });
-    expect(advice.headline).toBe('Bid 27, up to 31');
+    expect(advice.action).toEqual({ type: 'bid', seat: 0, amount: 26 });
+    expect(advice.headline).toBe('Bid 26, up to 31');
     expect(advice.reason).toContain('Your meld in hearts is 11');
     expect(advice.reason).toContain('Walt passed');
     expect(advice.reason).toContain('J♥');
     expect(advice.cards.length).toBeGreaterThan(0);
     const won = follow(state, s => s.phase !== 'bidding');
-    expect(won).toMatchObject({ phase: 'declaring_trump', bidder: 0, highBid: { amount: 31 } });
+    expect(won).toMatchObject({ phase: 'declaring_trump', bidder: 0, highBid: { amount: 26 } });
   });
 
   it('names hearts for length and the nearly complete run', () => {
@@ -78,7 +78,7 @@ describe('coach advice on the curated practice deal', () => {
     const over = follow(practiceToSouth(), s => s.phase === 'hand_over', seen);
     expect(over.phase).toBe('hand_over');
     expect(new Set(seen)).toEqual(new Set(['bidding', 'declaring_trump', 'passing_back', 'melding', 'playing']));
-    expect(over.history[0]).toMatchObject({ bidder: 0, bid: 31, wentSet: false });
+    expect(over.history[0]).toMatchObject({ bidder: 0, bid: 26, wentSet: false });
   });
 });
 

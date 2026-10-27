@@ -1,4 +1,5 @@
 import type { CardId, PlayerView, SeatIndex, Suit } from '../types';
+import { auction } from './bid';
 import { ranks, seats, suits, suitOf } from './shared';
 
 export function knowledge(view: PlayerView) {
@@ -12,7 +13,9 @@ export function knowledge(view: PlayerView) {
       if (view.trump && suitOf(play.card) !== view.trump) voids[play.seat].add(view.trump);
     }
   }
-  const known = seats.map(seat => seat === view.seat ? [...view.hand] : [...new Set(view.melds[seat].flatMap(m => m.cards))].filter(c => !gone.has(c)));
+  // Cards this seat passed went to its partner, who still holds any not played or passed back.
+  const passedToPartner = (seat: SeatIndex) => seat === (view.seat + 2) % 4 ? view.recap.myPassedOut.filter(c => !view.hand.includes(c)) : [];
+  const known = seats.map(seat => seat === view.seat ? [...view.hand] : [...new Set([...view.melds[seat].flatMap(m => m.cards), ...passedToPartner(seat)])].filter(c => !gone.has(c)));
   const deck = suits.flatMap(s => [...ranks].flatMap(r => [0, 1].map(c => `${r}${s}${c}` as CardId)));
   const unknown = deck.filter(c => !gone.has(c) && !known.some(hand => hand.includes(c)));
   const estimates = seats.map(seat => ({ seat, count: view.handCounts[seat], known: known[seat], bid: view.bids.filter(b => b.seat === seat && b.amount !== null).at(-1)?.amount ?? null,
@@ -20,9 +23,44 @@ export function knowledge(view: PlayerView) {
   return { gone, voids, known, unknown, estimates };
 }
 
-/** Randomized constrained assignment. Backtracking preserves counts, meld ownership and voids. */
+/**
+ * How strong a seat's public calls say its hand is: -0.5 for a pass without a bid while the other
+ * side held the bid or nobody had bid, 0 before it has called or for a pass over its partner's
+ * high bid (the same neutral reading `partnerSignal` uses), and 0.4 to 1 for a bid, rising with
+ * how far above the minimum it went.
+ */
+export function bidStrength(view: PlayerView, seat: SeatIndex) {
+  const calls = auction(view).filter(b => b.seat === seat);
+  const bids = calls.filter(b => b.amount !== null);
+  if (!bids.length) return calls.some(c => c.over !== (seat + 2) % 4) ? -.5 : 0;
+  if (bids.some(b => b.shoot)) return 1;
+  const top = Math.max(...bids.map(b => b.amount!));
+  return Math.min(1, .4 + .6 * (top - view.rules.minBid) / (10 * view.rules.bidStep));
+}
+
+/**
+ * Relative odds that a hidden card sits with a seat, from the auction: bidders hold more aces and
+ * trump, passers fewer; the declarer chose trump and was passed more of it, so its partner holds less.
+ */
+export function cardWeights(view: PlayerView) {
+  const strength = seats.map(seat => bidStrength(view, seat));
+  const passing = view.rules.passCount > 0;
+  return (seat: SeatIndex, card: CardId) => {
+    let log = 0;
+    if (card[0] === 'A') log += .6 * strength[seat];
+    if (view.trump && suitOf(card) === view.trump) {
+      log += .4 * strength[seat];
+      if (seat === view.bidder) log += passing ? .8 : .5;
+      else if (passing && view.bidder !== null && seat === (view.bidder + 2) % 4) log -= .4;
+    }
+    return Math.exp(log);
+  };
+}
+
+/** Randomized constrained assignment. Backtracking preserves counts, meld ownership and voids; the auction weights the order seats are tried. */
 export function sampleDeal(view: PlayerView, rng: () => number): CardId[][] | null {
   const k = knowledge(view);
+  const weight = cardWeights(view);
   const hands = k.known.map(h => [...h]);
   const capacity = seats.map(s => view.handCounts[s] - hands[s].length);
   const pool = k.unknown.map(card => ({ card, tie: rng() })).sort((a, b) => {
@@ -34,7 +72,8 @@ export function sampleDeal(view: PlayerView, rng: () => number): CardId[][] | nu
     if (++nodes > 3000) return false;
     if (i === pool.length) return capacity.every(n => n === 0);
     const card = pool[i].card;
-    const candidates = seats.filter(s => s !== view.seat && capacity[s] > 0 && !k.voids[s].has(suitOf(card))).map(s => ({ s, tie: rng() })).sort((a,b) => a.tie-b.tie);
+    // Weighted order without replacement: the first seat tried is drawn in proportion to its weight.
+    const candidates = seats.filter(s => s !== view.seat && capacity[s] > 0 && !k.voids[s].has(suitOf(card))).map(s => ({ s, tie: Math.log(rng() || Number.MIN_VALUE) / weight(s, card) })).sort((a,b) => b.tie-a.tie);
     for (const { s } of candidates) {
       hands[s].push(card); capacity[s]--;
       if (assign(i + 1)) return true;

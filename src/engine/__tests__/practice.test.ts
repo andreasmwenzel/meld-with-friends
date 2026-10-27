@@ -16,18 +16,17 @@ function winBid(): GameState {
   for (const expected of [
     { type: 'bid', seat: 1, amount: 25 },
     { type: 'pass_bid', seat: 2 },
-    { type: 'bid', seat: 3, amount: 26 },
+    // East lets its partner's bid stand rather than raise it.
+    { type: 'pass_bid', seat: 3 },
   ]) {
     const action = chooseAction(viewFor(state, state.turn!));
     expect(action).toEqual(expected);
     state = applyAction(state, action);
   }
   state = applyAction(state, { type: 'bid', seat: 0, amount: 31 });
-  for (const seat of [1, 3] as const) {
-    const action = chooseAction(viewFor(state, seat));
-    expect(action).toEqual({ type: 'pass_bid', seat });
-    state = applyAction(state, action);
-  }
+  const action = chooseAction(viewFor(state, 1));
+  expect(action).toEqual({ type: 'pass_bid', seat: 1 });
+  state = applyAction(state, action);
   expect(state).toMatchObject({ phase: 'declaring_trump', bidder: 0, highBid: { amount: 31 } });
   return state;
 }
@@ -60,7 +59,7 @@ describe('curated practice deal', () => {
     expect(computeMeld(view.hand, 'H').items.some(item => item.kind === 'run')).toBe(false);
   });
 
-  it('has both opponents bid once and pass their second turn after a raise to 31', () => {
+  it('has West open, East let it stand, and West pass after a raise to 31', () => {
     winBid();
   });
 

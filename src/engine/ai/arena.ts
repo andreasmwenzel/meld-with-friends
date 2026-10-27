@@ -67,3 +67,43 @@ export function compareScoring(hands = 300, budgetMs = 0, prefix = 'scoring') {
   // Keep the public result small enough for CLI and admin diagnostics.
   return { modern: { ...modern, decisions: undefined }, classic: { ...classic, decisions: undefined }, mismatchedHands };
 }
+
+export type Policy = (view: PlayerView, options: { budgetMs?: number; seed?: string }) => Action;
+/**
+ * Paired head-to-head between two bot policies. Every deal is played twice with the teams
+ * swapped, and both policies get the same sampling seeds, so deal luck cancels out.
+ * `partnerRaises` counts bids over a partner's high bid after both opponents had passed.
+ */
+export function duel(n: number, a: Policy, b: Policy, budgetMs = 0, prefix = 'duel') {
+  const side = () => ({ wins: 0, points: 0, contracts: 0, made: 0, bidTotal: 0, partnerRaises: 0 });
+  const stats = { a: side(), b: side() };
+  let hands = 0;
+  for (let i = 0; i < n; i++) for (const aParity of [0, 1]) {
+    let state = newGame(`${prefix}:${i}`);
+    const who = (seat: SeatIndex) => seat % 2 === aParity ? stats.a : stats.b;
+    for (let step = 0; state.phase !== 'game_over'; step++) {
+      if (step > 15000) throw new Error(`Duel game did not finish: ${i}`);
+      const seat = (state.phase === 'melding' ? state.players.find(p => !p.meldConfirmed)!.seat : state.turn ?? 0) as SeatIndex;
+      const policy = seat % 2 === aParity ? a : b;
+      const action = policy(viewFor(state, seat), { budgetMs, seed: `${prefix}:${i}:${state.rev}` });
+      if (action.type === 'bid' && state.highBid?.seat === (seat + 2) % 4
+        && [1, 3].every(d => state.bids.some(x => x.seat === (seat + d) % 4 && x.amount === null))) who(seat).partnerRaises++;
+      const priorHands = state.history.length;
+      state = applyAction(state, action);
+      if (state.history.length > priorHands) {
+        const record = state.history.at(-1)!;
+        hands++;
+        const bidder = who(record.bidder);
+        bidder.contracts++; bidder.bidTotal += record.bid;
+        if (!record.wentSet && record.shotMade !== false) bidder.made++;
+      }
+    }
+    const aTeam = aParity === 0 ? 'red' : 'blue', bTeam = aParity === 0 ? 'blue' : 'red';
+    if (state.winner === aTeam) stats.a.wins++; else stats.b.wins++;
+    stats.a.points += state.score[aTeam]; stats.b.points += state.score[bTeam];
+  }
+  const games = 2 * n;
+  const summary = (s: ReturnType<typeof side>) => ({ wins: s.wins, winRate: s.wins / games, meanFinalScore: s.points / games,
+    contracts: s.contracts, madeRate: s.contracts ? s.made / s.contracts : 0, meanBid: s.contracts ? s.bidTotal / s.contracts : 0, partnerRaises: s.partnerRaises });
+  return { games, hands, a: summary(stats.a), b: summary(stats.b), meanScoreDiff: (stats.a.points - stats.b.points) / games };
+}
