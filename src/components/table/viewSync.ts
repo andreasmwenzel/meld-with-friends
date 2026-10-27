@@ -7,6 +7,7 @@ import type { TableEvent } from "@/lib/realtime/useTableChannel";
  *   duplicate) fetch nothing. Events arriving together (in the same tick, before the fetch goes out)
  *   share one fetch; events that land while a fetch is running share one follow-up fetch.
  * - While this client's own action is in flight, events wait for its response, which carries the view.
+ *   If it fails or brings no view back, one fetch follows.
  * - A table (seats) event, which is how ready checks arrive, always needs a view fetched after it: the
  *   ready list lives in the view, and the event carries no revision to compare against. A fetch
  *   queued alongside it, or one this client's own control action asks for, serves it too.
@@ -27,8 +28,11 @@ export class ViewSync<V extends { rev: number }> {
   private acting = 0;
   /** A game event arrived that no running request is known to cover. */
   private stale = false;
-  /** A table event arrived while a request was running; fetch once more when it settles. */
-  private dirty = false;
+  /**
+   * An invalidation is waiting for a view: only a request numbered above this one, answered with a
+   * view, covers it. Null when nothing waits. Requests already running when it arrived do not count.
+   */
+  private pending: number | null = null;
   /** A fetch is queued for the end of this tick; requests until then share it. */
   private queued = false;
   /** Bumped by dispose(), so answers to requests from before it are dropped. */
@@ -50,6 +54,7 @@ export class ViewSync<V extends { rev: number }> {
     if (request < this.applied || view.rev < this.rev) return false;
     this.applied = request;
     this.rev = view.rev;
+    if (this.pending !== null && request > this.pending) this.pending = null;
     this.options.apply(view);
     return true;
   }
@@ -90,6 +95,7 @@ export class ViewSync<V extends { rev: number }> {
     this.announced = Math.max(this.announced, rev);
     if (rev <= this.rev) return;
     if (this.loading || this.acting) { this.stale = true; return; }
+    this.pending = this.issued;
     this.request();
   }
 
@@ -99,7 +105,8 @@ export class ViewSync<V extends { rev: number }> {
    */
   invalidate(): void {
     if (this.disposed) return;
-    if (this.loading || this.acting) { this.dirty = true; return; }
+    this.pending = this.issued;
+    if (this.loading || this.acting) return;
     this.request();
   }
 
@@ -138,7 +145,7 @@ export class ViewSync<V extends { rev: number }> {
     this.generation++;
     this.loading = 0;
     this.stale = false;
-    this.dirty = false;
+    this.pending = null;
     this.queued = false;
     for (const timer of this.timers) clearTimeout(timer);
     this.timers.clear();
@@ -146,18 +153,18 @@ export class ViewSync<V extends { rev: number }> {
 
   /**
    * Fetch at the end of this tick, so a burst of events (a game event and a seat event from one
-   * change) costs one GET. A request that goes out meanwhile serves the burst instead.
+   * change) costs one GET. A request that goes out meanwhile serves the burst instead, but only once
+   * it answers with a view: if it fails (an own move rejected without one), settling fetches.
    */
   private request(): void {
     if (this.queued) return;
     this.queued = true;
     const generation = this.generation;
-    const issued = this.issued;
     queueMicrotask(() => {
       if (generation !== this.generation || !this.queued) return;
       this.queued = false;
-      if (this.issued > issued) return;
-      if (this.loading || this.acting) { this.dirty = true; return; }
+      if (this.pending === null || this.loading || this.acting) return;
+      this.pending = null;
       void this.load();
     });
   }
@@ -165,11 +172,12 @@ export class ViewSync<V extends { rev: number }> {
   /** Once nothing is running, fetch if an event is still not covered by what came back. */
   private settle(): void {
     if (this.disposed || this.loading || this.acting) return;
-    const dirty = this.dirty;
+    // One follow-up at most: a failed follow-up is not retried here (polling and resyncs take over).
+    const pending = this.pending !== null;
     const stale = this.stale && this.announced > this.rev;
-    this.dirty = false;
+    this.pending = null;
     this.stale = false;
-    if (dirty || stale) void this.load();
+    if (pending || stale) void this.load();
   }
 }
 

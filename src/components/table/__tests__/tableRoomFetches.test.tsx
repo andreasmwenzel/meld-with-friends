@@ -73,6 +73,7 @@ beforeEach(() => {
     if (!init?.method || init.method === "GET") gets.push(url);
     if (url === `/api/tables/${CODE}`) return Response.json({ ...snap, ready });
     if (url.endsWith("/view")) return Response.json({ ...view, rev: serverRev, ready });
+    if (url.endsWith("/act")) return Response.json({ error: "The table moved on" }, { status: 409 });
     if (url.endsWith("/ready")) {
       // Like the server: record the check, broadcast it, then answer with the table (not the view).
       ready = [...ready, 0];
@@ -183,6 +184,27 @@ describe("a mounted table room", () => {
     await burst([["seats", { type: "seats" }], ["game", { type: "game", rev: serverRev }]]);
     await settle();
     expect(views()).toBe(2);
+  });
+
+  it("fetches the newer view once when your own move is turned down while a game event's fetch is queued", async () => {
+    await room();
+    const card = view.legal.playableCards[0];
+    const button = () => document.querySelector<HTMLButtonElement>(`[data-hand-card="${card}"]`)!;
+    await act(() => { button().click(); }); // the first tap lifts the card
+    await settle();
+    gets = [];
+    serverRev = view.rev + 1;
+    // Another seat's event lands, and the second tap sends the move before its fetch goes out.
+    await act(() => {
+      for (const c of tableChannels()) c.broadcast("game", { type: "game", rev: serverRev });
+      button().click();
+    });
+    await settle();
+    expect(views()).toBe(1);
+    // The board took the newer revision: hearing about it again fetches nothing.
+    await cast("game", { type: "game", rev: serverRev });
+    await settle();
+    expect(views()).toBe(1);
   });
 
   it("fetches the view once when you say you are ready, though the server broadcasts it too", async () => {

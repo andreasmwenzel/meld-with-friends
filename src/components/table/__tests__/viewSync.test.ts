@@ -115,6 +115,35 @@ describe("one fetch per game event", () => {
     expect(tab.applied.at(-1)).toBe(9);
   });
 
+  it("fetches once when its own action fails while an event's fetch is still queued", async () => {
+    const srv = server(8);
+    const tab = client(srv);
+    void tab.sync.load(); await srv.answer();
+    srv.fetches = 0;
+    srv.rev = 9;
+    tab.channel({ type: "game", rev: 9 }); // queues a fetch for the end of the tick
+    tab.sync.begin(); // this client's own move goes out before it
+    await tab.sync.act(() => Promise.reject(new Error("rejected"))).catch(() => {}); // no view comes back
+    await flush();
+    expect(srv.fetches).toBe(1);
+    await srv.answer();
+    expect(tab.applied.at(-1)).toBe(9);
+    expect(srv.pending).toHaveLength(0);
+  });
+
+  it("fetches nothing more when its own action answers with a view while an event's fetch is queued", async () => {
+    const srv = server(8);
+    const tab = client(srv);
+    void tab.sync.load(); await srv.answer();
+    srv.fetches = 0;
+    tab.channel({ type: "game", rev: 9 });
+    const request = tab.sync.begin();
+    await tab.sync.act(async () => { tab.sync.accept({ rev: 9 }, request); });
+    await flush();
+    expect(srv.fetches).toBe(0);
+    expect(tab.applied.at(-1)).toBe(9);
+  });
+
   it("shares one follow-up fetch among events that land while a fetch is running", async () => {
     const srv = server(0);
     const tab = client(srv);
