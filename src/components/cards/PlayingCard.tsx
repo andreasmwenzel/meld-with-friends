@@ -7,7 +7,7 @@ export const SUIT_NAME: Record<Suit, string> = { S: "spades", H: "hearts", D: "d
 export const RANK_LABEL: Record<Rank, string> = { A: "A", T: "10", K: "K", Q: "Q", J: "J", "9": "9" };
 const RANK_NAME: Record<Rank, string> = { A: "ace", T: "ten", K: "king", Q: "queen", J: "jack", "9": "nine" };
 
-function suitInk(suit: Suit, fourColour: boolean): string {
+export function suitInk(suit: Suit, fourColour: boolean): string {
   if (suit === "H") return "var(--pip-red)";
   if (suit === "D") return fourColour ? "var(--deck-blue)" : "var(--pip-red)";
   if (suit === "C") return fourColour ? "var(--pip-green)" : "var(--pip-black)";
@@ -34,13 +34,15 @@ type Props = {
   title?: string;
   /** display options; omit for the standard deck with regular indices */
   prefs?: CardPrefs;
+  /** a trump card in your hand: the face takes a faint wash when the trump tint option is on */
+  trump?: boolean;
 };
 
 /**
  * A pinochle card. Chalk face, Bodoni rank, one large pip. Pure SVG so it scales from a 36px
  * trick thumbnail to a 220px hero card without losing its edge.
  */
-export function PlayingCard({ card, width = 96, selected, dimmed, className, style, title, prefs }: Props) {
+export function PlayingCard({ card, width = 96, selected, dimmed, className, style, title, prefs, trump }: Props) {
   const { rank, suit } = splitCard(card);
   const four = prefs?.fourColour === true;
   const big = prefs?.bigIndex === true;
@@ -67,7 +69,7 @@ export function PlayingCard({ card, width = 96, selected, dimmed, className, sty
         ...style,
       }}
     >
-      <rect width="100" height="140" rx="8.5" fill="var(--chalk)" />
+      <rect width="100" height="140" rx="8.5" fill={trump && prefs?.trumpTint ? "var(--chalk-trump)" : "var(--chalk)"} />
       {/* corner indices */}
       {big ? (
         <g fill={ink} fontFamily="var(--font-bodoni), serif" fontWeight={700}>
