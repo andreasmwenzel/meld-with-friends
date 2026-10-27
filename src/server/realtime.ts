@@ -3,7 +3,9 @@ import { bump } from "./metrics";
 import { getServerEnv } from "@/lib/env";
 import { normalizeCode } from "@/lib/codes";
 
-export type TableEvent = { type: "seats" | "trade" } | { type: "game"; rev: number };
+/** A game event may carry the public move as signed JSON (see src/lib/moveAuth.ts). */
+export type GameEvent = { type: "game"; rev: number; move?: string; sig?: string };
+export type TableEvent = { type: "seats" | "trade" } | GameEvent;
 
 export async function broadcastTable(code: string, payload: TableEvent) {
   try {

@@ -12,6 +12,7 @@ import { json } from "../http";
 let state: GameState;
 let ready: number[];
 beforeEach(() => {
+  for (const [key, value] of Object.entries({ NEXT_PUBLIC_SUPABASE_URL: "https://meld.supabase.co", NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon", SUPABASE_SERVICE_ROLE_KEY: "service-role", CRON_SECRET: "cron" })) vi.stubEnv(key, value);
   vi.clearAllMocks();
   mocks.table.paused_by = null;
   state = newGame("controls"); ready = [];
