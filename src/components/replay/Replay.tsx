@@ -275,11 +275,12 @@ function phasesOf(moves: Move[], c: { hand: number; first: number; last: number 
     for (; i <= c.last; i++) {
       if (moves[i].trick || i === c.last) {
         const winner = moves[i].trick ? moves[i].label.replace(/^.*?\. /, "").replace(/ takes the trick.*$/, "") : undefined;
-        tricks.push({ key: `${c.hand}:trick:${n}`, title: `Trick ${n}`, note: winner, first: start, last: i });
+        tricks.push({ key: `${c.hand}:trick:${n}`, title: moves[i].kind === "claim" ? "Claim the rest" : `Trick ${n}`, note: winner, first: start, last: i });
         start = i + 1; n++;
       }
     }
-    phases.push({ key: `${c.hand}:play`, title: "Play", note: `${tricks.length} ${tricks.length === 1 ? "trick" : "tricks"}`, first, last: c.last, tricks });
+    const claimed = moves.slice(first, c.last + 1).some(move => move.kind === "claim");
+    phases.push({ key: `${c.hand}:play`, title: "Play", note: claimed ? `${tricks.length - 1} played, rest claimed` : `${tricks.length} ${tricks.length === 1 ? "trick" : "tricks"}`, first, last: c.last, tricks });
   }
   return phases;
 }

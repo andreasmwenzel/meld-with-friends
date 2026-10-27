@@ -94,7 +94,7 @@ function sharedFields(view: PlayerView): Record<string, unknown> {
 }
 
 /** Enough of a game state to work out one seat's legal actions from its own view. */
-function stateFromView(view: PlayerView): GameState {
+function stateFromView(view: PlayerView): GameState & Pick<PlayerView, 'playedCards'> {
   return {
     version: 1, rules: view.rules, phase: view.phase, handNumber: view.handNumber, dealer: view.dealer, turn: view.turn,
     players: SEATS.map(seat => ({
@@ -103,6 +103,7 @@ function stateFromView(view: PlayerView): GameState {
     })) as unknown as GameState['players'],
     bids: view.bids, highBid: view.highBid, bidder: view.bidder, trump: view.trump, currentTrick: view.currentTrick,
     tricksTaken: { red: [], blue: [] }, score: view.score, history: [], winner: view.winner, seed: '', rev: view.rev, log: [],
+    playedCards: view.playedCards,
   };
 }
 

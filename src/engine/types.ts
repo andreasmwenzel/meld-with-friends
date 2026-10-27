@@ -124,6 +124,13 @@ export interface Trick {
   winner: SeatIndex | null;
 }
 
+/** The remaining hands become public only after an accepted claim. */
+export interface HandClaim {
+  seat: SeatIndex;
+  fromTrick: number;
+  hands: Record<SeatIndex, CardId[]>;
+}
+
 export interface HandRecap {
   handNumber: number;
   dealer: SeatIndex;
@@ -222,6 +229,7 @@ export type Action =
   | { type: "declare_meld"; seat: SeatIndex; cards: CardId[] } // cards laid down; engine computes best meld from them
   | { type: "confirm_meld"; seat: SeatIndex } // done melding (may be with zero cards)
   | { type: "play_card"; seat: SeatIndex; card: CardId }
+  | { type: "claim"; seat: SeatIndex }
   | { type: "next_hand"; seat: SeatIndex }; // any seat may advance after hand_over
 
 /** What a single player is allowed to see. Other hands are hidden; only their counts are exposed. */
@@ -247,6 +255,7 @@ export interface PlayerView {
   trickCounts: Record<Team, number>;
   /** every card played this hand so far, in play order, with the seat that played it (public information) */
   playedCards: TrickPlay[];
+  claim: HandClaim | null;
   score: Record<Team, number>;
   history: HandRecord[];
   winner: Team | null;
@@ -283,6 +292,8 @@ export interface LegalActions {
   canConfirmMeld: boolean;
   /** card ids that may legally be played right now (empty when not your turn) */
   playableCards: CardId[];
+  /** on lead, with a proof from only your hand and public plays */
+  canClaim: boolean;
   playConstraint: PlayConstraint | null;
   canAdvanceHand: boolean;
 }

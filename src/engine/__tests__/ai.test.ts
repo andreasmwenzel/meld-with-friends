@@ -11,7 +11,7 @@ import type { SeatIndex } from '../types';
 describe('public-information computer players',()=>{
   it('plays thousands of seeded legal positions to game over, with constrained deals',()=>{
     let positions=0;
-    for(let i=0;i<12;i++) {
+    for(let i=0;i<16;i++) {
       let state=newGame(`fuzz:${i}`,{scoring:'classic',target:500, counting:i%2?'classic':'tens',passCount:i%3?4:0});
       for(let step=0;state.phase!=='game_over';step++) {
         expect(step).toBeLessThan(10000);
@@ -93,12 +93,13 @@ describe('public-information computer players',()=>{
       const seat=(state.phase==='melding'?state.players.find(p=>!p.meldConfirmed)!.seat:state.turn!) as SeatIndex;
       state=applyAction(state,chooseAction(viewFor(state,seat),{budgetMs:0}));
     }
-    for(let i=0;i<48;i++) {
+    for(let i=0;i<48 && state.phase==='playing';i++) {
       const v=viewFor(state,state.turn!);
       const a=chooseAction(v,{budgetMs:3,seed:`mc:${i}`});
       expect(a).toEqual(chooseAction(v,{budgetMs:3,seed:`mc:${i}`}));
       state=applyAction(state,a);
     }
+    expect(['hand_over', 'game_over']).toContain(state.phase);
   });
   it('wins at least 80% of 50 games against random legal play',()=>{
     expect(arena(50,0).winRate).toBeGreaterThanOrEqual(.8);

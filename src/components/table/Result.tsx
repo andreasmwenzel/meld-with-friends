@@ -106,7 +106,7 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
   const cols: Team[] = [myTeam, them];
   const h = view.history.at(-1);
   const rows = h ? BREAKDOWN_ROWS.filter(([k]) => cols.some((t) => (h.breakdown?.[t]?.[k] ?? 0) !== 0)) : [];
-  const passing = view.rules.passCount > 0 && !!view.revealed;
+  const passing = view.rules.passCount > 0 && !!view.revealed && !view.claim;
   const won = view.winner === myTeam;
   const title = over ? (won ? "You and your partner win." : `${view.winner === "red" ? "Red" : "Blue"} team wins.`) : headline(view, nameOf);
 
@@ -141,6 +141,7 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
       <section ref={sheet} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId}
         className="panel outline-none max-h-[78dvh] w-full max-w-md overflow-y-auto rounded-b-none short:max-h-[calc(100dvh-1rem)] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:rounded-b-[inherit] sm:p-5">
         <p id={titleId} className="display" style={{ fontSize: 26, lineHeight: 1.1 }}>{title}</p>
+        {view.claim && <p className="mt-1 text-sm text-ink-soft">{nameOf(view.claim.seat)} {nameOf(view.claim.seat) === "You" ? "claim" : "claims"} the rest. {13 - view.claim.fromTrick} remaining tricks.</p>}
         {over && <p className="mt-1 text-sm tabular-nums text-ink-soft">
           Final: <span style={{ color: teamColor(myTeam) }}>Us {view.score[myTeam].toLocaleString()}</span>, <span style={{ color: teamColor(them) }}>Them {view.score[them].toLocaleString()}</span>
         </p>}

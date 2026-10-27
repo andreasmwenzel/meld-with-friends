@@ -248,7 +248,12 @@ export function buildScenario(spec: ScenarioSpec): Scenario {
         if (!legal.playableCards.includes(card)) throw new Error(`${playQueue[0]} is not a legal play for seat ${seat} now`);
         playQueue.shift();
         apply({ type: 'play_card', seat, card });
-      } else apply(botAction(state, seat));
+      } else {
+        // A position requested mid-play must stay there even if a bot could end it by claiming.
+        const view = viewFor(state, seat);
+        if (to === 'playing') view.legal.canClaim = false;
+        apply(chooseAction(view, { seed: `${state.seed}:${state.rev}`, config: { samples: 6, budgetMs: 4 } }));
+      }
       continue;
     }
     break;

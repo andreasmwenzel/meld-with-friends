@@ -107,6 +107,7 @@ async function runSmoke() {
       else if (L.canDeclineShoot) view = await act(seat, { type: "decline_shoot" });
       else if (L.canDeclareTrump) view = await act(seat, { type: "declare_trump", suit: "H" });
       else if (L.mustPassCount) view = await act(seat, { type: "pass_cards", cards: v.hand.slice(0, L.mustPassCount) });
+      else if (L.canClaim) view = await act(seat, { type: "claim" });
       else if (L.playableCards.length) view = await act(seat, { type: "play_card", card: L.playableCards[0] });
       else throw new Error(`stuck in ${v.phase} at seat ${seat}`);
       continue;
@@ -250,6 +251,7 @@ async function driveShortGame(path) {
       else if (legal.canPassBid) await submit(seat, { type: "pass_bid" });
       else if (legal.canDeclareTrump) await submit(seat, { type: "declare_trump", suit: "H" });
       else if (legal.mustPassCount) await submit(seat, { type: "pass_cards", cards: own.hand.slice(0, legal.mustPassCount) });
+      else if (legal.canClaim) await submit(seat, { type: "claim" });
       else if (legal.playableCards.length) await submit(seat, { type: "play_card", card: legal.playableCards[0] });
       else throw new Error(`short game stuck in ${own.phase}`);
     }

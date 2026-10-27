@@ -28,6 +28,7 @@ import { autoMeldSelection, meldBySuit, sortHand } from "@/engine/hand";
 import { describeConstraint } from "@/engine/rules";
 import { cardLabel } from "@/engine/deck";
 import { motionTimings, flyFrom, sweepTo } from "./motion";
+import { ClaimButton, useClaimReveal } from "./Claim";
 import { newLogLines, speakLine } from "./announce";
 import { DOUBLE_TAP_MS, isRealPress, isTimedActivation, releasePress, secondPress, type Armed, type Press } from "./tapTwice";
 
@@ -139,6 +140,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   }, [armed]);
   const motion = reducedMotion ? "off" : cardPrefs.motion;
   const { slideMs, holdMs, sweepMs } = motionTimings(motion);
+  const claimRoot = useRef<HTMLDivElement>(null);
+  const revealingClaim = useClaimReveal(view, motion, claimRoot);
   const router = useRouter();
 
   const load = useCallback(() => sync.load(), [sync]);
@@ -281,7 +284,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   // Before paint, so a card you play never shows gone from your hand and not yet on the table.
   useLayoutEffect(() => {
     if (!view) return;
-    const last = view.lastTrick;
+    const last = view.claim ? null : view.lastTrick;
     const key = `${view.handNumber}:${last?.plays.map(p => p.card).join(",") ?? ""}`;
     if (last?.plays.length === 4 && key !== trickHold.current.key) {
       trickHold.current = { key, until: Date.now() + (holdMs + sweepMs) };
@@ -575,7 +578,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     if (!view) return [];
     // Once play starts your meld is back in your hand to be played, even while it still shows on the table.
     const laid = new Set(view.phase === "melding" ? laidOf(view.seat) : []);
-    const cards = (view.revealed ? view.revealed[which][view.seat] ?? [] : view.hand).filter((c) => !laid.has(c));
+    const cards = (view.claim ? view.claim.hands[view.seat] : view.revealed ? view.revealed[which][view.seat] ?? [] : view.hand).filter((c) => !laid.has(c));
     if (unshown) cards.push(unshown);
     return sortHand(cards, view.trump, cardPrefs.sort);
   }, [view, cardPrefs.sort, which, laidOf, unshown]);
@@ -596,7 +599,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     if (action && (view?.phase === "melding" || !card)) action.focus({ preventScroll: true });
     else focusHand();
   }, [view, hand, focusHand]);
-  const revealedFor = (seat: SeatIndex): CardId[] | undefined => view?.revealed ? sortHand(view.revealed[which][seat] ?? [], view.trump, cardPrefs.sort) : undefined;
+  const revealedFor = (seat: SeatIndex): CardId[] | undefined => view?.claim ? sortHand(view.claim.hands[seat], view.trump, cardPrefs.sort)
+    : view?.revealed ? sortHand(view.revealed[which][seat] ?? [], view.trump, cardPrefs.sort) : undefined;
 
   // The table has no header, so until the board loads (or if it cannot, say for someone without a seat) keep a way out.
   if (!view) {
@@ -718,7 +722,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const them: Team = myTeam === "red" ? "blue" : "red";
   const peekingResult = over && !recapOpen && peekKey === `${view.handNumber}-${view.phase}`;
   // The result sheet is modal: while it is up, the board behind it is out of reach.
-  const resultModal = over && !menu && !peekingResult;
+  const resultModal = over && !menu && !peekingResult && !revealingClaim;
   // The hand's one tab stop: the card last focused, else your first playable card, else the first card.
   const tabStop = rove && hand.includes(rove) ? rove
     : hand.find((c) => view.phase === "playing" ? view.legal.playableCards.includes(c) : picking) ?? hand[0];
@@ -738,7 +742,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const linkCls = "tap-link text-left text-sm text-chalk-faint underline underline-offset-4 hover:text-chalk disabled:opacity-60";
 
   return (
-    <div aria-busy={updating || undefined} className="board relative flex min-h-0 w-full flex-1 flex-col overflow-hidden"
+    <div ref={claimRoot} aria-busy={updating || undefined} className="board relative flex min-h-0 w-full flex-1 flex-col overflow-hidden"
       data-motion={motion} style={{ "--pm": `${slideMs}ms`, "--sd": `${holdMs}ms`, "--sm": `${sweepMs}ms`, paddingBottom: peekingResult ? "4.5rem" : undefined } as React.CSSProperties}>
       <div className={`board-flat flex min-h-0 flex-1 flex-col ${menu ? "lg:pr-[380px]" : ""}`} inert={(menu && !wide) || resultModal ? true : undefined}>
         {/* One slim strip: the hand, the score, and the way to everything else. */}
@@ -801,7 +805,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           )}
           {/* Whose turn it is lives here, by your hand, so the cloth holds only the cards. */}
           {view.phase === "playing" && (
-            <PlayStatus view={view} trick={trickCards} nameOf={nameOf} peek={peek} stalled={stalled && !paused} nudge={nudge} compact={short} />
+            <PlayStatus view={view} trick={trickCards} nameOf={nameOf} peek={peek} stalled={stalled && !paused} nudge={nudge} compact={short}
+              busy={busy || updating} claim={() => void act({ type: "claim" })} />
           )}
           {(view.phase === "bidding" || (view.phase === "melding" && view.trump)) && (
             <MeldLine key={view.phase} rules={view.rules} hand={view.hand} trump={view.phase === "melding" ? view.trump : null} lit={lit} setLit={setLit} />
@@ -834,7 +839,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
               const ringed = (sel && !isArmed) || (isArmed && armed!.open);
               const blocked = view.phase === "playing" && isMyTurn && !playable && !!constraintText;
               return (
-                <span key={c} data-keep-armed={isArmed || armedCard ? "" : undefined} className="shrink-0" style={{ marginLeft: -overlap }} onClick={() => { if (view.phase === "playing" && isMyTurn && !playable) showHint(); }}>
+                <span key={c} data-claim-card={view.claim ? c : undefined} data-keep-armed={isArmed || armedCard ? "" : undefined} className="shrink-0" style={{ marginLeft: -overlap }} onClick={() => { if (view.phase === "playing" && isMyTurn && !playable) showHint(); }}>
                   <button data-hand-card={c}
                     onPointerDown={(e) => { lastPress.current = { card: c, pointerId: e.pointerId, real: isRealPress(e.pointerType, window.matchMedia("(any-pointer: fine)").matches), upAt: null }; }}
                     onPointerUp={(e) => { lastPress.current = releasePress(lastPress.current, c, e.pointerId, e.timeStamp); }}
@@ -863,7 +868,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
         </div>
         </div>
       </div>
-      {over && !menu && (() => {
+      {over && !menu && !revealingClaim && (() => {
         const key = `${view.handNumber}-${view.phase}`;
         return <div {...keepFocus} inert={updating || undefined}><ResultSheet local={local} view={view} nameOf={nameOf} host={isHostNow ? null : snap.seats.find((x) => x.user_id === snap.table.host)?.profile?.display_name ?? "the host"}
           busy={busy || updating} onNext={() => act({ type: "next_hand" })} onRematch={rematch} readyInfo={readyInfo}
@@ -985,7 +990,7 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
   bot?: boolean; standIn?: { away: boolean; run: () => void }; makeHost?: () => void; compact?: boolean; className?: string;
 }) {
   // The engine keeps meld in the hand; while it lies on the table it is not among the backs.
-  const n = view.handCounts[seat] - laid;
+  const n = faceUp?.length ?? view.handCounts[seat] - laid;
   const team = teamOf(seat);
   const active = view.turn === seat;
   const vertical = align !== "center";
@@ -1000,10 +1005,10 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
     </>
   );
   if (compact) {
-    return <CompactSeat {...{ className, team, active, name, chip, score, n, faceUp, standIn, align }} />;
+    return <CompactSeat {...{ seat, className, team, active, name, chip, score, n, faceUp, standIn, align }} />;
   }
   return (
-    <div className={`group flex flex-col ${items} gap-1 py-1 sm:gap-1.5 sm:py-2 min-w-0 ${className}`}>
+    <div data-claim-seat={seat} className={`group flex flex-col ${items} gap-1 py-1 sm:gap-1.5 sm:py-2 min-w-0 ${className}`}>
       <div className={`relative flex max-w-full items-center ${vertical ? "flex-col" : "flex-row"}`}>
         <div className={`flex ${vertical ? "flex-col" : "flex-row"} items-center gap-1 sm:gap-2 rounded-2xl px-2 py-1 max-w-full`}
           style={active ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
@@ -1016,10 +1021,10 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
       </div>
       <div className={`flex ${vertical ? "flex-col" : "flex-row"}`} style={vertical ? { padding: "0 7px" } : undefined} role={faceUp ? "group" : "img"} aria-label={`${n} cards`}>
         {faceUp ? faceUp.map((c, i) => vertical ? (
-          <div key={c} className="relative shrink-0" style={{ width: (REV_W * 7) / 5, height: i === faceUp.length - 1 ? REV_W : 17, zIndex: align === "right" ? faceUp.length - i : i }}>
+          <div key={c} data-claim-card={view.claim ? c : undefined} className="relative shrink-0" style={{ width: (REV_W * 7) / 5, height: i === faceUp.length - 1 ? REV_W : 17, zIndex: align === "right" ? faceUp.length - i : i }}>
             <PlayingCard card={c} width={REV_W} style={{ position: "absolute", left: "50%", top: REV_W / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg)` }} />
           </div>
-        ) : <PlayingCard key={c} card={c} width={REV_W} style={{ marginLeft: i ? -REV_W * 0.45 : 0 }} />)
+        ) : <span key={c} data-claim-card={view.claim ? c : undefined} style={{ marginLeft: i ? -REV_W * 0.45 : 0 }}><PlayingCard card={c} width={REV_W} /></span>)
         : Array.from({ length: n }).map((_, i) => (
           <CardBack key={i} width={34} team={team}
             style={vertical ? { marginTop: i ? -40 : 0, transform: align === "left" ? "rotate(90deg)" : "rotate(-90deg)" } : { marginLeft: i ? -24 : 0 }} />
@@ -1045,13 +1050,14 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
  * An opponent on a phone held sideways: name, turn ring and a card count in place of the fanned backs.
  * Hands shown at the end stay face up in a tight overlapping fan.
  */
-function CompactSeat({ className, team, active, name, chip, score, n, faceUp, standIn, align }: {
+function CompactSeat({ seat, className, team, active, name, chip, score, n, faceUp, standIn, align }: {
+  seat: SeatIndex;
   className: string; team: Team; active: boolean; name: string; chip: React.ReactNode; score: SeatScore; n: number;
   faceUp?: CardId[]; standIn?: { away: boolean; run: () => void }; align: "left" | "center" | "right";
 }) {
   const across = align === "center";
   return (
-    <div className={`flex min-w-0 items-center gap-2 ${across ? "flex-row justify-center" : "flex-col"} ${className}`}>
+    <div data-claim-seat={seat} className={`flex min-w-0 items-center gap-2 ${across ? "flex-row justify-center" : "flex-col"} ${className}`}>
       <div className={`relative flex max-w-full items-center ${across ? "flex-row" : "flex-col"}`}>
         <div className={`flex max-w-full items-center gap-x-2 gap-y-0.5 rounded-2xl px-2 py-1 ${across ? "flex-row" : "flex-col"}`}
           style={active ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
@@ -1084,7 +1090,7 @@ function SmallFan({ cards, perRow, label, width = MELD_W, lit }: { cards: CardId
   return (
     <div className="flex flex-wrap" role="group" aria-label={label} title={label}
       style={{ width: w + (cols - 1) * peekX + 0.5, paddingLeft: w - peekX, paddingTop: h - peekY }}>
-      {cards.map((c) => <PlayingCard key={c} card={c} width={w} selected={lit?.includes(c) ?? false} style={{ marginLeft: peekX - w, marginTop: peekY - h, flexShrink: 0 }} />)}
+      {cards.map((c) => <span key={c} data-claim-card={c} style={{ marginLeft: peekX - w, marginTop: peekY - h, flexShrink: 0 }}><PlayingCard card={c} width={w} selected={lit?.includes(c) ?? false} /></span>)}
     </div>
   );
 }
@@ -1150,7 +1156,7 @@ type Peek = { last: NonNullable<PlayerView["lastTrick"]> | null; can: boolean; t
 /** Your own chair below the cloth: the same name and score chip as the other three. */
 function MySeat({ view, name, score }: { view: PlayerView; name: string; score: SeatScore }) {
   return (
-    <div className="flex justify-center py-1">
+    <div data-claim-seat={view.seat} className="flex justify-center py-1">
       <div className="relative flex items-center">
         <div className="flex items-center gap-1 rounded-2xl px-2 py-1 sm:gap-2" style={view.turn === view.seat ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
           <span className="relative shrink-0">
@@ -1178,9 +1184,10 @@ function Name({ name }: { name: string }) {
  * the rule you must follow, and the way to see the last trick again. Fixed height, so the hand never moves:
  * a long name is cut short, and on an upright phone the second row keeps room for two lines.
  */
-function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact }: {
+function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact, busy, claim }: {
   view: PlayerView; trick: PlayerView["currentTrick"]; nameOf: (s: SeatIndex) => string; peek: Peek;
   stalled: boolean; nudge: () => void; compact: boolean;
+  busy: boolean; claim: () => void;
 }) {
   const mine = view.turn === view.seat;
   const done = !peek.last && !!trick && trick.plays.length === 4 && trick.winner !== null;
@@ -1194,10 +1201,11 @@ function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact }: {
   const line = "flex min-w-0 max-w-full whitespace-pre";
   return (
     <div data-play-status="" className="flex w-full flex-col items-center text-center pb-5 short:pb-0">
-      <div className="flex h-8 max-w-full items-center">
+      <div className="flex h-8 max-w-full items-center gap-3">
         {peek.last ? <p className={`display text-chalk ${line}`} style={{ fontSize: compact ? 17 : 19 }}>Last trick: <Name name={nameOf(peek.last.winner!)} /> took it.</p>
           : mine ? <p className={`display ${line}`} style={{ fontSize: compact ? 19 : 22, color: "var(--brass)" }}>Your play.</p>
           : <p className={`text-sm text-chalk ${line}`}><Name name={nameOf(view.turn!)} /> to play.</p>}
+        {view.legal.canClaim && <ClaimButton busy={busy} onClaim={claim} />}
       </div>
       <div className="flex h-10 max-w-full flex-wrap content-center items-center justify-center gap-x-3 text-xs leading-5 text-chalk-faint short:h-5">
         {detail && <span className={typeof detail === "string" ? "max-w-full truncate" : line}>{detail}</span>}
@@ -1239,8 +1247,8 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
       case "passing_back": return who === "You" ? `Pass ${view.legal.mustPassCount ?? ""} cards back.` : `${who} is passing back.`;
       case "deciding_shoot": return who === "You" ? "Shoot the moon?" : `Waiting on ${who}.`;
       case "melding": return view.meldConfirmed[view.seat] ? "Meld is in." : "Lay down your meld.";
-      case "hand_over": return "Hand over.";
-      case "game_over": return view.winner ? `${view.winner === "red" ? "Red" : "Blue"} team wins.` : "Game over.";
+      case "hand_over": return view.claim ? `${nameOf(view.claim.seat)} ${nameOf(view.claim.seat) === "You" ? "claim" : "claims"} the rest.` : "Hand over.";
+      case "game_over": return view.claim ? `${nameOf(view.claim.seat)} ${nameOf(view.claim.seat) === "You" ? "claim" : "claims"} the rest.` : view.winner ? `${view.winner === "red" ? "Red" : "Blue"} team wins.` : "Game over.";
       default: return "";
     }
   })();
@@ -1313,7 +1321,7 @@ function yourTurnSentence(view: PlayerView): string | null {
     case "declaring_trump": return "Name trump";
     case "passing_to_bidder": case "passing_back": return `Choose ${view.legal.mustPassCount ?? ""} cards to pass`;
     case "deciding_shoot": return "Shoot the moon, or play it out";
-    case "playing": return ["Your play", constraintSentence(view)].filter(Boolean).join(". ");
+    case "playing": return ["Your play", constraintSentence(view), view.legal.canClaim ? "You can claim all remaining tricks" : null].filter(Boolean).join(". ");
     default: return null;
   }
 }
