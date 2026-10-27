@@ -28,17 +28,19 @@ SQL
 # Sign-ups before 0020 get the old handles: player, player1, an email name.
 for f in supabase/migrations/*.sql; do [[ "$f" == *0020_* ]] && break; psql < "$f"; done
 psql -c "insert into auth.users(email) values (null),(null),(null),('margaret.h@example.com')"
-expect "old sign-ups get player handles" "$(psql -c "select string_agg(handle,',' order by handle) from public.profiles")" "margareth,player,player1,player2"
+psql -c "insert into auth.users(email) values ('jonah@example.com')"
+CHOSEN=$(psql -c "update public.profiles set handle='card_shark' where handle='jonah' returning id")
+expect "old sign-ups get player and email handles" "$(psql -c "select string_agg(handle,',' order by handle) from public.profiles")" "card_shark,margareth,player,player1,player2"
 
 psql < supabase/migrations/0020_word_handles.sql
-expect "the backfill replaces only player handles" "$(psql -c "select count(*) from public.profiles where handle ~ '^player[0-9]*$'")" 0
-expect "a chosen or email handle is kept" "$(psql -c "select count(*) from public.profiles where handle='margareth'")" 1
-expect "backfilled handles are two words" "$(psql -c "select count(*) from public.profiles where handle ~ '^[a-z]+_[a-z]+$'")" 3
+expect "the backfill replaces player and email handles" "$(psql -c "select count(*) from public.profiles where handle ~ '^player[0-9]*$' or handle like 'margareth%'")" 0
+expect "a handle the player chose is kept" "$(psql -c "select handle from public.profiles where id='$CHOSEN'")" "card_shark"
+expect "backfilled handles are two words" "$(psql -c "select count(*) from public.profiles where handle ~ '^[a-z]+_[a-z]+$' and handle <> 'card_shark'")" 4
 
 psql -c "insert into auth.users(email) select null from generate_series(1,300)"
-expect "new sign-ups get unique two-word handles" "$(psql -c "select count(*) filter (where handle ~ '^[a-z]+_[a-z]+(_[0-9]{2})?$'), count(distinct handle) from public.profiles where handle <> 'margareth'")" "303|303"
+expect "new sign-ups get unique two-word handles" "$(psql -c "select count(*) filter (where handle ~ '^[a-z]+_[a-z]+(_[0-9]{2})?$'), count(distinct handle) from public.profiles where handle <> 'card_shark'")" "304|304"
 
-M=$(psql -c "select id from public.profiles where handle='margareth'")
+M=$CHOSEN
 N=$(psql -c "select public.regenerate_handle('$M')")
 expect "a re-roll saves the drawn handle" "$(psql -c "select handle from public.profiles where id='$M'")" "$N"
 psql -c "select public.regenerate_handle(gen_random_uuid())" 2>/dev/null && fail "re-rolled a missing profile"

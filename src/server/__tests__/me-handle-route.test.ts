@@ -41,3 +41,10 @@ it("requires a session", async () => {
   expect((await POST()).status).toBe(401);
   expect(mocks.rpc).not.toHaveBeenCalled();
 });
+
+it("reports a failed draw instead of returning a stale profile", async () => {
+  mocks.rpc.mockImplementation(async (name: string) => name === "consume_rate" ? { data: true, error: null } : { data: null, error: { code: "P0001", message: "Could not find a free handle" } });
+  const response = await POST();
+  expect(response.status).toBeGreaterThanOrEqual(400);
+  expect(mocks.from).not.toHaveBeenCalled();
+});

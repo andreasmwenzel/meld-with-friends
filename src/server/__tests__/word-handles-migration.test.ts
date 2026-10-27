@@ -14,9 +14,10 @@ it("draws handles from two word lists that fit the handle format", () => {
   expect(longest).toBeLessThanOrEqual(32);
 });
 
-it("gives new accounts word handles and only replaces automatic player handles", () => {
+it("gives new accounts word handles and replaces only automatic player and email handles", () => {
   expect(sql).toMatch(/create or replace function public\.create_profile\(\)[\s\S]*public\.word_handle\(\)/);
-  expect(sql).toContain("where handle ~ '^player[0-9]*$'");
+  expect(sql).toContain("where pr.handle ~ '^player[0-9]*$'");
+  expect(sql).toMatch(/left join auth\.users u on u\.id = pr\.id/);
   expect(sql).toContain("grant execute on function public.regenerate_handle(uuid) to service_role;");
   expect(sql).toMatch(/revoke all on function [^;]*public\.regenerate_handle\(uuid\) from public, anon, authenticated;/);
 });

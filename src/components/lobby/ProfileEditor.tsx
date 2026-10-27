@@ -10,7 +10,7 @@ export function ProfileEditor({ me }: { me: Profile }) {
   const [open, setOpen] = useState(false);
   const [displayName, setDisplayName] = useState(me.display_name);
   const [handle, setHandle] = useState(me.handle);
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function save(e: FormEvent) {
@@ -18,20 +18,22 @@ export function ProfileEditor({ me }: { me: Profile }) {
     setBusy(true); setNote(null);
     try {
       await api("/api/me", { method: "PATCH", body: { displayName: displayName.trim(), handle: handle.trim().replace(/^@/, "").toLowerCase() } });
-      setNote("Saved.");
+      setNote({ text: "Saved.", ok: true });
       setOpen(false);
       router.refresh();
-    } catch (err) { setNote((err as Error).message); } finally { setBusy(false); }
+    } catch (err) { setNote({ text: (err as Error).message, ok: false }); } finally { setBusy(false); }
   }
 
-  // Draws a fresh two-word handle and saves it straight away; the name field is left as typed.
+  // Draws a fresh two-word handle and saves it straight away. It replaces a handle typed but not saved;
+  // the name field is left as typed.
   async function reroll() {
     setBusy(true); setNote(null);
     try {
       const next = await api<Profile>("/api/me/handle", { method: "POST" });
       setHandle(next.handle);
+      setNote({ text: `Saved as @${next.handle}.`, ok: true });
       router.refresh();
-    } catch (err) { setNote((err as Error).message); } finally { setBusy(false); }
+    } catch (err) { setNote({ text: (err as Error).message, ok: false }); } finally { setBusy(false); }
   }
 
   if (!open) {
@@ -49,7 +51,7 @@ export function ProfileEditor({ me }: { me: Profile }) {
       <div className="text-sm text-ink-soft">
         <div className="flex items-baseline justify-between gap-2">
           <label htmlFor="profile-handle">Handle</label>
-          <button type="button" className="tap font-semibold text-ink hover:underline" onClick={reroll} disabled={busy}>New words</button>
+          <button type="button" className="tap font-semibold text-ink hover:underline" onClick={reroll} disabled={busy} aria-label="Draw a new two-word handle">New words</button>
         </div>
         <input id="profile-handle" className="field mt-1" value={handle} onChange={(e) => setHandle(e.target.value)} maxLength={32} required autoCapitalize="off" />
       </div>
@@ -57,7 +59,7 @@ export function ProfileEditor({ me }: { me: Profile }) {
         <button className="btn btn-ink" disabled={busy}>Save</button>
         <button type="button" className="btn" style={{ color: "var(--ink-soft)" }} onClick={() => setOpen(false)}>Cancel</button>
       </div>
-      {note && <p className="text-sm text-pip-red sm:col-span-3">{note}</p>}
+      <p aria-live="polite" className={`text-sm sm:col-span-3 empty:hidden ${note?.ok ? "text-ink-soft" : "text-pip-red"}`}>{note?.text}</p>
     </form>
   );
 }
