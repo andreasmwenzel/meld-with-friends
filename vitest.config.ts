@@ -6,5 +6,5 @@ export default defineConfig({
     '@': fileURLToPath(new URL('./src', import.meta.url)),
     'server-only': fileURLToPath(new URL('./src/server/__tests__/server-only.ts', import.meta.url)),
   } },
-  test: { environment: 'node', include: ['src/components/**/__tests__/**/*.test.{ts,tsx}', 'src/engine/__tests__/**/*.test.ts', 'src/server/__tests__/**/*.test.ts'] },
+  test: { environment: 'node', include: ['src/components/**/__tests__/**/*.test.{ts,tsx}', 'src/engine/__tests__/**/*.test.ts', 'src/lib/__tests__/**/*.test.ts', 'src/server/__tests__/**/*.test.ts'] },
 });
