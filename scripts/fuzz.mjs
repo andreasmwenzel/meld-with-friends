@@ -14,6 +14,7 @@ try {
   const result = fuzz(games, prefix);
   console.log(`${result.played} games, ${result.actions} actions, ${result.failures.length} failures in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   console.log(`  ${Object.entries(result.kinds).sort().map(([k, n]) => `${k} ${n}`).join(', ')}`);
+  console.log(`  claims proved: ${result.claims.positions}; adversarial playouts: ${result.claims.playouts}`);
   if (result.failures.length) {
     mkdirSync('.dev/states', { recursive: true });
     for (const f of result.failures) {

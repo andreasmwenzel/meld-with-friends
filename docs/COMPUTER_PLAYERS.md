@@ -44,6 +44,8 @@ Trump selection maximizes this projection, whose suit-dependent terms reward mel
 
 ## Trick play: determinized Monte Carlo
 
+Bots claim the rest whenever `legal.canClaim` is true, before choosing a card. This is a proof from their own hand and public plays, independent of sampling or hidden ownership; the ordinary bot tick commits the claim as one action.
+
 `play.ts` evaluates only `legal.playableCards`. For each sample, `knowledge.ts` assigns the unknown deck to the other seats, respecting remaining counts, shown voids, ownership established by public meld and passing, and leaning toward what each seat's bids suggest. Randomized backtracking gives constrained deals; an assignment has a bounded search limit and failure falls back to the heuristic. Every candidate uses the same sampled deal, reducing sampling noise between candidates.
 
 Each candidate is played to the hand's end. All four simulated seats use the same heuristic and `legalPlays` from the real rules. The policy leads boss cards, favors drawing trump when the bidding team holds length, wins cheaply against an opponent, puts counters on a safe partner trick, and otherwise discards low non-counters. The policy sees its simulated own hand and the union of unplayed cards, which is public information, rather than consulting a simulated opponent's hand to select a card. Scoring includes counters, the last trick bonus, whether each side saved meld, and the bidding side's make/set result. Shoot contracts use the all-tricks outcome. The candidate with the best mean team score difference wins.

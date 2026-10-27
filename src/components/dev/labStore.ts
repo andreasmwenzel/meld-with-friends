@@ -57,6 +57,7 @@ export function describeAction(a: Action): string {
     case "declare_meld": return `${who} lays down ${a.cards.length} cards`;
     case "confirm_meld": return `${who} confirms meld`;
     case "play_card": return `${who} plays ${cardLabel(a.card)}`;
+    case "claim": return `${who} claims the rest`;
     case "next_hand": return `${who} deals the next hand`;
   }
 }

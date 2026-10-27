@@ -6,3 +6,4 @@ export * from './rules';
 export * from './game';
 export * from './practice';
 export * from './scoring';
+export * from './claim';

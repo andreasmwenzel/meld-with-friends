@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { newGame } from '@/engine/game';
+import { buildScenario } from '@/engine/scenario';
+import { PRESETS } from '@/engine/scenarios';
+import { actionSchema } from '../validation';
 import type { GameState } from '@/engine/types';
 import { openMove } from '@/lib/moveAuth';
 const mocks = vi.hoisted(() => ({ rpc: vi.fn(), from: vi.fn(), broadcast: vi.fn(), notify: vi.fn() }));
@@ -57,6 +60,26 @@ describe('paced bot ticks', () => {
     state.phase = 'hand_over'; state.turn = null;
     await expect(botTick('ABC234')).resolves.toEqual({ acted: false, rev: 0 });
     expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+  it('commits a proven claim in one revision and broadcasts only the revision', async () => {
+    const spec = PRESETS.find(p => p.id === 'claim-all')!.spec;
+    state = buildScenario({ ...spec, bidder: 1, dealer: 0,
+      hands: { 1: spec.hands![0], 2: ['JS1'], 3: ['9S0'], 0: ['9S1'] } }).state;
+    botSeat = 1;
+    const rev = state.rev + 1;
+    mocks.rpc.mockResolvedValue({ data: rev, error: null });
+    await expect(botTick('ABC234')).resolves.toEqual({ acted: true, rev });
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+    expect(mocks.rpc).toHaveBeenCalledWith('commit_bot_action', expect.objectContaining({
+      p_old_rev: state.rev, p_action: { type: 'claim', seat: 1 },
+      p_state: expect.objectContaining({ rev, phase: 'hand_over' }),
+    }));
+    expect(mocks.broadcast).toHaveBeenCalledWith('ABC234', { type: 'game', rev });
+  });
+  it('validates a claim payload without accepting client-supplied cards or proof', () => {
+    expect(actionSchema.parse({ type: 'claim', seat: 1 })).toEqual({ type: 'claim', seat: 1 });
+    expect(actionSchema.safeParse({ type: 'claim', seat: 1, cards: ['AS0'] }).success).toBe(false);
+    expect(actionSchema.safeParse({ type: 'claim', seat: 4 }).success).toBe(false);
   });
 });
 
