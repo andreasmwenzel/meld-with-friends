@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { generateKeyPairSync, sign } from 'node:crypto';
 import { applyAction, newGame, viewFor } from '@/engine/game';
 import { fuzzRules } from '@/engine/fuzz';
-import { actors, botAction } from '@/engine/scenario';
+import { actors, botAction, buildScenario, stackDeal } from '@/engine/scenario';
+import { PRESETS } from '@/engine/scenarios';
 import { applyPublicMove, type PublicMove } from '@/engine/publicMove';
 import type { Action, CardId, GameState, PlayerView, SeatIndex } from '@/engine/types';
-import { openMove } from '@/lib/moveAuth';
+import { moveMessage, openMove } from '@/lib/moveAuth';
 import { ViewSync } from '@/components/table/viewSync';
 vi.mock('../push', () => ({ scheduleTurnNotification: vi.fn() }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({}) }));
@@ -78,14 +80,28 @@ describe('the game broadcast', () => {
     const forged = signed.move!.replace(/"rev":(\d+)/, (_m, n) => `"rev":${Number(n) + 1}`);
     expect(await openMove(movePublicKey(), GAME, forged, signed.sig)).toBeNull();
   });
+
+  it('is a bare revision for a nines misdeal and for the play that ends a shoot', () => {
+    const nines = stackDeal(newGame('nines', {}, 3), { 0: ['9S', '9S', '9H', '9H', '9D', 'AS', 'AS', 'TS', 'TH', 'TD', 'AC', 'TC'] });
+    const misdeal: Action = { type: 'misdeal', seat: 0 };
+    const redealt = applyAction(nines, misdeal);
+    expect(gameEvent(GAME, nines, redealt, misdeal)).toEqual({ type: 'game', rev: redealt.rev });
+    for (const id of ['hand-shoot-made', 'hand-shoot-missed']) {
+      const { base, actions, state } = buildScenario(PRESETS.find(p => p.id === id)!.spec);
+      const before = actions.slice(0, -1).reduce(applyAction, base);
+      expect(state.phase, id).toBe('hand_over');
+      expect(gameEvent(GAME, before, state, actions.at(-1)!), id).toEqual({ type: 'game', rev: state.rev });
+    }
+  });
 });
 
 /** One seat's tab: a ViewSync over a server that answers /view with the current engine state. */
 function tab(seat: SeatIndex, server: { state: GameState; fetches: number }) {
   let shown: PlayerView | null = null;
+  let applied = 0;
   const sync = new ViewSync<PlayerView, PublicMove>({
     fetchView: async () => { server.fetches++; return { ...viewFor(server.state, seat), moveKey: movePublicKey() } as PlayerView; },
-    applyMove: applyPublicMove,
+    applyMove: (view, move) => { applied++; return applyPublicMove(view, move); },
     apply: view => { shown = view; },
     onError: e => { throw e; },
   });
@@ -94,9 +110,41 @@ function tab(seat: SeatIndex, server: { state: GameState; fetches: number }) {
     const move = event.move ? await openMove(movePublicKey(), GAME, event.move, event.sig) : null;
     sync.event(event.rev, move ?? undefined);
   };
-  return { sync, receive, get shown() { return shown; } };
+  return { sync, receive, get shown() { return shown; }, get applied() { return applied; } };
 }
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(r => setTimeout(r, 0)); };
+
+describe('a move signed with another key', () => {
+  it('is never applied: the tab fetches its view once and shows the server\'s', async () => {
+    const { steps } = playGame('wrong-key', {});
+    const step = steps.find(s => s.event.move && s.action.type === 'play_card')!;
+    const server = { state: step.prev, fetches: 0 };
+    const t = tab(0, server);
+    await t.sync.load();
+    server.fetches = 0;
+    // A valid move for this game and revision, signed by someone who is not the server.
+    const move = JSON.parse(step.event.move!).move as PublicMove;
+    const message = moveMessage(GAME, move);
+    const { privateKey } = generateKeyPairSync('ed25519');
+    const forged = { type: 'game' as const, rev: step.next.rev, move: message, sig: sign(null, Buffer.from(message), privateKey).toString('base64url') };
+    server.state = step.next;
+    await t.receive(forged);
+    await settle();
+    expect(t.applied).toBe(0);
+    expect(server.fetches).toBe(1);
+    expect(t.shown).toMatchObject(viewFor(step.next, 0));
+    // The same move with the server's own signature applies without a fetch.
+    server.state = step.prev;
+    const control = tab(0, server);
+    await control.sync.load();
+    server.fetches = 0;
+    server.state = step.next;
+    await control.receive(step.event);
+    await settle();
+    expect(control.applied).toBe(1);
+    expect(server.fetches).toBe(0);
+  });
+});
 
 describe('four tabs applying a whole game from the broadcast', () => {
   it('match the server at every step, fetching only for deals, hand ends and gaps', async () => {

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { applyAction, newGame, viewFor } from '../game';
 import { fuzzRules } from '../fuzz';
-import { actors, botAction } from '../scenario';
+import { actors, botAction, buildScenario, stackDeal } from '../scenario';
+import { PRESETS } from '../scenarios';
 import { applyPublicMove, publicMove, type PublicMove } from '../publicMove';
 import type { Action, CardId, GameState, SeatIndex } from '../types';
 
@@ -98,5 +99,47 @@ describe('public moves', () => {
     const view = viewFor(step.prev, 0);
     expect(applyPublicMove({ ...view, rev: view.rev - 1 }, step.move!)).toBeNull();
     expect(applyPublicMove(viewFor(step.next, 0), step.move!)).toBeNull();
+  });
+});
+
+/** Replay a lab preset from its start, pairing each action with the public move it would broadcast. */
+function presetSteps(id: string): Step[] {
+  const { base, actions } = buildScenario(PRESETS.find(p => p.id === id)!.spec);
+  let state = base;
+  return actions.map(action => {
+    const next = applyAction(state, action);
+    const step = { prev: state, next, action, move: publicMove(state, next, action) };
+    state = next;
+    return step;
+  });
+}
+
+// The generated games above rarely shoot or throw in a hand, so both are pinned here.
+describe('public moves for shoots and misdeals', () => {
+  it.each(['hand-shoot-made', 'hand-shoot-missed', 'game-shoot-win'])('%s: the shoot call is public, the play that ends the hand is not', id => {
+    const steps = presetSteps(id);
+    const shoot = steps.find(s => s.action.type === 'shoot')!;
+    expect(shoot.move?.action).toEqual({ type: 'shoot', seat: shoot.action.seat });
+    const last = steps.at(-1)!;
+    expect(last.action.type).toBe('play_card');
+    expect(['hand_over', 'game_over']).toContain(last.next.phase);
+    expect(last.move).toBeNull();
+    for (const { prev, move } of steps.filter(s => s.move)) for (const seat of SEATS) expect(applyPublicMove(viewFor(prev, seat), move!)).not.toBeNull();
+  });
+
+  it('a missed shoot ends the hand early, on the first trick lost, with no move', () => {
+    const steps = presetSteps('hand-shoot-missed');
+    expect(steps.at(-1)!.next.players.some(p => p.hand.length > 0)).toBe(true);
+    expect(steps.at(-1)!.move).toBeNull();
+  });
+
+  it('a nines misdeal is never a move, since it redeals', () => {
+    // Five nines and no other meld for South; East deals, so South calls first.
+    const nines = ['9S', '9S', '9H', '9H', '9D', 'AS', 'AS', 'TS', 'TH', 'TD', 'AC', 'TC'];
+    const state = stackDeal(newGame('nines', {}, 3), { 0: nines });
+    const action: Action = { type: 'misdeal', seat: 0 };
+    const next = applyAction(state, action);
+    expect(next.handNumber).toBe(state.handNumber + 1);
+    expect(publicMove(state, next, action)).toBeNull();
   });
 });

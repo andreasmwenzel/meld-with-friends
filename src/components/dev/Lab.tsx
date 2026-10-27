@@ -102,10 +102,15 @@ export function Lab() {
     const qs = new URLSearchParams(window.location.search);
     setChrome(qs.get("chrome") !== "0"); // eslint-disable-line react-hooks/set-state-in-effect -- read once from the URL on mount
     exposeConsole();
+    // Strict Mode runs this effect twice: setup that finishes after cleanup must undo itself.
+    let disposed = false;
     let autoplay: ReturnType<typeof setInterval> | undefined;
+    let unsubscribe: (() => void) | undefined;
     void boot(qs).then(async () => {
-      if (!broadcast) return;
-      await broadcast.start();
+      if (!broadcast || disposed) return;
+      const stop = await broadcast.start();
+      if (disposed) { stop(); return; }
+      unsubscribe = stop;
       if (qs.get("autoplay") !== "1") return;
       // Every seat moves through the lab store, so each move reaches the board only as a broadcast.
       labStore.setRunning(false);
@@ -113,8 +118,8 @@ export function Lab() {
         const phase = labStore.state.phase;
         if (phase === "hand_over" || phase === "game_over" || !labStore.step()) clearInterval(autoplay);
       }, labStore.get().speed);
-    }).finally(() => { setReady(true); labStore.kick(); });
-    return () => { window.fetch = real; clearInterval(autoplay); };
+    }).finally(() => { if (disposed) return; setReady(true); labStore.kick(); });
+    return () => { disposed = true; window.fetch = real; clearInterval(autoplay); unsubscribe?.(); };
   }, [broadcast]);
 
   useEffect(() => {
