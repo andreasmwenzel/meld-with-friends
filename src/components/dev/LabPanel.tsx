@@ -13,7 +13,7 @@ const TABS = ["Positions", "Build", "Timeline", "State"] as const;
 type Tab = (typeof TABS)[number];
 const PHASE_LABEL: Record<Phase, string> = {
   dealing: "Dealing", bidding: "Bidding", declaring_trump: "Naming trump", passing_to_bidder: "Passing to bidder",
-  passing_back: "Passing back", melding: "Melding", playing: "Trick play", hand_over: "Hand over", game_over: "Game over",
+  passing_back: "Passing back", deciding_shoot: "Shoot or play", melding: "Melding", playing: "Trick play", hand_over: "Hand over", game_over: "Game over",
 };
 const SUIT_INK: Record<Suit, string> = { S: "text-pip-black", H: "text-pip-red", D: "text-pip-red", C: "text-pip-black" };
 
@@ -149,7 +149,7 @@ function Positions({ snap }: { snap: LabSnapshot }) {
 
 /* ---------- Build ---------- */
 
-const TARGETS: ScenarioTarget[] = ["bidding", "declaring_trump", "passing_to_bidder", "passing_back", "melding", "playing", "hand_over", "game_over"];
+const TARGETS: ScenarioTarget[] = ["bidding", "declaring_trump", "passing_to_bidder", "passing_back", "deciding_shoot", "melding", "playing", "hand_over", "game_over"];
 
 function startingSpec(snap: LabSnapshot): ScenarioSpec {
   if (snap.source.kind === "spec") return snap.source.spec;

@@ -65,7 +65,8 @@ meld.spec({...})                         // encode a spec for ?spec=
 the same spec always gives the same position. Every position it produces is one the engine can
 actually reach. Card names can be `AS0`, `AS` (first free copy), `10S` or `A♠`. Fields: `seed`,
 `rules`, `dealer`, `handNumber`, `score`, `hands`, `to`, `bids` (`[25, null, "shoot"]` from the
-dealer's left), `bidder`/`bid`/`shoot`, `trump`, `passToBidder`/`passBack`, `meld` per seat
+dealer's left), `bidder`/`bid`/`shoot`, `shootAfterPass` (the bidder's decision after the pass; plays it out
+when omitted), `trump`, `passToBidder`/`passBack`, `meld` per seat
 (`"full"`, `"none"`, or cards), `confirmed`, `tricks`, `plays`, `turn`, `play` (scripted cards in order).
 
 When you add a preset, `src/engine/__tests__/scenario.test.ts` builds it and checks that it reaches
@@ -111,7 +112,8 @@ Plays full games with random rules (target, min bid, step, pass count, counting,
 stuck, meld saving) and the real bots. After every move it runs `checkState` and checks that no seat's
 `viewFor` contains a card that seat shouldn't see (`leakedCards`). Each failure is saved
 to `.dev/states/fuzz-*.json`; open it with `/dev/lab?state=<name>` and walk back to the move that
-broke it. A small fuzz run is also part of `pnpm vitest run`.
+broke it. It prints how often each action was played; at the bidder's shoot decision after the pass it
+shoots about one time in ten, since bots rarely hold a shooting hand. A small fuzz run is also part of `pnpm vitest run`.
 
 ## Front door: `/dev/welcome`
 

@@ -34,7 +34,7 @@ export interface Chapter {
 export interface Walk { frames: GameState[]; moves: Move[]; chapters: Chapter[] }
 
 const KIND: Record<Action["type"], MoveKind> = {
-  bid: "bid", pass_bid: "bid", shoot: "bid", misdeal: "bid", declare_trump: "trump", pass_cards: "pass",
+  bid: "bid", pass_bid: "bid", shoot: "bid", decline_shoot: "bid", misdeal: "bid", declare_trump: "trump", pass_cards: "pass",
   declare_meld: "meld", confirm_meld: "meld", play_card: "play", next_hand: "deal",
 };
 const lastTrickOf = (state: GameState) => (state as GameState & { lastTrick?: Trick | null }).lastTrick ?? null;

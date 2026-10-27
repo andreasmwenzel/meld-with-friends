@@ -2,6 +2,7 @@
 import { applyAction, cardLabel, IllegalAction, newGame, type Action, type GameState, type SeatIndex } from "@/engine";
 import { actors, botAction, buildScenario, SEATS, type ScenarioSpec } from "@/engine/scenario";
 import { presetById } from "@/engine/scenarios";
+import { replayLog } from "@/engine/replay";
 
 export interface LabFlags {
   /** Game's connection prop, to see the reconnecting banner */
@@ -49,6 +50,7 @@ export function describeAction(a: Action): string {
     case "bid": return `${who} bids ${a.amount}`;
     case "pass_bid": return `${who} passes`;
     case "shoot": return `${who} shoots the moon`;
+    case "decline_shoot": return `${who} plays it out`;
     case "misdeal": return `${who} throws in for nines`;
     case "declare_trump": return `${who} names ${{ S: "spades", H: "hearts", D: "diamonds", C: "clubs" }[a.suit]}`;
     case "pass_cards": return `${who} passes ${a.cards.map(cardLabel).join(" ") || "nothing"}`;
@@ -218,9 +220,11 @@ export function parseImport(data: unknown): { base: GameState; actions: Action[]
     for (const dealer of SEATS) {
       try {
         const start = newGame(state.seed, state.rules, dealer);
-        const end = actions.reduce(applyAction, start);
-        if (end.rev === state.rev && canonical(end.players) === canonical(state.players) && canonical(end.score) === canonical(state.score)) {
-          return { base: start, actions, note: `Rebuilt from seed with ${actions.length} actions` };
+        // Older logs lack the bidder's shoot decision after the pass; replayLog fills it in.
+        const played = replayLog(start, actions);
+        const end = played.states.at(-1)!;
+        if (end.rev - (played.actions.length - actions.length) === state.rev && canonical(end.players) === canonical(state.players) && canonical(end.score) === canonical(state.score)) {
+          return { base: start, actions: played.actions, note: `Rebuilt from seed with ${played.actions.length} actions` };
         }
       } catch { /* try the next dealer */ }
     }

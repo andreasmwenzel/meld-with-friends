@@ -37,7 +37,10 @@ export interface ScenarioSpec {
   bids?: (number | null | 'shoot')[];
   bidder?: SeatIndex;
   bid?: number;
+  /** the bidder shoots in the auction */
   shoot?: boolean;
+  /** the bidder shoots after the pass (default: plays it out once past deciding_shoot) */
+  shootAfterPass?: boolean;
   trump?: Suit;
   /** cards the bidder's partner passes over, and the bidder passes back; the bot picks when omitted */
   passToBidder?: string[];
@@ -149,7 +152,7 @@ export function scenarioStart(spec: ScenarioSpec): GameState {
   return spec.hands ? stackDeal(state, spec.hands, spec.seed ?? 'lab') : state;
 }
 
-const PHASE_ORDER: ScenarioTarget[] = ['bidding', 'declaring_trump', 'passing_to_bidder', 'passing_back', 'melding', 'playing', 'hand_over', 'game_over'];
+const PHASE_ORDER: ScenarioTarget[] = ['bidding', 'declaring_trump', 'passing_to_bidder', 'passing_back', 'deciding_shoot', 'melding', 'playing', 'hand_over', 'game_over'];
 
 /** Fast deterministic bot for filling in whatever the spec leaves open. */
 export function botAction(state: GameState, seat: SeatIndex): Action {
@@ -235,6 +238,10 @@ export function buildScenario(spec: ScenarioSpec): Scenario {
       apply(names ? { type: 'pass_cards', seat, cards: resolveOwned(names, state.players[seat].hand) } : botAction(state, seat));
       continue;
     }
+    if (state.phase === 'deciding_shoot') {
+      apply({ type: spec.shootAfterPass ? 'shoot' : 'decline_shoot', seat });
+      continue;
+    }
     if (state.phase === 'playing') {
       if (playQueue.length) {
         const card = resolveOwned([playQueue[0]], state.players[seat].hand)[0];
@@ -282,13 +289,14 @@ export function checkState(input: GameState): string[] {
   }
   if (state.phase === 'bidding' && state.players.some(p => p.hand.length !== 12)) problems.push('Every hand should hold 12 cards while bidding');
   const onTurn = state.turn;
-  if (['bidding', 'declaring_trump', 'passing_to_bidder', 'passing_back', 'playing'].includes(state.phase) && onTurn === null) problems.push(`Nobody is on turn in ${state.phase}`);
+  if (['bidding', 'declaring_trump', 'passing_to_bidder', 'passing_back', 'deciding_shoot', 'playing'].includes(state.phase) && onTurn === null) problems.push(`Nobody is on turn in ${state.phase}`);
   if (state.phase === 'playing' && state.currentTrick && onTurn !== null) {
     const expected = ((state.currentTrick.leader + inTrick) % 4) as SeatIndex;
     if (expected !== onTurn) problems.push(`Seat ${onTurn} is on turn but seat ${expected} should play next`);
   }
-  if (['declaring_trump', 'passing_to_bidder', 'passing_back', 'melding', 'playing'].includes(state.phase) && state.bidder === null) problems.push('No bidder after the auction');
-  if (['passing_to_bidder', 'passing_back', 'melding', 'playing'].includes(state.phase) && !state.trump) problems.push('No trump after it was declared');
+  if (['declaring_trump', 'passing_to_bidder', 'passing_back', 'deciding_shoot', 'melding', 'playing'].includes(state.phase) && state.bidder === null) problems.push('No bidder after the auction');
+  if (state.phase === 'deciding_shoot' && (state.turn !== state.bidder || state.highBid?.shoot || state.rules.shoot === 'off')) problems.push('Only a bidder who has not shot decides on a shoot, with shooting on');
+  if (['passing_to_bidder', 'passing_back', 'deciding_shoot', 'melding', 'playing'].includes(state.phase) && !state.trump) problems.push('No trump after it was declared');
   for (const team of ['red', 'blue'] as const) {
     const sum = state.history.reduce((total, h) => total + h.delta[team], 0);
     if (sum !== state.score[team]) problems.push(`${team} score ${state.score[team]} differs from its history total ${sum}`);

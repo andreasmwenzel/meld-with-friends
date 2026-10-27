@@ -42,19 +42,40 @@ function sameGame(a: GameState, b: GameState): boolean {
  * after the dealer, so the first logged action names the dealer; the other seats are tried in case
  * an older game disagrees. Returns null when the log no longer replays, for example after an engine change.
  */
-export function rebuildFromLog(final: GameState, actions: Action[]): { start: GameState; states: GameState[] } | null {
+export function rebuildFromLog(final: GameState, actions: Action[]): { start: GameState; states: GameState[]; actions: Action[] } | null {
   const first = actions[0]?.seat;
   const guess = first === undefined ? 0 : ((first + 3) % 4) as SeatIndex;
   const dealers = [guess, ...SEATS.filter(seat => seat !== guess)];
   for (const dealer of dealers) {
     try {
       const start = newGame(final.seed, final.rules, dealer);
-      const states = [start];
-      for (const action of actions) states.push(applyAction(states[states.length - 1], action));
-      if (sameGame(states[states.length - 1], final)) return { start, states };
+      const played = replayLog(start, actions);
+      // Each decision the older log lacks adds a revision the stored game never had.
+      const added = played.actions.length - actions.length;
+      const last = played.states[played.states.length - 1];
+      if (sameGame({ ...last, rev: last.rev - added }, final)) return { start, ...played };
     } catch { /* try the next dealer */ }
   }
   return null;
+}
+
+/**
+ * Applies a logged action list from `start`. Games logged before the bidder's shoot decision after
+ * the pass existed went straight to meld, so where the log moves on without a decision the bidder is
+ * taken to have played it out. Returns every state and the actions actually applied.
+ */
+export function replayLog(start: GameState, actions: readonly Action[]): { states: GameState[]; actions: Action[] } {
+  const states = [start];
+  const applied: Action[] = [];
+  const apply = (action: Action) => { states.push(applyAction(states[states.length - 1], action)); applied.push(action); };
+  for (const action of actions) {
+    const at = states[states.length - 1];
+    if (at.phase === 'deciding_shoot' && at.bidder !== null && action.type !== 'shoot' && action.type !== 'decline_shoot') {
+      apply({ type: 'decline_shoot', seat: at.bidder });
+    }
+    apply(action);
+  }
+  return { states, actions: applied };
 }
 
 /** The state without its seed, so nobody can deal the next hand from it. */
@@ -96,7 +117,8 @@ export function describeStep(action: Action, before: GameState, after: GameState
   const who = nameOf(action.seat);
   switch (action.type) {
     case 'bid': return `${who} bids ${action.amount}`;
-    case 'shoot': return `${who} shoots the moon`;
+    case 'shoot': return before.phase === 'deciding_shoot' ? `${who} shoots the moon after the pass` : `${who} shoots the moon`;
+    case 'decline_shoot': return `${who} plays it out`;
     case 'misdeal': return `${who} throws in ${before.players[action.seat].hand.filter(card => card[0] === '9').length} nines and no meld, so ${nameOf(after.dealer)} redeals`;
     case 'pass_bid': {
       if (after.handNumber !== before.handNumber) return `${who} passes. Everyone passed, so ${nameOf(after.dealer)} redeals`;

@@ -120,9 +120,11 @@ export function legalActionsFor(state: GameState, seat: SeatIndex): LegalActions
   const allOthersPassed = seat === state.dealer && !state.highBid
     && SEATS.every(other => other === seat || state.bids.some(b => b.seat === other && b.amount === null));
   const canBid = bidding && !shotBid && !allOthersPassed;
+  const deciding = state.phase === 'deciding_shoot' && onTurn && seat === state.bidder;
   return {
     canBid, minBid: canBid ? openingBid(state) : null,
-    canShoot: bidding && state.rules.shoot !== 'off' && !shotBid,
+    canShoot: (bidding && state.rules.shoot !== 'off' && !shotBid) || deciding,
+    canDeclineShoot: deciding,
     canMisdeal: bidding && state.rules.ninesMisdeal && !state.bids.some(b => b.seat === seat)
       && qualifiesForMisdeal(state.players[seat].hand),
     canPassBid: bidding, canDeclareTrump: state.phase === 'declaring_trump' && onTurn,
@@ -167,6 +169,21 @@ function finishBiddingAction(state: EngineState): void {
     requireAction(state.turn !== null, 'Bidding requires a turn');
     do { state.turn = nextSeat(state.turn); } while (passed.has(state.turn));
   }
+}
+/**
+ * Once the bidder holds the passed cards (or trump is named, with passing off), a bidder who has not
+ * shot decides whether to shoot before anyone lays down meld. Otherwise meld begins.
+ */
+function afterPass(state: GameState): void {
+  requireAction(state.bidder !== null, 'No bidder');
+  if (state.rules.shoot !== 'off' && !state.highBid?.shoot) {
+    state.phase = 'deciding_shoot';
+    state.turn = state.bidder;
+  } else startMeld(state);
+}
+function startMeld(state: GameState): void {
+  state.phase = 'melding';
+  state.turn = null;
 }
 function countCounters(cards: CardId[], rules: RulesConfig): number {
   return cards.reduce((total, card) => {
@@ -260,11 +277,20 @@ export function applyAction(previous: GameState, action: Action): GameState {
       requireAction(legal.canShoot, 'You cannot shoot now');
       const amount = state.rules.shoot === 'points' ? state.rules.shootPoints : state.rules.target;
       state.highBid = { seat: action.seat, amount, shoot: true };
-      state.bids.push({ ...state.highBid });
       log(state, `${name} shoots the moon`);
-      finishBiddingAction(state);
+      // After the pass the auction is over: the contract becomes the shoot and meld begins.
+      if (state.phase === 'deciding_shoot') startMeld(state);
+      else {
+        state.bids.push({ ...state.highBid });
+        finishBiddingAction(state);
+      }
       break;
     }
+    case 'decline_shoot':
+      requireAction(legal.canDeclineShoot, 'You cannot decline a shoot now');
+      log(state, `${name} plays it out`);
+      startMeld(state);
+      break;
     case 'misdeal': {
       requireAction(legal.canMisdeal, 'You cannot throw this hand in');
       const hand = [...player.hand];
@@ -295,8 +321,10 @@ export function applyAction(previous: GameState, action: Action): GameState {
       requireAction(SUITS.includes(action.suit), 'Invalid trump suit');
       state.trump = action.suit;
       log(state, `${name} declares ${{ S: 'spades', H: 'hearts', D: 'diamonds', C: 'clubs' }[action.suit]}`);
-      state.phase = state.rules.passCount ? 'passing_to_bidder' : 'melding';
-      state.turn = state.rules.passCount ? partner(action.seat) : null;
+      if (state.rules.passCount) {
+        state.phase = 'passing_to_bidder';
+        state.turn = partner(action.seat);
+      } else afterPass(state);
       break;
     case 'pass_cards': {
       requireAction(legal.mustPassCount !== null, 'You cannot pass cards now');
@@ -311,8 +339,10 @@ export function applyAction(previous: GameState, action: Action): GameState {
       // Transfer is atomic; no pending face-down cards need to be retained.
       player.passBuffer = [];
       log(state, `${name} passes ${action.cards.length} cards to ${SEAT_NAMES[receiving]}`);
-      state.phase = state.phase === 'passing_to_bidder' ? 'passing_back' : 'melding';
-      state.turn = state.phase === 'passing_back' ? state.bidder : null;
+      if (state.phase === 'passing_to_bidder') {
+        state.phase = 'passing_back';
+        state.turn = state.bidder;
+      } else afterPass(state);
       break;
     }
     case 'declare_meld': {
@@ -407,7 +437,7 @@ export function viewFor(state: GameState, seat: SeatIndex): PlayerView {
     recap: {
       handNumber: state.handNumber, dealer: state.dealer, bids: state.bids,
       bidder: state.bidder, bid: state.highBid?.amount ?? null, trump: state.trump,
-      passing: { done: ['melding', 'playing', 'hand_over', 'game_over'].includes(state.phase), count: state.rules.passCount },
+      passing: { done: ['deciding_shoot', 'melding', 'playing', 'hand_over', 'game_over'].includes(state.phase), count: state.rules.passCount },
       myPassedOut: (state as EngineState).passedOut?.[seat] ?? [],
       myPassedIn: (state as EngineState).passedIn?.[seat] ?? [],
       melds: Object.fromEntries(state.players.map(p => [p.seat, { items: p.meld, points: p.meldPoints }])) as HandRecap['melds'],

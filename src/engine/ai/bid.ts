@@ -70,6 +70,7 @@ export function chooseBid(view: PlayerView, config: BotConfig = DEFAULT_SETTINGS
   return minBid;
 }
 
+/** A hand to shoot with: enough of one suit, both its aces, and an ace in every other suit. Once trump is named, that suit. */
 export function overwhelming(view: PlayerView, config: BotConfig = DEFAULT_SETTINGS.bots) {
-  return suits.some(s => view.hand.filter(c => suitOf(c) === s).length >= config.shootMinTrump && view.hand.filter(c => suitOf(c) === s && c[0] === 'A').length === 2 && suits.every(side => side === s || view.hand.some(c => suitOf(c) === side && c[0] === 'A')));
+  return (view.trump ? [view.trump] : suits).some(s => view.hand.filter(c => suitOf(c) === s).length >= config.shootMinTrump && view.hand.filter(c => suitOf(c) === s && c[0] === 'A').length === 2 && suits.every(side => side === s || view.hand.some(c => suitOf(c) === side && c[0] === 'A')));
 }

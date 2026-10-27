@@ -11,7 +11,7 @@ const LOG_CAP = 50;
 /** What a move said, without anything private (a meld declaration's chosen cards are left out). */
 export type PublicAction =
   | { type: 'bid'; seat: SeatIndex; amount: number }
-  | { type: 'pass_bid' | 'shoot' | 'declare_meld' | 'confirm_meld'; seat: SeatIndex }
+  | { type: 'pass_bid' | 'shoot' | 'decline_shoot' | 'declare_meld' | 'confirm_meld'; seat: SeatIndex }
   | { type: 'declare_trump'; seat: SeatIndex; suit: Suit }
   | { type: 'play_card'; seat: SeatIndex; card: CardId };
 
@@ -35,7 +35,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 function publicAction(action: Action): PublicAction | null {
   switch (action.type) {
     case 'bid': return { type: 'bid', seat: action.seat, amount: action.amount };
-    case 'pass_bid': case 'shoot': case 'declare_meld': case 'confirm_meld': return { type: action.type, seat: action.seat };
+    case 'pass_bid': case 'shoot': case 'decline_shoot': case 'declare_meld': case 'confirm_meld': return { type: action.type, seat: action.seat };
     case 'declare_trump': return { type: 'declare_trump', seat: action.seat, suit: action.suit };
     case 'play_card': return { type: 'play_card', seat: action.seat, card: action.card };
     default: return null;

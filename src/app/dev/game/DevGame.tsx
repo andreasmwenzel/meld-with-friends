@@ -75,6 +75,7 @@ function jump(s: GameState, phase: "playing" | "melding" | "passing_back"): Game
     else if (L.canBid && L.minBid) s = applyAction(s, { type: "bid", seat, amount: L.minBid });
     else if (L.canDeclareTrump) s = applyAction(s, { type: "declare_trump", seat, suit: "S" });
     else if (L.mustPassCount) s = applyAction(s, { type: "pass_cards", seat, cards: v.hand.slice(0, L.mustPassCount) });
+    else if (L.canDeclineShoot) s = applyAction(s, { type: "decline_shoot", seat });
     else return s;
   }
   if (phase === "playing") {
@@ -108,6 +109,7 @@ function autoplay(s: GameState, all = false): GameState {
     else if (L.canBid && L.minBid) s = applyAction(s, { type: "bid", seat, amount: L.minBid });
     else if (L.canDeclareTrump) s = applyAction(s, { type: "declare_trump", seat, suit: "S" });
     else if (L.mustPassCount) s = applyAction(s, { type: "pass_cards", seat, cards: v.hand.slice(0, L.mustPassCount) });
+    else if (L.canDeclineShoot) s = applyAction(s, { type: "decline_shoot", seat });
     else if (L.playableCards.length) s = applyAction(s, { type: "play_card", seat, card: L.playableCards[0] });
     else return s;
   }
