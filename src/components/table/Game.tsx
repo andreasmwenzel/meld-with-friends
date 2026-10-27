@@ -26,7 +26,7 @@ import { describeConstraint } from "@/engine/rules";
 import { cardLabel } from "@/engine/deck";
 import { motionTimings, flyFrom, sweepTo } from "./motion";
 import { newLogLines, speakLine } from "./announce";
-import { DOUBLE_TAP_MS, isRealPress, isTimedActivation, secondPress, type Armed, type Press } from "./tapTwice";
+import { DOUBLE_TAP_MS, isRealPress, isTimedActivation, releasePress, secondPress, type Armed, type Press } from "./tapTwice";
 
 type ClientAction = Action extends infer A ? (A extends Action ? Omit<A, "seat"> : never) : never;
 
@@ -64,7 +64,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   /** Card lifted awaiting a second tap; only valid for the view revision it was lifted in.
    *  While `open`, a second tap plays it (the card wears its ring); once the window closes a tap puts it down. */
   const [armed, setArmed] = useState<Armed | null>(null);
-  /** The last pointerdown on a hand card; a click without one just before it is a keyboard or screen-reader press. */
+  /** The last pointer press on a hand card; a click not just after it was let go is a keyboard or screen-reader press. */
   const lastPress = useRef<Press | null>(null);
   /** The card you just played, held up in your hand while the play is sent. */
   const [sending, setSending] = useState<CardId | null>(null);
@@ -732,7 +732,8 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
               return (
                 <span key={c} data-keep-armed={isArmed || armedCard ? "" : undefined} className="shrink-0" style={{ marginLeft: -overlap }} onClick={() => { if (view.phase === "playing" && isMyTurn && !playable) showHint(); }}>
                   <button data-hand-card={c}
-                    onPointerDown={(e) => { lastPress.current = { card: c, at: e.timeStamp, real: isRealPress(e.pointerType, window.matchMedia("(any-pointer: fine)").matches) }; }}
+                    onPointerDown={(e) => { lastPress.current = { card: c, pointerId: e.pointerId, real: isRealPress(e.pointerType, window.matchMedia("(any-pointer: fine)").matches), upAt: null }; }}
+                    onPointerUp={(e) => { lastPress.current = releasePress(lastPress.current, c, e.pointerId, e.timeStamp); }}
                     onPointerCancel={() => { lastPress.current = null; }}
                     onClick={(e) => { const timed = isTimedActivation(lastPress.current, c, e.timeStamp, e.detail); lastPress.current = null; toggle(c, timed); }} disabled={busy || !playable} aria-pressed={sel}
                     className="group relative block touch-manipulation rounded-[10px] focus-visible:z-20 disabled:pointer-events-none"
