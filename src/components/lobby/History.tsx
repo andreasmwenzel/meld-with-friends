@@ -60,8 +60,10 @@ export function HistoryList({ rows }: { rows: HistoryEntry[] }) {
                     <span className="tabular-nums text-chalk">{fmt.format(mine)} to {fmt.format(theirs)}</span>
                     <span className="text-chalk-faint"> in {g.hands} {g.hands === 1 ? "hand" : "hands"}</span>
                   </p>
+                  {/* Screen readers get the full names; the visible line keeps first names and may truncate. */}
                   <p className="mt-0.5 truncate text-sm text-chalk-faint" title={full}>
-                    With {firstName(g.partner)} vs {firstName(g.opponents[0])} and {firstName(g.opponents[1])}
+                    <span aria-hidden>With {firstName(g.partner)} vs {firstName(g.opponents[0])} and {firstName(g.opponents[1])}</span>
+                    <span className="sr-only">{full}</span>
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
