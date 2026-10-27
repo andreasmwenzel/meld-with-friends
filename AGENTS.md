@@ -31,7 +31,8 @@ Everything committed, and every issue, PR and comment, is world-readable. Before
 1. Branch from up-to-date `main`: `git switch -c <type>/<short-name> origin/main`.
 2. Commit by explicit path list (`git add path1 path2`, never `git add -A`) so other work in the checkout
    is not swept in. Commit messages say what changed and why.
-3. Verify locally: `pnpm tsc --noEmit && pnpm lint && pnpm vitest run`. For anything a player sees, check it
+3. Verify locally: `pnpm next typegen && pnpm tsc --noEmit && pnpm lint && pnpm vitest run` (a fresh checkout
+   needs the typegen step first, as CI does). For anything a player sees, check it
    at 390x844 with the dev tools below and put before/after screenshots in the PR.
 4. `gh pr create` with a summary, how it was verified, and `Closes #N` for the issues it finishes.
 5. Review: an agent may review and merge its own PR, but the review must be a separate pass with fresh
@@ -63,4 +64,9 @@ Everything committed, and every issue, PR and comment, is world-readable. Before
   `node scripts/shots.mjs [--only ids]` screenshots presets at 390x844 into `.dev/shots`.
   `node scripts/pull-game.mjs CODE` copies a production game into the lab. `node scripts/fuzz.mjs N` fuzzes
   the engine. Older boards: `/dev/game` (`?play`, `?meld`, `?end=1`).
-- App env lives in `.env.local` (see `.env.example`). Never print or commit it.
+- App env lives in `.env.local` (see `.env.example`). Never print or commit it. It holds production
+  credentials: agent worktrees must not copy it from another checkout. Unit tests and `/dev/lab` run without
+  Supabase; start `pnpm dev` with placeholder values (`NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co`,
+  any string for the anon key) when you only need the lab. Never point a script, a dev server or a load
+  measurement at the production project; `scripts/smoke.mjs` against production is a maintainer step that
+  runs once, after a merge. A stray run has taken production down (#67).
