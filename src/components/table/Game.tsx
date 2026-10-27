@@ -845,9 +845,9 @@ function SuggestedMark() {
   );
 }
 
-/** "You are shooting the moon", "West is shooting the moon", or "shot" once the hand is over. */
-function shootLine(who: string, over: boolean): string {
-  return over ? `${who} shot the moon` : `${who} ${who === "You" ? "are" : "is"} shooting the moon`;
+/** "You are shooting the moon" or "West is shooting the moon". */
+function shootLine(who: string): string {
+  return `${who} ${who === "You" ? "are" : "is"} shooting the moon`;
 }
 
 const REV_W = 36;
@@ -1035,17 +1035,24 @@ function MySeat({ view, name, score }: { view: PlayerView; name: string; score: 
           </span>
           <span className="text-xs font-semibold sm:text-sm">You{score.dealer && <span className="sr-only">, dealer</span>}</span>
         </div>
-        <div className="absolute left-full top-1/2 ml-1 -translate-y-1/2 whitespace-nowrap">
-          <ScoreTag score={score} name="You" align="center" />
+        {/* Above the side seats' cards, and opening up and over the cloth: below this seat the board ends. */}
+        <div className="absolute left-full top-1/2 z-30 ml-1 -translate-y-1/2 whitespace-nowrap">
+          <ScoreTag score={score} name="You" align="right" placement="above" />
         </div>
       </div>
     </div>
   );
 }
 
+/** A player's name within a line, cut short with an ellipsis when it would not fit; the text keeps all of it for screen readers. */
+function Name({ name }: { name: string }) {
+  return <span className="min-w-0 truncate" title={name}>{name}</span>;
+}
+
 /**
  * Trick play's status, just above your hand: whose turn it is, then what the last trick brought,
- * the rule you must follow, and the way to see the last trick again. Fixed height, so nothing moves.
+ * the rule you must follow, and the way to see the last trick again. Fixed height, so the hand never moves:
+ * a long name is cut short, and on an upright phone the second row keeps room for two lines.
  */
 function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact }: {
   view: PlayerView; trick: PlayerView["currentTrick"]; nameOf: (s: SeatIndex) => string; peek: Peek;
@@ -1055,18 +1062,21 @@ function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact }: {
   const done = !peek.last && !!trick && trick.plays.length === 4 && trick.winner !== null;
   const took = done ? countersIn(trick, view.rules) : 0;
   const detail = peek.last ? null
-    : done ? `${nameOf(trick.winner!)} took it${took > 0 ? `, ${took} ${took === 1 ? "counter" : "counters"}` : ", no counters"}.`
+    : done ? <><Name name={nameOf(trick.winner!)} />{` took it${took > 0 ? `, ${took} ${took === 1 ? "counter" : "counters"}` : ", no counters"}.`}</>
     : mine ? constraintSentence(view) ?? "Tap a card to play it."
     : null;
-  const link = "text-xs text-chalk-faint underline underline-offset-4 hover:text-chalk";
+  const link = "whitespace-nowrap text-xs text-chalk-faint underline underline-offset-4 hover:text-chalk";
+  // Each line is a single row of text, so a name can shrink inside it while the words round it stay whole.
+  const line = "flex min-w-0 max-w-full whitespace-pre";
   return (
-    <div className="flex flex-col items-center text-center pb-5 short:pb-0">
-      <div className="flex h-8 items-center">
-        {peek.last ? <p className="display text-chalk" style={{ fontSize: compact ? 17 : 19 }}>Last trick: {nameOf(peek.last.winner!)} took it.</p>
-          : <p className={mine ? "display" : "text-sm text-chalk"} style={mine ? { fontSize: compact ? 19 : 22, color: "var(--brass)" } : undefined}>{mine ? "Your play." : `${nameOf(view.turn!)} to play.`}</p>}
+    <div data-play-status="" className="flex w-full flex-col items-center text-center pb-5 short:pb-0">
+      <div className="flex h-8 max-w-full items-center">
+        {peek.last ? <p className={`display text-chalk ${line}`} style={{ fontSize: compact ? 17 : 19 }}>Last trick: <Name name={nameOf(peek.last.winner!)} /> took it.</p>
+          : mine ? <p className={`display ${line}`} style={{ fontSize: compact ? 19 : 22, color: "var(--brass)" }}>Your play.</p>
+          : <p className={`text-sm text-chalk ${line}`}><Name name={nameOf(view.turn!)} /> to play.</p>}
       </div>
-      <div className="flex min-h-5 flex-wrap items-center justify-center gap-x-3 text-xs text-chalk-faint">
-        {detail && <span>{detail}</span>}
+      <div className="flex h-10 max-w-full flex-wrap content-center items-center justify-center gap-x-3 text-xs leading-5 text-chalk-faint short:h-5">
+        {detail && <span className={typeof detail === "string" ? "max-w-full truncate" : line}>{detail}</span>}
         {(peek.can || peek.last) && <button type="button" onClick={peek.toggle} aria-expanded={!!peek.last} className={link}>{peek.last ? "Back to the table" : "Last trick"}</button>}
         {stalled && <button type="button" onClick={nudge} className={link}>Nudge the computers</button>}
       </div>
@@ -1104,7 +1114,6 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
       case "passing_to_bidder": return who === "You" ? `Pass ${view.legal.mustPassCount ?? ""} cards to your partner.` : `${who} is passing to the bidder.`;
       case "passing_back": return who === "You" ? `Pass ${view.legal.mustPassCount ?? ""} cards back.` : `${who} is passing back.`;
       case "melding": return view.meldConfirmed[view.seat] ? "Meld is in." : "Lay down your meld.";
-      case "playing": return who === "You" ? "Your play." : `${who} to play.`;
       case "hand_over": return "Hand over.";
       case "game_over": return view.winner ? `${view.winner === "red" ? "Red" : "Blue"} team wins.` : "Game over.";
       default: return "";
@@ -1153,7 +1162,7 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
         <p className={mine ? "display" : "text-sm text-chalk"} style={mine ? { fontSize: compact ? 19 : 22, color: "var(--brass)" } : undefined}>{prompt}</p>
         {view.highBid && view.phase === "bidding" && (
           <p className="text-sm text-chalk-faint">
-            {view.highBid.shoot ? shootLine(nameOf(view.highBid.seat), false) : <>{nameOf(view.highBid.seat)} holds {view.highBid.amount}</>}
+            {view.highBid.shoot ? shootLine(nameOf(view.highBid.seat)) : <>{nameOf(view.highBid.seat)} holds {view.highBid.amount}</>}
           </p>
         )}
         {done && (
@@ -1229,7 +1238,7 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld }: {
     return (<>
       {thrown}
       <Bar>
-        {!stuck && <span className="text-chalk-faint">{shooter ? `${shootLine(shooter, false)}.` : "If everyone passes, redeal."}</span>}
+        {!stuck && <span className="text-chalk-faint">{shooter ? `${shootLine(shooter)}.` : "If everyone passes, redeal."}</span>}
         <button className="btn btn-ghost btn-compact" style={{ color: "var(--chalk-faint)" }} onClick={() => act({ type: "pass_bid" })} disabled={busy}>
           {stuck ? `Take it at ${view.rules.minBid}` : "Pass"}
         </button>
