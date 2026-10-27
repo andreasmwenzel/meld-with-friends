@@ -1,4 +1,5 @@
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { DEFAULT_SETTINGS } from '@/lib/settings';
 const mocks = vi.hoisted(() => ({ rpc: vi.fn(), from: vi.fn(), settings: vi.fn() }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ rpc: mocks.rpc, from: mocks.from }) }));
@@ -35,4 +36,16 @@ it('passes saved retention settings to SQL and reports cleanup counts', async ()
   expect(mocks.rpc.mock.calls).toEqual([
     ['cleanup_tables', { p_idle_hours: 48, p_leisurely_days: 60, p_retain_days: 30 }], ['prune_guests', { p_days: 30 }],
   ]);
+});
+it('prunes guests by their latest auth activity, not account age', () => {
+  // The SQL runs only in Supabase; pin the rule in the newest definition of prune_guests.
+  const sql = readFileSync('supabase/migrations/0015_prune_inactive_guests.sql', 'utf8');
+  expect(sql).toContain('create or replace function public.prune_guests(p_days int)');
+  expect(sql).toContain('greatest(u.created_at,u.last_sign_in_at,u.updated_at)<cutoff');
+  expect(sql).toContain('not exists(select 1 from auth.sessions s where s.user_id=u.id and greatest(s.created_at,s.updated_at)>=cutoff)');
+  expect(sql).toContain('not exists(select 1 from auth.refresh_tokens r where r.user_id=u.id::text and greatest(r.created_at,r.updated_at)>=cutoff)');
+  for (const kept of ['public.seats s where s.user_id=u.id', 'public.tables t where t.host=u.id', 'public.banned_users b where b.user_id=u.id']) {
+    expect(sql).toContain(`not exists(select 1 from ${kept})`);
+  }
+  expect(sql).not.toMatch(/u\.created_at<now\(\)/);
 });
