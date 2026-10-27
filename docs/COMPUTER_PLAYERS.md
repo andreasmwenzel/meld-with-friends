@@ -64,6 +64,59 @@ Bots occupy `seats.bot`, with a null `user_id`. The six names are Mabel, Otto, P
 
 Each bot action uses `commit_bot_action`. That service-role-only transaction verifies bot ownership, compares the old revision, updates the game, and appends the seat and action to `game_actions`. A stale revision returns a null commit result without updating the game or inserting an audit row. The worker translates that result to `acted: false` with the current revision. Migration `0004_bot_conflict_noop.sql` makes this an ordinary return rather than raising `40001`: the live database API retried that serialization error until an upstream timeout during concurrent ticks. The winner broadcasts the committed revision. Melding uses one transaction per declaration or confirmation; concurrent workers may split progress across those actions, but cannot duplicate any revision. A dedicated melding-only path prevents the human action hook from accidentally playing a bot turn if another request has already finished melding.
 
+## Table talk
+
+A seated bot offers a short comment every three or four deals, alternating those gaps with a
+starting offset derived from the table id. The first deal stays quiet. Throw-ins and all-pass
+redeals count as deals too. One bot speaks per event, even when several bots are seated.
+A successful rematch also gets a greeting, separately from the hand cadence.
+
+The pure, seeded picker in `src/lib/bots/tableTalk.ts` uses only the scored hand record, public
+scores and seat names. It reacts to made or set contracts, big opposing bids, moon attempts,
+big meld, score gaps and game results. It receives no hands, passes, private views or deal seed.
+Display names in lines are bounded to keep comments under 80 characters: a name longer than 16
+characters is shortened to its first word (split on any whitespace), or cut at 16 when that word is still too long. Names are
+substituted literally, so `$&` in a name stays as typed.
+
+Situations are told apart by who bid: the speaker itself, its partner, or an opponent, each for a
+made bid, a set and a moon. A shoot almost always decides the game; when it does, a moon line is
+the only comment on that game and reads as a game-over line. A shoot that leaves the game running
+(a made solo shoot from a negative score, or a legacy points shoot) is talked about like an
+ordinary made or set bid, with an opponent's made shoot counting as a big bid.
+
+Each bot has its own voice, rooted in its name, in `src/lib/bots/tableTalkLines.ts`: at least six
+lines per bot for each of the twenty situations. Any other speaker name falls back to a plain,
+neutral voice. The voices:
+
+- **Mabel**: a cheerful grandmother. Calls everyone "dear" and "love", talks in baking and kitchen
+  metaphors, and encourages everyone, opponents included.
+- **Otto**: a dry numbers man. Quotes odds and percentages, understated, quietly pleased when the
+  arithmetic holds, and allowed the odd joke about his name reading the same backwards.
+- **Pearl**: old-Hollywood elegance. "Darling", scripts, premieres and encores; compliments
+  come with one eyebrow raised.
+- **Gus**: big-hearted and loud. Sports-commentator energy, exclamation marks, a theatrical
+  groan at a set and a high five for everything else.
+- **Hazel**: sharp and competitive. Trash-talks with a wink, then gives credit anyway.
+- **Walt**: an unhurried old-timer. Fishing and porch talk, and tall tales from back in '62.
+
+House rules for the words: friendly table banter only, nothing that could sting a beginner, no
+gambling talk. A bot that bid and went set, or shot and missed, owns it and apologizes to its
+partner; when the partner bid, the bot is kind and never scolds. Teasing an opponent who went set
+stays playful, and an opponent's missed moon gets respect, not gloating. Big-meld lines name
+nobody, since either side may have melded. Lines speak only of the scored, public result and
+never claim a margin ("so close") the picker cannot know. Moon lines promise no next hand.
+
+Both human and bot scoring actions schedule a comment only after winning the revision-guarded
+commit. Losing ticks and duplicate human actions schedule nothing. `src/server/botTableTalk.ts`
+uses Next.js `after()` for seat-name lookup and delivery, so chat cannot delay the action response;
+lookup, scheduling and delivery failures are logged. There are no retries or stored messages.
+Delivery is best effort, with at most one send attempt per committed event. A disconnected player
+may miss a line, just as with human chat.
+
+Bot messages use the existing `chat:{code}` channel's `message` event and
+`{ id, from, name, text, at }` shape. `from` is `bot:{tableId}:{seat}`, distinct from human UUIDs;
+the stable event id also lets the client deduplicate delivery. No chat UI changes are needed.
+
 ## Measured results
 
 Measured results are recorded below after running `node scripts/bot-arena.mjs 50 3` and `node scripts/bot-arena.mjs 50 60`. Those arena runs alternated the bot team's seats and used complete games to the former default 1500 target with classic scoring. The random team chooses random legal trump, passes, and plays, declares full meld, and randomly bids one legal increment with 25% probability rather than selecting arbitrary unbounded bid amounts. These results measure performance against that baseline, not against skilled humans.
