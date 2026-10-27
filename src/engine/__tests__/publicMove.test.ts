@@ -121,7 +121,8 @@ describe('public moves for shoots and misdeals', () => {
     const shoot = steps.find(s => s.action.type === 'shoot')!;
     expect(shoot.move).toBeNull();
     const last = steps.at(-1)!;
-    expect(last.action.type).toBe('play_card');
+    // Bots claim a proven shoot, so the hand can end on a claim as well as a played card.
+    expect(['play_card', 'claim']).toContain(last.action.type);
     expect(['hand_over', 'game_over']).toContain(last.next.phase);
     expect(last.move).toBeNull();
     for (const { prev, next, move } of steps.filter(s => s.move)) for (const seat of SEATS) {

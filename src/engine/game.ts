@@ -112,6 +112,19 @@ function openingBid(state: GameState): number {
   return Math.ceil(floor / state.rules.bidStep) * state.rules.bidStep;
 }
 
+/**
+ * The claim line `seat` could prove now. A shooter remembers the cards it passed back to its partner:
+ * that partner sits the hand out, so those cards never reach the table. The view hides them during
+ * play, so the proof reads them here; replies come only from the seats still playing.
+ */
+export function claimLineFor(state: GameState, seat: SeatIndex): CardId[] | null {
+  const engine = state as EngineState;
+  const shooter = state.sittingOut != null && state.bidder === seat && state.sittingOut === partner(seat);
+  return claimLine({ phase: state.phase, seat, turn: state.turn, hand: state.players[seat].hand,
+    playedCards: engine.playedCards ?? [], currentTrick: state.currentTrick, trump: state.trump,
+    outOfPlay: shooter ? engine.passedOut?.[seat] ?? [] : [] });
+}
+
 export function legalActionsFor(state: GameState, seat: SeatIndex): LegalActions {
   requireAction(SEATS.includes(seat), 'Invalid seat');
   state = { ...state, rules: resolveRules(state.rules, true) };
@@ -133,9 +146,7 @@ export function legalActionsFor(state: GameState, seat: SeatIndex): LegalActions
     canPassBid: bidding, canDeclareTrump: state.phase === 'declaring_trump' && onTurn,
     mustPassCount: onTurn && (state.phase === 'passing_to_bidder' || state.phase === 'passing_back') ? state.rules.passCount : null,
     canDeclareMeld: melding, canConfirmMeld: melding,
-    // Claim proofs currently assume four active seats. Solo shoots must be played out.
-    canClaim: state.sittingOut == null && claimLine({ phase: state.phase, seat, turn: state.turn, hand: state.players[seat].hand,
-      playedCards: (state as EngineState).playedCards ?? [], currentTrick: state.currentTrick, trump: state.trump }) !== null,
+    canClaim: claimLineFor(state, seat) !== null,
     playableCards: state.phase === 'playing' && onTurn && seat !== state.sittingOut && state.currentTrick && state.trump
       ? legalPlays(state.players[seat].hand, state.currentTrick, state.trump) : [],
     playConstraint: state.phase === 'playing' && onTurn && seat !== state.sittingOut && state.currentTrick && state.trump
@@ -444,8 +455,7 @@ function apply(previous: GameState, action: Action, legacyShoot: boolean): GameS
     }
     case 'claim': {
       requireAction(legal.canClaim, 'You cannot claim the rest now');
-      const line = claimLine({ phase: state.phase, seat: action.seat, turn: state.turn, hand: player.hand,
-        playedCards: state.playedCards ?? [], currentTrick: state.currentTrick, trump: state.trump });
+      const line = claimLineFor(state, action.seat);
       requireAction(line !== null && state.trump !== null, 'No proven claim line');
       state.claim = { seat: action.seat, fromTrick: state.tricksTaken.red.length + state.tricksTaken.blue.length + 1, hands: snapshotHands(state) };
       log(state, `${name} claims the rest.`);
