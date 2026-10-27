@@ -111,6 +111,16 @@ export function Game({ code, me, snap, rev, feed, onTableChange, connection = "o
   // The game ending also finishes the table; game events no longer refetch the table, so ask once.
   const tableEnding = view?.phase === "game_over" && snap.table.status === "playing";
   useEffect(() => { if (tableEnding) onTableChange(); }, [tableEnding, onTableChange]);
+  // Ready checks arrive as table (seats) events, which refresh the snapshot; the board shows the view's
+  // ready list, so fetch it again when the snapshot's list changes between hands (not when a hand ends).
+  const handOver = view?.phase === "hand_over";
+  const snapReady = (snap.ready ?? []).join();
+  const seenReady = useRef(snapReady);
+  useEffect(() => {
+    if (seenReady.current === snapReady) return;
+    seenReady.current = snapReady;
+    if (handOver && feed) void sync.load();
+  }, [handOver, snapReady, feed, sync]);
 
   /** Sends an action; resolves to the view it brought back, or null if nothing came back. */
   async function act(action: ClientAction): Promise<PlayerView | null> {

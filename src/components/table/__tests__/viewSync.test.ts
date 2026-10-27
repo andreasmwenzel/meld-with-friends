@@ -173,6 +173,14 @@ describe("one fetch per game event", () => {
     expect(srv.fetches).toBe(0);
   });
 
+  it("fetches nothing for a chat event on the table channel", () => {
+    const srv = server();
+    const tab = client(srv);
+    tab.channel({ type: "chat", text: "hi" });
+    expect(tab.refresh).not.toHaveBeenCalled();
+    expect(srv.fetches).toBe(0);
+  });
+
   it("refreshes the table for a game event when no board is mounted (game starting)", () => {
     const srv = server();
     const tab = client(srv, { board: false });

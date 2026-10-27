@@ -116,10 +116,11 @@ export function createGameFeed(): GameFeed & { emit: (event: GameFeedEvent) => b
 /**
  * Route one channel event. A mounted board takes game events and fetches its own view once; the
  * table snapshot is refetched for seat, trade and control changes, on resync, and for game events
- * when no board is mounted yet (a game starting from the seating screen).
+ * when no board is mounted yet (a game starting from the seating screen). Chat events fetch nothing.
  */
 export function routeTableEvent(event: TableEvent, feed: { emit: (event: GameFeedEvent) => boolean }, refresh: () => void): void {
   if (event.type === "game") { if (!feed.emit(event)) refresh(); }
   else if (event.type === "resync") { refresh(); feed.emit({ type: "resync" }); }
-  else refresh();
+  // Talk has its own channel; nothing in the snapshot changes with a message.
+  else if (event.type !== "chat") refresh();
 }
