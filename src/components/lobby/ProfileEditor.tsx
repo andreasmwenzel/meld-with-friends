@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { api, type Profile } from "@/lib/api";
 
-/** Name and handle. Friends find you by the handle, so it is worth getting right on day one. */
+/** Name and handle. The name is typed; the handle friends find you by is drawn from two random words. */
 export function ProfileEditor({ me }: { me: Profile }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -17,15 +17,14 @@ export function ProfileEditor({ me }: { me: Profile }) {
     e.preventDefault();
     setBusy(true); setNote(null);
     try {
-      await api("/api/me", { method: "PATCH", body: { displayName: displayName.trim(), handle: handle.trim().replace(/^@/, "").toLowerCase() } });
+      await api("/api/me", { method: "PATCH", body: { displayName: displayName.trim() } });
       setNote({ text: "Saved.", ok: true });
       setOpen(false);
       router.refresh();
     } catch (err) { setNote({ text: (err as Error).message, ok: false }); } finally { setBusy(false); }
   }
 
-  // Draws a fresh two-word handle and saves it straight away. It replaces a handle typed but not saved;
-  // the name field is left as typed.
+  // Draws a fresh two-word handle and saves it straight away; the name field is left as typed.
   async function reroll() {
     setBusy(true); setNote(null);
     try {
@@ -49,11 +48,11 @@ export function ProfileEditor({ me }: { me: Profile }) {
         <input className="field mt-1" value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={40} required />
       </label>
       <div className="text-sm text-ink-soft">
-        <div className="flex items-baseline justify-between gap-2">
-          <label htmlFor="profile-handle">Handle</label>
-          <button type="button" className="tap font-semibold text-ink hover:underline" onClick={reroll} disabled={busy} aria-label="Draw a new two-word handle">New words</button>
+        <p>Handle</p>
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <p className="min-w-0 truncate text-base font-semibold text-ink">@{handle}</p>
+          <button type="button" className="btn btn-compact shrink-0" style={{ color: "var(--ink)" }} onClick={reroll} disabled={busy} aria-label="Draw a new random handle">New words</button>
         </div>
-        <input id="profile-handle" className="field mt-1" value={handle} onChange={(e) => setHandle(e.target.value)} maxLength={32} required autoCapitalize="off" />
       </div>
       <div className="flex flex-wrap gap-2">
         <button className="btn btn-ink" disabled={busy}>Save</button>

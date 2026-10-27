@@ -39,13 +39,13 @@ describe("profile rules API contract", () => {
   );
 
   it("accepts profile fields together with defaults", async () => {
-    const response = await PATCH(request({ displayName: " Player ", handle: "PLAYER", defaultRules: {} }));
+    const response = await PATCH(request({ displayName: " Player ", defaultRules: {} }));
     expect(response.status).toBe(200);
-    expect(mocks.update).toHaveBeenCalledWith({ display_name: "Player", handle: "player", default_rules: resolveRules({}) });
+    expect(mocks.update).toHaveBeenCalledWith({ display_name: "Player", default_rules: resolveRules({}) });
   });
 
   it.each([{}, { defaultRules: null }, { defaultRules: { extra: true } }, { defaultRules: { revealHands: "false" } },
-    { defaultRules: { target: 501 } }, { defaultRules: {}, id: "someone-else" }])(
+    { defaultRules: { target: 501 } }, { defaultRules: {}, id: "someone-else" }, { handle: "chosen_name" }, { displayName: "Player", handle: "chosen_name" }])(
     "rejects invalid profile updates %j", async input => {
       expect((await PATCH(request(input))).status).toBe(400);
       expect(mocks.admin).not.toHaveBeenCalled();
