@@ -7,6 +7,7 @@ import { api, ApiError, isTransientError, type Profile } from "@/lib/api";
 import { ViewSync, type GameFeed } from "./viewSync";
 import { applyPublicMove, type PublicMove } from "@/engine/publicMove";
 import { openMove } from "@/lib/moveAuth";
+import { BUILD_ID, recordBuildReload, reloadPage, staleBuild } from "@/lib/staleClient";
 import type { Action, CardId, PlayerView, SeatIndex, Suit, Team } from "@/engine/types";
 import { PlayingCard, CardBack, SUIT_GLYPH, SUIT_NAME, RANK_LABEL, splitCard, cardName } from "@/components/cards/PlayingCard";
 import { Avatar } from "@/components/site/Avatar";
@@ -82,10 +83,42 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (hintTimer.current) clearTimeout(hintTimer.current); }, []);
   const [degraded, setDegraded] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  // The ref blocks handlers immediately, before React renders the inert controls.
+  const updatingRef = useRef<string | null>(null);
+  const pendingMutations = useRef(0);
+  const [mutations, setMutations] = useState(0);
+  const mutate = useCallback(async <T,>(send: () => Promise<T>): Promise<T> => {
+    setMutations(++pendingMutations.current);
+    try { return await send(); }
+    finally { setMutations(--pendingMutations.current); }
+  }, []);
+  const checkBuild = useCallback((next: PlayerView & { build?: string }) => {
+    if (updatingRef.current || !next.build || !staleBuild(next.build)) return;
+    updatingRef.current = next.build;
+    setUpdating(true);
+  }, []);
+  const reloadIfNeeded = useCallback(() => {
+    const build = updatingRef.current;
+    if (build && recordBuildReload(build)) reloadPage();
+  }, []);
+  useEffect(() => {
+    if (!updating) return;
+    // A hung request must not leave the table inert forever. This deadline never resets on settlement.
+    const timer = setTimeout(reloadIfNeeded, 5000);
+    return () => clearTimeout(timer);
+  }, [updating, reloadIfNeeded]);
+  useEffect(() => {
+    if (!updating || mutations > 0) return;
+    // Let the status paint and sync.act settle, unless the drain deadline above expires first.
+    const timer = setTimeout(() => { if (pendingMutations.current === 0) reloadIfNeeded(); }, 300);
+    return () => clearTimeout(timer);
+  }, [updating, mutations, reloadIfNeeded]);
+  // eslint-disable-next-line react-hooks/refs -- ViewSync stores apply; it runs only after requests or feed events, never during render.
   const [sync] = useState(() => new ViewSync<PlayerView, PublicMove>({
     fetchView: () => api<PlayerView>(`/api/tables/${code}/view`),
     applyMove: applyPublicMove,
-    apply: (next) => { inspect?.(next); setView(next); setDegraded(false); },
+    apply: (next) => { inspect?.(next); setView(next); setDegraded(false); checkBuild(next); },
     onError: (e) => {
       if (isTransientError(e)) setDegraded(true);
       else setError(e instanceof ApiError && e.status === 404 ? "No table has this code." : (e as Error).message);
@@ -123,7 +156,10 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
       // The server's public key for broadcast moves comes with the view.
       const key = (sync.latest as (PlayerView & { moveKey?: string }) | null)?.moveKey;
       const move = key && gameId && event.move ? await openMove(key, gameId, event.move, event.sig) : null;
-      sync.event(event.rev, move ?? undefined);
+      // A newer server may describe rules this bundle cannot apply. Fetch its view before reloading,
+      // even if this build was already attempted, and let the normal view path check the build.
+      if (move && move.build !== BUILD_ID) { await sync.load(); return; }
+      sync.event(event.rev, move?.move);
     }).catch(() => sync.event(event.rev)); // never let one bad event stop the ones after it
   }), [feed, sync, gameId]);
   const live = !!feed && connection === "ok";
@@ -133,12 +169,12 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
 
   /** Sends an action; resolves to the view it brought back, or null if nothing came back. */
   async function act(action: ClientAction): Promise<PlayerView | null> {
-    if (!view || busy) return null;
+    if (!view || busy || updatingRef.current) return null;
     const request = sync.begin();
     const body = { action: { ...action, seat: view.seat }, expectedRev: view.rev, requestId: crypto.randomUUID() };
     setBusy(true); setError(null);
     // The response carries the new view, so the broadcast for this move needs no fetch.
-    return sync.act(async () => {
+    return mutate(() => sync.act(async () => {
       try {
         let next: PlayerView;
         try { next = await api<PlayerView>(`/api/tables/${code}/act`, { body }); }
@@ -157,27 +193,28 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
         else setError((e as Error).message);
         return null;
       } finally { setBusy(false); }
-    });
+    }));
   }
 
   async function countdownNext(signal: AbortSignal) {
-    if (!view || busy || error || reconnecting || document.hidden) return;
+    if (!view || busy || error || reconnecting || document.hidden || updatingRef.current) return;
     let submitted = false;
     try {
       const [table, latest] = await Promise.all([
         api<Snapshot>(`/api/tables/${code}`),
         api<PlayerView & { ready?: SeatIndex[] }>(`/api/tables/${code}/view`),
       ]);
-      if (signal.aborted || document.hidden || !canCountdownAdvance(table, latest, {
+      checkBuild(latest);
+      if (updatingRef.current || signal.aborted || document.hidden || !canCountdownAdvance(table, latest, {
         tableId: snap.table.id, userId: me.id, handNumber: view.handNumber, rev: view.rev,
       })) return;
       const request = sync.begin();
       submitted = true;
       setBusy(true);
       // One normal action request, with the freshly checked revision and no retry.
-      const next = await api<PlayerView>(`/api/tables/${code}/act`, { body: {
+      const next = await mutate(() => api<PlayerView>(`/api/tables/${code}/act`, { body: {
         action: { type: "next_hand", seat: latest.seat }, expectedRev: latest.rev, requestId: crypto.randomUUID(),
-      } });
+      } }));
       sync.accept(next, request);
       setSelected([]);
     } catch (e) {
@@ -208,14 +245,15 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     setStalledSince(botTurn ? Date.now() : null);
   }, [botTurn, view?.rev]);
   useEffect(() => {
-    if (!botTurn || !view) return;
+    if (!botTurn || !view || updating) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     const delay = (view.phase === "playing" ? pace : Math.min(pace, 600)) + (leader ? 0 : 2500);
     const run = async () => {
+      if (updatingRef.current) return;
       let nextDelay = delay;
       try {
-        const r = await api<{ acted: boolean; rev: number; delayMs?: number }>(`/api/tables/${code}/tick`, { body: {} });
+        const r = await mutate(() => api<{ acted: boolean; rev: number; delayMs?: number }>(`/api/tables/${code}/tick`, { body: {} }));
         if (cancelled) return;
         tickFailures.current = 0;
         if (typeof r.delayMs === "number") setPace(r.delayMs);
@@ -234,7 +272,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     timer = setTimeout(run, nudgePending.current ? 0 : delay);
     nudgePending.current = false;
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [botTurn, view, code, load, sync, live, leader, pace, nudgeVersion]);
+  }, [botTurn, view, code, load, sync, live, leader, pace, nudgeVersion, updating, mutate]);
 
   const [displayedTrick, setDisplayedTrick] = useState<PlayerView["currentTrick"]>(null);
   /** The revision at which you asked to see the last trick again; any move puts the table back. */
@@ -320,61 +358,68 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   }, [turnSeat]);
 
   async function rematch() {
+    if (updatingRef.current) return;
     setBusy(true); setError(null);
     try {
-      await api<{ code: string; rev: number }>(`/api/tables/${code}/rematch`, { body: {} });
+      await mutate(() => api<{ code: string; rev: number }>(`/api/tables/${code}/rematch`, { body: {} }));
       onTableChange(); await load();
     } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   }
   async function standIn(seat: SeatIndex, name: string) {
+    if (updatingRef.current) return;
     if (!window.confirm(`Hand ${name}'s chair to a computer? The game continues without them.`)) return;
     setError(null);
     try {
-      await api(`/api/tables/${code}/standin`, { body: { seat } });
+      await mutate(() => api(`/api/tables/${code}/standin`, { body: { seat } }));
       onTableChange(); await load();
     } catch (e) { setError((e as Error).message); }
   }
   async function postReady() {
+    if (updatingRef.current) return;
     setError(null);
     try {
       // The answer is the table, not the view: ask for one view fetch, which the seat broadcast for
       // this same change shares if it arrives first.
-      await sync.act(async () => {
+      await mutate(() => sync.act(async () => {
         await api(`/api/tables/${code}/ready`, { body: {} });
         sync.invalidate();
-      });
+      }));
     } catch (e) { setError((e as Error).message); }
   }
   async function pauseTable() {
+    if (updatingRef.current) return;
     const reason = window.prompt("Why the pause? (optional, 80 characters)", "");
     if (reason === null) return;
     setError(null);
     try {
-      await api(`/api/tables/${code}/pause`, { body: { reason: reason.trim().slice(0, 80) } });
+      await mutate(() => api(`/api/tables/${code}/pause`, { body: { reason: reason.trim().slice(0, 80) } }));
       onTableChange(); await load();
     } catch (e) { setError((e as Error).message); }
   }
   async function resumeTable() {
+    if (updatingRef.current) return;
     setError(null);
     try {
-      await api(`/api/tables/${code}/resume`, { body: {} });
+      await mutate(() => api(`/api/tables/${code}/resume`, { body: {} }));
       onTableChange(); await load();
     } catch (e) { setError((e as Error).message); }
   }
   async function makeHost(userId: string, name: string) {
+    if (updatingRef.current) return;
     if (!window.confirm(`Make ${name} the host? They will deal and run the table from here.`)) return;
     setError(null);
     try {
-      await api(`/api/tables/${code}/host`, { body: { toUserId: userId } });
+      await mutate(() => api(`/api/tables/${code}/host`, { body: { toUserId: userId } }));
       onTableChange(); await load();
     } catch (e) { setError((e as Error).message); }
   }
   async function leave() {
+    if (updatingRef.current) return;
     if (!window.confirm("Leave the game? A computer will take your chair and play on.")) return;
     setError(null);
     try {
-      await api(`/api/tables/${code}/seat`, { method: "DELETE" });
+      await mutate(() => api(`/api/tables/${code}/seat`, { method: "DELETE" }));
       router.push("/home");
     } catch (e) { setError((e as Error).message); }
   }
@@ -402,7 +447,11 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const recapOpen = menu && tab === "hand";
   const unread = chat?.unread ?? 0;
   const autoRecap = useRef(false);
-  useSeenReporting(code, snap.mySeat !== null && view ? view.rev : null);
+  const sendSeen = useCallback((path: string, init: Parameters<typeof api>[1]) => {
+    if (updatingRef.current) return Promise.resolve(null);
+    return api(path, init);
+  }, []);
+  useSeenReporting(code, snap.mySeat !== null && view ? view.rev : null, sendSeen);
   useEffect(() => {
     if (!view || autoRecap.current) return;
     autoRecap.current = true;
@@ -581,7 +630,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
 
   function toggle(card: CardId, timed: boolean) {
     // One action at a time; a press while the last is in flight would clear the card being sent.
-    if (busy) return;
+    if (busy || updatingRef.current) return;
     if (view!.phase === "playing") {
       if (!view!.legal.playableCards.includes(card)) return;
       if (cardPrefs.confirmPlay) {
@@ -689,11 +738,11 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const linkCls = "tap-link text-left text-sm text-chalk-faint underline underline-offset-4 hover:text-chalk disabled:opacity-60";
 
   return (
-    <div className="board relative flex min-h-0 w-full flex-1 flex-col overflow-hidden"
+    <div aria-busy={updating || undefined} className="board relative flex min-h-0 w-full flex-1 flex-col overflow-hidden"
       data-motion={motion} style={{ "--pm": `${slideMs}ms`, "--sd": `${holdMs}ms`, "--sm": `${sweepMs}ms`, paddingBottom: peekingResult ? "4.5rem" : undefined } as React.CSSProperties}>
       <div className={`board-flat flex min-h-0 flex-1 flex-col ${menu ? "lg:pr-[380px]" : ""}`} inert={(menu && !wide) || resultModal ? true : undefined}>
         {/* One slim strip: the hand, the score, and the way to everything else. */}
-        <div className="board-score flex shrink-0 flex-wrap items-center justify-between gap-x-3 px-3 py-1.5 text-sm tabular-nums sm:px-4">
+        <div inert={updating || undefined} className="board-score flex shrink-0 flex-wrap items-center justify-between gap-x-3 px-3 py-1.5 text-sm tabular-nums sm:px-4">
           <p className="min-w-0 truncate">
             <span className="font-semibold">Hand {view.handNumber}</span>
             {view.dealer === view.seat && view.phase === "bidding" && <span className="text-chalk-faint"> · you deal</span>}
@@ -711,7 +760,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           </button>
         </div>
         {paused && (
-          <div className="board-banner panel mx-2 mb-1 flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5 sm:mx-auto sm:w-[min(100%-1rem,760px)]">
+          <div inert={updating || undefined} className="board-banner panel mx-2 mb-1 flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5 sm:mx-auto sm:w-[min(100%-1rem,760px)]">
             <p className="text-sm">
               {canResume
                 ? <>Paused by {paused.by === me.id ? "you" : paused.name}{paused.reason ? `: ${paused.reason}` : ""}.</>
@@ -720,8 +769,9 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
             {canResume && <button type="button" className="btn btn-ink" style={{ height: "2.25rem" }} onClick={resumeTable}>Resume</button>}
           </div>
         )}
-        <div aria-disabled={paused ? true : undefined} inert={paused ? true : undefined} className={`board-flat flex min-h-0 min-w-0 flex-1 flex-col px-3 pb-[max(.5rem,env(safe-area-inset-bottom))] sm:px-4 ${paused ? "pointer-events-none opacity-70" : ""}`}>
-        {reconnecting && <p role="status" className="board-note mb-1 shrink-0 text-center text-xs text-chalk-faint">Reconnecting to the table.</p>}
+        {updating ? <p role="status" className="board-note mb-1 shrink-0 text-center text-xs text-chalk-faint">Updating the table…</p>
+          : reconnecting && <p role="status" className="board-note mb-1 shrink-0 text-center text-xs text-chalk-faint">Reconnecting to the table.</p>}
+        <div aria-disabled={paused || updating ? true : undefined} inert={paused || updating ? true : undefined} className={`board-flat flex min-h-0 min-w-0 flex-1 flex-col px-3 pb-[max(.5rem,env(safe-area-inset-bottom))] sm:px-4 ${paused ? "pointer-events-none opacity-70" : ""}`}>
         {/* Anchored at the top: when the action bar grows or shrinks, the room below the board changes, not the board. */}
         <div ref={stage} className="board-flat flex min-h-0 flex-1 items-start justify-center overflow-hidden pt-[clamp(0px,calc((100dvh-44rem)/2),3rem)]">
           <div className="board-flat" style={fit.scale < 1 ? { width: fit.w * fit.scale, height: fit.h * fit.scale } : undefined}>
@@ -741,7 +791,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
 
         {/* action bar */}
         <div ref={actionRef} {...keepFocus} className="board-action mt-1 min-h-[64px] shrink-0 sm:mt-2 sm:min-h-[88px]">
-          <ActionBar key={view.rev} view={view} selected={selected} busy={busy} act={act} nameOf={nameOf} autoMeld={cardPrefs.autoMeld} />
+          <ActionBar key={view.rev} view={view} selected={selected} busy={busy || updating} act={act} nameOf={nameOf} autoMeld={cardPrefs.autoMeld} />
           {view.phase === "playing" && view.playedCards.length < 4 && meldHidden !== view.handNumber && (
             <div className="mt-1 flex min-h-11 items-center justify-center">
               {/* Hiding removes the button that had focus; the hand takes it. */}
@@ -815,16 +865,16 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
       </div>
       {over && !menu && (() => {
         const key = `${view.handNumber}-${view.phase}`;
-        return <div {...keepFocus}><ResultSheet local={local} view={view} nameOf={nameOf} host={isHostNow ? null : snap.seats.find((x) => x.user_id === snap.table.host)?.profile?.display_name ?? "the host"}
-          busy={busy} onNext={() => act({ type: "next_hand" })} onRematch={rematch} readyInfo={readyInfo}
+        return <div {...keepFocus} inert={updating || undefined}><ResultSheet local={local} view={view} nameOf={nameOf} host={isHostNow ? null : snap.seats.find((x) => x.user_id === snap.table.host)?.profile?.display_name ?? "the host"}
+          busy={busy || updating} onNext={() => act({ type: "next_hand" })} onRematch={rematch} readyInfo={readyInfo}
           countdown={{ handKey: `${snap.table.id}-${code}-${key}`, blocked: !!paused || !!error || reconnecting || snap.table.status !== "playing",
             onNext: countdownNext }}
           which={which} setWhich={setWhich} peek={peekKey === key} setPeek={(p) => setPeekKey(p ? key : null)} replayHref={replayHref} /></div>;
       })()}
       <Announcer view={view} nameOf={nameOf} seats={snap.seats} paused={paused} myId={me.id} peek={peekSpoken} />
 
-      {menu && <button type="button" aria-label="Close the menu" tabIndex={-1} onClick={() => setMenu(false)} className="fixed inset-0 z-30 bg-black/50 lg:hidden" />}
-      <aside id="table-menu" aria-label="Table menu" hidden={!menu}
+      {menu && <button inert={updating || undefined} type="button" aria-label="Close the menu" tabIndex={-1} onClick={() => setMenu(false)} className="fixed inset-0 z-30 bg-black/50 lg:hidden" />}
+      <aside id="table-menu" aria-label="Table menu" hidden={!menu} inert={updating || undefined}
         className="fixed inset-y-0 right-0 z-40 flex w-full flex-col bg-cloth-deep pt-[env(safe-area-inset-top)] shadow-2xl sm:w-[380px] lg:border-l lg:border-chalk-ghost">
         <div className="flex items-center justify-between gap-3 px-4 pt-3">
           <p className="flex items-baseline gap-2 text-sm text-chalk-faint">

@@ -4,6 +4,7 @@
 import { viewFor, type PlayerView, type SeatIndex } from "@/engine";
 import { publicMove } from "@/engine/publicMove";
 import { moveMessage } from "@/lib/moveAuth";
+import { BUILD_ID } from "@/lib/staleClient";
 import { createGameFeed } from "@/components/table/viewSync";
 import { labStore } from "./labStore";
 
@@ -49,7 +50,7 @@ export function createLabBroadcast() {
     sending = sending.then(async () => {
       let event: { type: "game"; rev: number; move?: string; sig?: string } = { type: "game", rev };
       if (move && keys) {
-        const message = moveMessage(LAB_GAME, move);
+        const message = moveMessage(LAB_GAME, move, BUILD_ID);
         const sig = await crypto.subtle.sign({ name: "Ed25519" }, keys.privateKey, new TextEncoder().encode(message));
         event = { ...event, move: message, sig: toBase64Url(sig) };
         report.moves++;
