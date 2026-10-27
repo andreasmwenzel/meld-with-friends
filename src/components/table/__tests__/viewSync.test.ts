@@ -19,6 +19,7 @@ function server(startRev = 0) {
     },
     /** Answer the oldest open request with the current revision. */
     async answer(index = 0) {
+      await flush(); // fetches queued this tick go out first
       const [request] = pending.splice(index, 1);
       request.resolve({ rev });
       await flush();
@@ -68,6 +69,7 @@ describe("one fetch per game event", () => {
 
     srv.rev = 11;
     for (const tab of tabs) tab.channel({ type: "game", rev: 11 });
+    await flush();
     while (srv.pending.length) await srv.answer();
     expect(srv.fetches).toBe(4);
     for (const tab of tabs) expect(tab.applied.at(-1)).toBe(11);
@@ -118,6 +120,7 @@ describe("one fetch per game event", () => {
     const tab = client(srv);
     srv.rev = 1;
     tab.channel({ type: "game", rev: 1 });
+    await flush();
     expect(srv.fetches).toBe(1);
     tab.channel({ type: "game", rev: 2 });
     tab.channel({ type: "game", rev: 3 });
@@ -179,6 +182,7 @@ describe("one fetch per game event", () => {
     srv.fetches = 0;
     tab.channel({ type: "seats" });
     expect(tab.refresh).toHaveBeenCalledTimes(1);
+    await flush();
     expect(srv.fetches).toBe(1);
   });
 
@@ -275,7 +279,7 @@ describe("ready checks", () => {
     const feed = createGameFeed();
     feed.subscribe(event => sync.handle(event));
     const channel = (event: TableEvent) => routeTableEvent(event, feed, () => {});
-    const answer = async (v: ReadyView) => { pending.shift()!(v); await flush(); };
+    const answer = async (v: ReadyView) => { await flush(); pending.shift()!(v); await flush(); };
     return { sync, channel, answer, applied, get fetches() { return fetches; }, get open() { return pending.length; } };
   }
 
@@ -286,6 +290,7 @@ describe("ready checks", () => {
     // next hand, played out, then the same player readies again
     tab.channel({ type: "game", rev: 20 }); await tab.answer({ rev: 20, ready: [] });
     tab.channel({ type: "seats" });
+    await flush();
     expect(tab.fetches).toBe(4);
     await tab.answer({ rev: 20, ready: [1] });
     expect(tab.applied.at(-1)).toEqual({ rev: 20, ready: [1] });
@@ -295,12 +300,49 @@ describe("ready checks", () => {
     const tab = readyTab();
     void tab.sync.load(); await tab.answer({ rev: 10, ready: [] });
     tab.channel({ type: "game", rev: 11 }); // the hand ends
+    await flush(); // its view is requested
     tab.channel({ type: "seats" }); // a player readies before that view comes back
     expect(tab.fetches).toBe(2);
     await tab.answer({ rev: 11, ready: [] }); // the slow hand-over view, from before the ready check
     expect(tab.fetches).toBe(3);
     await tab.answer({ rev: 11, ready: [2] });
     expect(tab.applied.at(-1)).toEqual({ rev: 11, ready: [2] });
+    expect(tab.open).toBe(0);
+  });
+
+  it("fetches once for a game event and a ready check arriving together, in either order", async () => {
+    for (const order of [["game", "seats"], ["seats", "game"]] as const) {
+      const tab = readyTab();
+      void tab.sync.load(); await tab.answer({ rev: 10, ready: [] });
+      for (const type of order) tab.channel(type === "game" ? { type, rev: 11 } : { type });
+      await tab.answer({ rev: 11, ready: [2] }); // goes out after both, so it carries both
+      expect(tab.fetches).toBe(2);
+      expect(tab.open).toBe(0);
+      expect(tab.applied.at(-1)).toEqual({ rev: 11, ready: [2] });
+    }
+  });
+
+  it("fetches once for its own ready check when the broadcast comes back before the answer", async () => {
+    const tab = readyTab();
+    void tab.sync.load(); await tab.answer({ rev: 10, ready: [] });
+    let answerPost!: () => void;
+    const posted = tab.sync.act(() => new Promise<void>((r) => { answerPost = r; }).then(() => tab.sync.invalidate()));
+    tab.channel({ type: "seats" }); // the server broadcasts before it answers
+    await flush();
+    expect(tab.fetches).toBe(1); // nothing while the POST is out
+    answerPost(); await posted;
+    await tab.answer({ rev: 10, ready: [0] });
+    expect(tab.fetches).toBe(2);
+    expect(tab.open).toBe(0);
+    expect(tab.applied.at(-1)).toEqual({ rev: 10, ready: [0] });
+  });
+
+  it("fetches once for its own ready check when the POST answers without a broadcast reaching it", async () => {
+    const tab = readyTab();
+    void tab.sync.load(); await tab.answer({ rev: 10, ready: [] });
+    await tab.sync.act(async () => { tab.sync.invalidate(); });
+    await tab.answer({ rev: 10, ready: [0] });
+    expect(tab.fetches).toBe(2);
     expect(tab.open).toBe(0);
   });
 });

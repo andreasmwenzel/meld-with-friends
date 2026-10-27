@@ -4,10 +4,12 @@ import type { TableEvent } from "@/lib/realtime/useTableChannel";
  * Keeps one client's game view in step with the server with as few GETs as possible.
  *
  * - A `game` event fetches the view at most once. Events the client already has (its own move, a
- *   duplicate) fetch nothing; events that land while a fetch is running share one follow-up fetch.
+ *   duplicate) fetch nothing. Events arriving together (in the same tick, before the fetch goes out)
+ *   share one fetch; events that land while a fetch is running share one follow-up fetch.
  * - While this client's own action is in flight, events wait for its response, which carries the view.
- * - A table (seats) event, which is how ready checks arrive, always fetches the view once: the ready
- *   list lives in the view, and the event carries no revision to compare against.
+ * - A table (seats) event, which is how ready checks arrive, always needs a view fetched after it: the
+ *   ready list lives in the view, and the event carries no revision to compare against. A fetch
+ *   queued alongside it, or one this client's own control action asks for, serves it too.
  * - Responses are applied in request order, and never move the view back to an older revision.
  * - Once disposed (the board unmounted) it fetches nothing more and ignores answers still on the way.
  */
@@ -27,6 +29,8 @@ export class ViewSync<V extends { rev: number }> {
   private stale = false;
   /** A table event arrived while a request was running; fetch once more when it settles. */
   private dirty = false;
+  /** A fetch is queued for the end of this tick; requests until then share it. */
+  private queued = false;
   /** Bumped by dispose(), so answers to requests from before it are dropped. */
   private generation = 0;
   private disposed = false;
@@ -86,13 +90,17 @@ export class ViewSync<V extends { rev: number }> {
     this.announced = Math.max(this.announced, rev);
     if (rev <= this.rev) return;
     if (this.loading || this.acting) { this.stale = true; return; }
-    void this.load();
+    this.request();
   }
 
-  /** Something in the view changed that no revision announces (a ready check); fetch it once. */
+  /**
+   * Something in the view changed that no revision announces (a ready check); fetch it once. During
+   * this client's own action it waits, so the action can ask for the fetch it needs (see act()).
+   */
   invalidate(): void {
+    if (this.disposed) return;
     if (this.loading || this.acting) { this.dirty = true; return; }
-    void this.load();
+    this.request();
   }
 
   /** Track this client's own action; events arriving meanwhile wait for its response. */
@@ -131,8 +139,27 @@ export class ViewSync<V extends { rev: number }> {
     this.loading = 0;
     this.stale = false;
     this.dirty = false;
+    this.queued = false;
     for (const timer of this.timers) clearTimeout(timer);
     this.timers.clear();
+  }
+
+  /**
+   * Fetch at the end of this tick, so a burst of events (a game event and a seat event from one
+   * change) costs one GET. A request that goes out meanwhile serves the burst instead.
+   */
+  private request(): void {
+    if (this.queued) return;
+    this.queued = true;
+    const generation = this.generation;
+    const issued = this.issued;
+    queueMicrotask(() => {
+      if (generation !== this.generation || !this.queued) return;
+      this.queued = false;
+      if (this.issued > issued) return;
+      if (this.loading || this.acting) { this.dirty = true; return; }
+      void this.load();
+    });
   }
 
   /** Once nothing is running, fetch if an event is still not covered by what came back. */

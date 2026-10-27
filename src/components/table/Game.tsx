@@ -320,8 +320,12 @@ export function Game({ code, me, snap, rev, feed, onTableChange, connection = "o
   async function postReady() {
     setError(null);
     try {
-      await api(`/api/tables/${code}/ready`, { body: {} });
-      await load();
+      // The answer is the table, not the view: ask for one view fetch, which the seat broadcast for
+      // this same change shares if it arrives first.
+      await sync.act(async () => {
+        await api(`/api/tables/${code}/ready`, { body: {} });
+        sync.invalidate();
+      });
     } catch (e) { setError((e as Error).message); }
   }
   async function pauseTable() {

@@ -36,14 +36,23 @@ vi.mock("@/lib/supabase/client", () => ({
 }));
 
 const CODE = "TEST";
-const { state } = buildScenario(PRESETS.find((p) => p.id === "play-lead")!.spec);
-const view = viewFor(state, 0);
 const me = { id: "u0", handle: "south", display_name: "South", avatar_seed: "South" };
-const snap: Snapshot = {
-  table: { id: "t", code: CODE, host: "u0", status: "playing", rules: { ...state.rules }, current_game_id: "g1" },
-  seats: [0, 1, 2, 3].map((seat) => seat === 0 ? { seat, user_id: "u0", bot: null, profile: me } : { seat, user_id: null, profile: null, bot: "bot" }),
-  offers: [], mySeat: 0, ready: [], paused: null,
-} as unknown as Snapshot;
+function position(preset: string, host = "u0") {
+  const { state } = buildScenario(PRESETS.find((p) => p.id === preset)!.spec);
+  const view = viewFor(state, 0);
+  const north = { id: "u2", handle: "north", display_name: "North", avatar_seed: "North" };
+  const snap = {
+    table: { id: "t", code: CODE, host, status: "playing", rules: { ...state.rules }, current_game_id: "g1" },
+    seats: [0, 1, 2, 3].map((seat) => seat === 0 ? { seat, user_id: "u0", bot: null, profile: me }
+      : seat === 2 && host === "u2" ? { seat, user_id: "u2", bot: null, profile: north }
+      : { seat, user_id: null, profile: null, bot: "bot" }),
+    offers: [], mySeat: 0, ready: [], paused: null,
+  } as unknown as Snapshot;
+  return { view, snap };
+}
+let { view, snap } = position("play-lead");
+/** Seats the server reports ready, in the view and the snapshot. */
+let ready: number[] = [];
 
 /** GETs the tab made, by path. */
 let gets: string[] = [];
@@ -55,14 +64,21 @@ const snapshots = () => gets.filter((p) => p === `/api/tables/${CODE}`).length;
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
 
 beforeEach(() => {
-  gets = []; channels.length = 0; serverRev = view.rev;
+  ({ view, snap } = position("play-lead"));
+  gets = []; channels.length = 0; serverRev = view.rev; ready = [];
   localStorage.setItem("meld.cards", JSON.stringify({ motion: "off" }));
   window.matchMedia = ((query: string) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} })) as unknown as typeof window.matchMedia;
   window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (!init?.method || init.method === "GET") gets.push(url);
-    if (url === `/api/tables/${CODE}`) return Response.json(snap);
-    if (url.endsWith("/view")) return Response.json({ ...view, rev: serverRev, ready: [] });
+    if (url === `/api/tables/${CODE}`) return Response.json({ ...snap, ready });
+    if (url.endsWith("/view")) return Response.json({ ...view, rev: serverRev, ready });
+    if (url.endsWith("/ready")) {
+      // Like the server: record the check, broadcast it, then answer with the table (not the view).
+      ready = [...ready, 0];
+      for (const c of tableChannels()) c.broadcast("seats", { type: "seats" });
+      return Response.json({ ...snap, ready });
+    }
     return Response.json({});
   }) as typeof fetch;
 });
@@ -72,12 +88,16 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 const settle = () => act(async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); });
 const tableChannels = () => channels.filter((c) => c.name === `table:${CODE}`);
 /** The server broadcasting on the table's topic, to every subscription the tab holds. */
-const cast = (event: string, payload: unknown) => act(() => { for (const c of tableChannels()) c.broadcast(event, payload); });
+const cast = (event: string, payload: unknown) => burst([[event, payload]]);
+/** Several broadcasts delivered in one go, before the tab gets to run anything else. */
+const burst = (events: [string, unknown][]) => act(() => {
+  for (const [event, payload] of events) for (const c of tableChannels()) c.broadcast(event, payload);
+});
 
 /** Mounts the room, connects its channel and waits for the board; counts start from there. */
-async function room({ connect = true } = {}) {
+async function room({ connect = true, board = "[data-hand-card]" } = {}) {
   const mounted = render(<TableRoom code={CODE} me={me} />);
-  await vi.waitFor(() => { if (!document.querySelector("[data-hand-card]")) throw new Error("board not rendered"); });
+  await vi.waitFor(() => { if (!document.querySelector(board)) throw new Error("board not rendered"); });
   const [channel] = tableChannels();
   if (connect) { await act(() => { channel.status?.("SUBSCRIBED"); }); await settle(); }
   gets = [];
@@ -151,5 +171,33 @@ describe("a mounted table room", () => {
     gets = [];
     await act(async () => { await vi.advanceTimersByTimeAsync(20000); });
     expect(gets).toEqual([]);
+  });
+
+  it("fetches the view once for a game event and a seat event arriving together, in either order", async () => {
+    await room();
+    serverRev = view.rev + 1;
+    await burst([["game", { type: "game", rev: serverRev }], ["seats", { type: "seats" }]]);
+    await settle();
+    expect(views()).toBe(1);
+    serverRev = view.rev + 2;
+    await burst([["seats", { type: "seats" }], ["game", { type: "game", rev: serverRev }]]);
+    await settle();
+    expect(views()).toBe(2);
+  });
+
+  it("fetches the view once when you say you are ready, though the server broadcasts it too", async () => {
+    ({ view, snap } = position("hand-made", "u2"));
+    serverRev = view.rev;
+    await room({ board: "button" });
+    const button = await vi.waitFor(() => {
+      const b = [...document.querySelectorAll("button")].find((x) => x.textContent === "Ready for the next hand");
+      if (!b) throw new Error("no ready button");
+      return b;
+    });
+    gets = [];
+    await act(async () => { button.click(); });
+    await settle();
+    expect(views()).toBe(1);
+    expect(document.body.textContent).toContain("Everyone is ready.");
   });
 });
