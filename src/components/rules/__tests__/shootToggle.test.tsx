@@ -7,13 +7,13 @@ import type { RulesConfig } from '@/engine';
 
 afterEach(() => { cleanup(); localStorage.clear(); });
 
-it.each(['game', 'points'])('shows one labelled shooting toggle for stored %s preferences', shoot => {
+it.each(['game', 'points'])('shows one labelled shooting select for stored %s preferences', shoot => {
   const change = vi.fn();
   render(<RulesForm value={{ shoot, shootPoints: 100, scoring: 'modern' } as unknown as RulesConfig} onChange={change} />);
-  const toggle = screen.getByRole('checkbox', { name: 'Shooting the moon' }) as HTMLInputElement;
-  expect(toggle.checked).toBe(true);
+  const select = screen.getByRole('combobox', { name: 'Shooting the moon' }) as HTMLSelectElement;
+  expect(select.value).toBe('on');
   expect(screen.queryByText('Shoot is worth')).toBeNull();
-  fireEvent.click(toggle);
+  fireEvent.change(select, { target: { value: 'off' } });
   expect(change.mock.calls[0][0].shoot).toBe('off');
   expect(change.mock.calls[0][0]).not.toHaveProperty('shootPoints');
 });
@@ -29,4 +29,13 @@ it.each(['profile', 'browser'])('normalizes stored %s rules before dealing witho
   const rules = JSON.parse(screen.getByRole('status').textContent!);
   expect(rules.shoot).toBe('on');
   expect(rules).not.toHaveProperty('shootPoints');
+});
+
+it.each([[undefined, 'on'], [{ scoring: 'modern', shoot: 'off' }, 'off']] as const)('starts a new table from %j with shooting %s', (saved, shoot) => {
+  function Fresh() {
+    const { rules } = useRulesPref(saved as RulesConfig | undefined);
+    return <output>{JSON.stringify(rules)}</output>;
+  }
+  render(<Fresh />);
+  expect(JSON.parse(screen.getByRole('status').textContent!).shoot).toBe(shoot);
 });
