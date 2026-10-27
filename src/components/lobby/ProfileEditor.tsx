@@ -4,24 +4,35 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { api, type Profile } from "@/lib/api";
 
-/** Name and handle. Friends find you by the handle, so it is worth getting right on day one. */
+/** Name and handle. The name is typed; the handle friends find you by is drawn from two random words. */
 export function ProfileEditor({ me }: { me: Profile }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [displayName, setDisplayName] = useState(me.display_name);
   const [handle, setHandle] = useState(me.handle);
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function save(e: FormEvent) {
     e.preventDefault();
     setBusy(true); setNote(null);
     try {
-      await api("/api/me", { method: "PATCH", body: { displayName: displayName.trim(), handle: handle.trim().replace(/^@/, "").toLowerCase() } });
-      setNote("Saved.");
+      await api("/api/me", { method: "PATCH", body: { displayName: displayName.trim() } });
+      setNote({ text: "Saved.", ok: true });
       setOpen(false);
       router.refresh();
-    } catch (err) { setNote((err as Error).message); } finally { setBusy(false); }
+    } catch (err) { setNote({ text: (err as Error).message, ok: false }); } finally { setBusy(false); }
+  }
+
+  // Draws a fresh two-word handle and saves it straight away; the name field is left as typed.
+  async function reroll() {
+    setBusy(true); setNote(null);
+    try {
+      const next = await api<Profile>("/api/me/handle", { method: "POST" });
+      setHandle(next.handle);
+      setNote({ text: `Saved as @${next.handle}.`, ok: true });
+      router.refresh();
+    } catch (err) { setNote({ text: (err as Error).message, ok: false }); } finally { setBusy(false); }
   }
 
   if (!open) {
@@ -36,14 +47,18 @@ export function ProfileEditor({ me }: { me: Profile }) {
       <label className="text-sm text-ink-soft">Name at the table
         <input className="field mt-1" value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={40} required />
       </label>
-      <label className="text-sm text-ink-soft">Handle
-        <input className="field mt-1" value={handle} onChange={(e) => setHandle(e.target.value)} maxLength={24} required autoCapitalize="off" />
-      </label>
+      <div className="text-sm text-ink-soft">
+        <p>Handle</p>
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <p className="min-w-0 truncate text-base font-semibold text-ink">@{handle}</p>
+          <button type="button" className="btn btn-compact shrink-0" style={{ color: "var(--ink)" }} onClick={reroll} disabled={busy} aria-label="New words: draw a random handle">New words</button>
+        </div>
+      </div>
       <div className="flex flex-wrap gap-2">
         <button className="btn btn-ink" disabled={busy}>Save</button>
         <button type="button" className="btn" style={{ color: "var(--ink-soft)" }} onClick={() => setOpen(false)}>Cancel</button>
       </div>
-      {note && <p className="text-sm text-pip-red sm:col-span-3">{note}</p>}
+      <p aria-live="polite" className={`text-sm sm:col-span-3 empty:hidden ${note?.ok ? "text-ink-soft" : "text-pip-red"}`}>{note?.text}</p>
     </form>
   );
 }
