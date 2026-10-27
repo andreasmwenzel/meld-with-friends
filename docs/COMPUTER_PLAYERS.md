@@ -76,6 +76,26 @@ scores and seat names. It reacts to made or set contracts, big opposing bids, mo
 big meld, score gaps and game results. It receives no hands, passes, private views or deal seed.
 Display names in lines are bounded to keep comments under 80 characters.
 
+Each bot has its own voice, rooted in its name, in `src/lib/bots/tableTalkLines.ts`: at least six
+lines per bot for each of the fifteen situations. Any other speaker name falls back to a plain,
+neutral voice. The voices:
+
+- **Mabel**: a cheerful grandmother. Calls everyone "dear" and "love", talks in baking and kitchen
+  metaphors, and encourages everyone, opponents included.
+- **Otto**: a dry numbers man. Quotes odds and percentages, understated, quietly pleased when the
+  arithmetic holds, and allowed the odd joke about his name reading the same backwards.
+- **Pearl**: old-Hollywood elegance. "Darling", scripts, premieres and encores; compliments
+  come with one eyebrow raised.
+- **Gus**: big-hearted and loud. Sports-commentator energy, exclamation marks, a theatrical
+  groan at a set and a high five for everything else.
+- **Hazel**: sharp and competitive. Trash-talks with a wink, then gives credit anyway.
+- **Walt**: an unhurried old-timer. Fishing and porch talk, and tall tales from back in '62.
+
+House rules for the words: friendly table banter only, nothing that could sting a beginner, no
+gambling talk. When the speaker's own side goes set the bot is kind to its partner; teasing an
+opponent who went set stays playful. Moon and big-meld lines name nobody and never gloat, since
+either side may have shot or melded. Lines speak only of the scored, public result.
+
 Both human and bot scoring actions schedule a comment only after winning the revision-guarded
 commit. Losing ticks and duplicate human actions schedule nothing. `src/server/botTableTalk.ts`
 uses Next.js `after()` for seat-name lookup and delivery, so chat cannot delay the action response;
