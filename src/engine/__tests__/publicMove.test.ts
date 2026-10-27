@@ -121,12 +121,50 @@ describe('public moves for shoots and misdeals', () => {
     const shoot = steps.find(s => s.action.type === 'shoot')!;
     expect(shoot.move).toBeNull();
     const last = steps.at(-1)!;
-    expect(last.action.type).toBe('play_card');
+    // Bots claim a proven shoot, so the hand can end on a claim as well as a played card.
+    expect(['play_card', 'claim']).toContain(last.action.type);
     expect(['hand_over', 'game_over']).toContain(last.next.phase);
     expect(last.move).toBeNull();
     for (const { prev, next, move } of steps.filter(s => s.move)) for (const seat of SEATS) {
       expect(applyPublicMove(viewFor(prev, seat), move!)).toEqual(viewFor(next, seat));
     }
+  });
+
+  it('during a solo shoot, every broadcast move rebuilds the view the server would send, claims included', () => {
+    const spec = PRESETS.find(p => p.id === 'claim-all')!.spec;
+    let state = buildScenario({ ...spec, rules: { ...spec.rules, shoot: 'on' }, shoot: true }).state;
+    expect(state.sittingOut).toBe(2);
+    let checked = 0;
+    while (state.phase === 'playing') {
+      const seat = state.turn!;
+      const action: Action = { type: 'play_card', seat, card: viewFor(state, seat).legal.playableCards.at(-1)! };
+      const next = applyAction(state, action);
+      const move = publicMove(state, next, action);
+      if (move) for (const s of SEATS) {
+        expect(applyPublicMove(viewFor(state, s), move)).toEqual(viewFor(next, s));
+        checked++;
+      }
+      state = next;
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it('sends no public move when a client could not rebuild the shooter’s claim', () => {
+    // The shooter passed back TS1, so the only unseen trump that could beat its spades never reaches the table.
+    const spec = PRESETS.find(p => p.id === 'claim-all')!.spec;
+    const state = structuredClone(buildScenario({ ...spec, rules: { ...spec.rules, shoot: 'on' }, shoot: true }).state) as GameState & { passedOut: Record<SeatIndex, CardId[]> };
+    const swap = (c: CardId, from: CardId, to: CardId) => c === from ? to : c;
+    state.players[0].hand = state.players[0].hand.map(c => swap(c, 'TS1', '9S0'));
+    state.players[2].hand = state.players[2].hand.map(c => swap(c, '9S0', 'TS1'));
+    state.passedOut = { 0: ['TS1'], 1: [], 2: [], 3: [] };
+    let at: GameState = state;
+    for (let n = 0; n < 2; n++) at = applyAction(at, { type: 'play_card', seat: at.turn!, card: viewFor(at, at.turn!).legal.playableCards[0] });
+    const last: Action = { type: 'play_card', seat: at.turn!, card: viewFor(at, at.turn!).legal.playableCards[0] };
+    const next = applyAction(at, last);
+    expect(next.turn).toBe(0);
+    expect(viewFor(next, 0).legal.canClaim).toBe(true);
+    expect(JSON.stringify(viewFor(next, 0))).not.toContain('"TS1"');
+    expect(publicMove(at, next, last)).toBeNull();
   });
 
   it('a missed shoot ends the hand early, on the first trick lost, with no move', () => {

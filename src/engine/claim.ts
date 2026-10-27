@@ -2,11 +2,15 @@ import { buildDeck, parseCard, RANK_ORDER } from './deck';
 import { trickWinner } from './rules';
 import type { CardId, PlayerView, Suit } from './types';
 
-type ClaimView = Pick<PlayerView, 'phase' | 'seat' | 'turn' | 'hand' | 'playedCards' | 'currentTrick' | 'trump'>;
+type ClaimView = Pick<PlayerView, 'phase' | 'seat' | 'turn' | 'hand' | 'playedCards' | 'currentTrick' | 'trump'> & {
+  /** Cards the claimer knows can never be played: in a solo shoot, the ones it passed back to its sitting-out partner. */
+  outOfPlay?: CardId[];
+};
 
 /**
- * A sufficient proof using only the leader's hand and public plays. Hidden ownership, meld and
- * passes are deliberately irrelevant. Equal ranks cannot beat the card that led the trick.
+ * A sufficient proof using only the leader's hand, public plays and cards it knows are out of play.
+ * Hidden ownership, meld and other passes are deliberately irrelevant. Equal ranks cannot beat the
+ * card that led the trick. With a seat sitting out, fewer seats reply, so the proof stays sufficient.
  *
  * On each lead of a suit every holder must follow. Even if all unseen cards of that suit were
  * concentrated in one hand, none can survive min(unseen count, hand size) such leads. Until then
@@ -17,7 +21,7 @@ export function claimLine(view: ClaimView): CardId[] | null {
   if (view.phase !== 'playing' || view.turn !== view.seat || !view.hand.length || !view.trump
     || !view.currentTrick || view.currentTrick.leader !== view.seat || view.currentTrick.plays.length) return null;
   const trump = view.trump;
-  const gone = new Set([...view.hand, ...view.playedCards.map(p => p.card)]);
+  const gone = new Set([...view.hand, ...view.playedCards.map(p => p.card), ...(view.outOfPlay ?? [])]);
   const unseen = buildDeck().filter(card => !gone.has(card));
   const suits: Suit[] = ['S', 'H', 'D', 'C'];
   const exhausts = Object.fromEntries(suits.map(suit => [suit, Math.min(view.hand.length,

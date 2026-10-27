@@ -1,9 +1,8 @@
 // Dev tooling: play many full games with random rules and real bots, checking every invariant after every move.
 // A failure carries its base state and actions, so it opens in the dev lab exactly as it happened.
-import { applyAction, newGame, viewFor } from './game';
+import { applyAction, claimLineFor, newGame, viewFor } from './game';
 import { random } from './ai/shared';
 import { actors, botAction, checkState } from './scenario';
-import { claimLine } from './claim';
 import type { Action, CardId, GameState, RulesConfig, SeatIndex } from './types';
 
 export interface FuzzFailure { seed: string; rules: Partial<RulesConfig>; error: string; base: GameState; actions: Action[] }
@@ -73,7 +72,7 @@ export function verifyClaim(state: GameState, seed: string): number {
   const seat = state.turn;
   const view = viewFor(state, seat);
   if (!view.legal.canClaim) return 0;
-  const line = claimLine(view);
+  const line = claimLineFor(state, seat);
   if (!line) return 0;
   const claimed = applyAction(state, { type: 'claim', seat });
   const before = viewFor(state, seat).recap.tricks.length;
@@ -84,7 +83,7 @@ export function verifyClaim(state: GameState, seed: string): number {
     for (const key of ['history', 'score', 'winner', 'phase'] as const) {
       if (JSON.stringify(played[key]) !== JSON.stringify(claimed[key])) throw new Error(`Claim and playout disagree on ${key}`);
     }
-    if (view.recap.tricks.length !== 12 || played.players.some(p => p.hand.length)) throw new Error('Claim playout did not finish all twelve tricks');
+    if (view.recap.tricks.length !== 12 || played.players.some(p => p.seat !== state.sittingOut && p.hand.length)) throw new Error('Claim playout did not finish all twelve tricks');
     playouts++;
   };
   const walk = (at: GameState) => {

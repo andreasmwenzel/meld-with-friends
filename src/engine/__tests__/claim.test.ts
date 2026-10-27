@@ -140,15 +140,27 @@ describe('claim settlement', () => {
     expect(claimed.history.at(-1)?.shotMade).toBe(true);
   });
 
-  it('requires solo shoots to be played out even with a proven winning line', () => {
+  it('lets a shooter claim, and nobody else learns the cards it passed back', () => {
     const { state } = buildScenario({ ...spec, rules: { ...spec.rules, shoot: 'on' }, shoot: true });
     expect(state.sittingOut).toBe(2);
-    expect(claimLine(viewFor(state, 0))).not.toBeNull();
-    expect(verifyClaim(state, 'solo-shoot')).toBe(0);
+    expect(viewFor(state, 0).legal.canClaim).toBe(true);
+    expect(verifyClaim(state, 'solo-shoot')).toBe(32);
+    for (const seat of [1, 3] as const) expect(viewFor(state, seat).legal.canClaim).toBe(false);
+    const claimed = applyAction(state, { type: 'claim', seat: 0 });
+    expect(claimed.history.at(-1)?.shotMade).toBe(true);
     for (const seat of seats) {
-      expect(viewFor(state, seat).legal.canClaim).toBe(false);
-      expect(() => applyAction(state, { type: 'claim', seat })).toThrow(/cannot claim/);
+      expect(leakedCards(claimed, seat)).toEqual([]);
+      // The sitting-out hand never reaches the table, so the claim shows nobody those cards.
+      expect(viewFor(claimed, seat).claim?.hands[2]).toEqual([]);
     }
+  });
+
+  it('a shooter remembers the cards it passed back to its sitting-out partner', () => {
+    // The only unseen card that beats the lead was passed back, so it never reaches the table.
+    const view = position(['TS0'], ['AS0', 'KH0', 'KD0']);
+    expect(canClaim(view)).toBe(false);
+    expect(canClaim({ ...view, outOfPlay: ['AS0'] })).toBe(true);
+    expect(canClaim({ ...view, outOfPlay: ['KH0'] })).toBe(false);
   });
 
   it('bots claim and replay preserves the claim and revealed hands', () => {

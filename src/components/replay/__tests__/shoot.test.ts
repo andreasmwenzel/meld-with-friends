@@ -14,7 +14,15 @@ it.each(['hand-shoot-made', 'hand-shoot-missed'])('describes the solo declaratio
   expect(model.moves.some(m => m.label.includes('North sits out; no meld'))).toBe(true);
   expect(model.moves.some(m => m.kind === 'meld')).toBe(false);
   const tricks = model.moves.flatMap(m => m.trick ? [m.trick] : []);
-  expect(tricks).toHaveLength(id === 'hand-shoot-made' ? 12 : 1);
   expect(tricks.every(t => t.plays.length === 3 && !t.plays.some(p => p.seat === 2))).toBe(true);
-  expect(model.moves.at(-1)!.label).toContain(id === 'hand-shoot-made' ? 'shot the moon' : 'shooting side loses the game');
+  const last = model.moves.at(-1)!;
+  if (id === 'hand-shoot-made') {
+    // The shooter holds a proven line from the first lead, so it claims the rest.
+    expect(last.kind).toBe('claim');
+    expect(last.label).toContain('claims the rest');
+    expect(last.label).toContain('shot the moon');
+  } else {
+    expect(tricks).toHaveLength(1);
+    expect(last.label).toContain('shooting side loses the game');
+  }
 });
