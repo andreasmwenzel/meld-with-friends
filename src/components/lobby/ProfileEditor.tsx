@@ -24,6 +24,16 @@ export function ProfileEditor({ me }: { me: Profile }) {
     } catch (err) { setNote((err as Error).message); } finally { setBusy(false); }
   }
 
+  // Draws a fresh two-word handle and saves it straight away; the name field is left as typed.
+  async function reroll() {
+    setBusy(true); setNote(null);
+    try {
+      const next = await api<Profile>("/api/me/handle", { method: "POST" });
+      setHandle(next.handle);
+      router.refresh();
+    } catch (err) { setNote((err as Error).message); } finally { setBusy(false); }
+  }
+
   if (!open) {
     return (
       <button className="tap text-left text-sm text-chalk-faint hover:text-chalk" onClick={() => setOpen(true)}>
@@ -36,9 +46,13 @@ export function ProfileEditor({ me }: { me: Profile }) {
       <label className="text-sm text-ink-soft">Name at the table
         <input className="field mt-1" value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={40} required />
       </label>
-      <label className="text-sm text-ink-soft">Handle
-        <input className="field mt-1" value={handle} onChange={(e) => setHandle(e.target.value)} maxLength={24} required autoCapitalize="off" />
-      </label>
+      <div className="text-sm text-ink-soft">
+        <div className="flex items-baseline justify-between gap-2">
+          <label htmlFor="profile-handle">Handle</label>
+          <button type="button" className="tap font-semibold text-ink hover:underline" onClick={reroll} disabled={busy}>New words</button>
+        </div>
+        <input id="profile-handle" className="field mt-1" value={handle} onChange={(e) => setHandle(e.target.value)} maxLength={32} required autoCapitalize="off" />
+      </div>
       <div className="flex flex-wrap gap-2">
         <button className="btn btn-ink" disabled={busy}>Save</button>
         <button type="button" className="btn" style={{ color: "var(--ink-soft)" }} onClick={() => setOpen(false)}>Cancel</button>
