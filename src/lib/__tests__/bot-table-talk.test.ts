@@ -91,6 +91,10 @@ describe("public bot table talk", () => {
     expect(named("Margaret Thompson")).not.toContain("Thompso");
     expect(named("Margaret Thompson")).toContain("Margaret");
     expect(named("Jo Park")).toContain("Jo Park");
+    for (const space of ["\u00a0", "\u2003", "\u3000", "\t"]) {
+      expect(named(`Margaret${space}Thompson`)).toContain("Margaret");
+      expect(named(`Margaret${space}Thompson`)).not.toContain("Thomps");
+    }
     expect(named("Bartholomewthethird")).toContain("Bartholomewthet");
     expect(named("Line\nbreak\tname")).not.toMatch(/[\r\n\t]/);
     for (const longName of ["x".repeat(300), "😀".repeat(30), "a ".repeat(100)]) {
@@ -140,6 +144,15 @@ describe("public bot table talk", () => {
     // A shoot ends the game; its line stands in for the win/loss comment.
     if (situation.includes("Shoot")) expect(found).toEqual([situation]);
     else expect(found).toContain(situation);
+  });
+  it.each([
+    ["selfMade", true, 0], ["partnerMade", true, 2], ["opponentMade", true, 1],
+    ["selfSet", false, 0], ["partnerSet", false, 2], ["opponentSet", false, 3],
+  ] as const)("scores a shoot that leaves the game running as an ordinary %s, with no game-over line", (situation, made, seat) => {
+    const f = facts(); f.hand.shotMade = made; f.hand.wentSet = !made; f.hand.bid = 25;
+    const found = talkSituations(f, seat);
+    expect(found).toContain(situation);
+    expect(found.some(s => s.includes("Shoot") || s === "win" || s === "loss")).toBe(false);
   });
   it("keeps classic/modern thresholds equivalent", () => {
     const modern = facts(); modern.hand.bid = 50; modern.hand.meld.blue = 40; modern.score.blue = 130;

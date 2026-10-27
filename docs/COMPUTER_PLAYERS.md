@@ -75,12 +75,14 @@ The pure, seeded picker in `src/lib/bots/tableTalk.ts` uses only the scored hand
 scores and seat names. It reacts to made or set contracts, big opposing bids, moon attempts,
 big meld, score gaps and game results. It receives no hands, passes, private views or deal seed.
 Display names in lines are bounded to keep comments under 80 characters: a name longer than 16
-characters is shortened to its first word, or cut at 16 when that word is still too long. Names are
+characters is shortened to its first word (split on any whitespace), or cut at 16 when that word is still too long. Names are
 substituted literally, so `$&` in a name stays as typed.
 
 Situations are told apart by who bid: the speaker itself, its partner, or an opponent, each for a
-made bid, a set and (for the bidder's side) a moon. A shoot decides the game, so a moon line is
-the only comment on that game and reads as a game-over line.
+made bid, a set and a moon. A shoot almost always decides the game; when it does, a moon line is
+the only comment on that game and reads as a game-over line. A shoot that leaves the game running
+(a made solo shoot from a negative score, or a legacy points shoot) is talked about like an
+ordinary made or set bid, with an opponent's made shoot counting as a big bid.
 
 Each bot has its own voice, rooted in its name, in `src/lib/bots/tableTalkLines.ts`: at least six
 lines per bot for each of the twenty situations. Any other speaker name falls back to a plain,

@@ -37,15 +37,17 @@ export function talkSituations(facts: TalkFacts, bot: SeatIndex): TalkSituation[
   const ours = teamOf(bot);
   const theirs = ours === "red" ? "blue" : "red";
   const side = hand.bidder === bot ? "self" : teamOf(hand.bidder) === ours ? "partner" : "opponent";
-  // A shoot decides the game, so its line is the only game-over comment.
-  if (hand.shotMade !== undefined) return [`${side}Shoot${hand.shotMade ? "Made" : "Missed"}` as const];
+  // A shoot that ends the game gets a game-over moon line, as the only comment on that game. A rare
+  // shoot that leaves the game running (a made solo shoot from a negative score, or a legacy points
+  // shoot) is scored like any other made or set bid below.
+  if (hand.shotMade !== undefined && winner) return [`${side}Shoot${hand.shotMade ? "Made" : "Missed"}` as const];
   if (winner) return [winner === ours ? "win" : "loss"];
   const situations: TalkSituation[] = [];
   if (Math.max(hand.meld.red, hand.meld.blue) >= 400 * scale) situations.push("bigMeld");
   if (Math.abs(score.red - score.blue) >= 750 * scale) situations.push(score[ours] > score[theirs] ? "leading" : "trailing");
   if (side !== "opponent") situations.push(`${side}${hand.wentSet ? "Set" : "Made"}` as const);
   else if (hand.wentSet) situations.push("opponentSet");
-  else situations.push(hand.bid >= minBid * 2 ? "opponentMade" : "opponentSmallMade");
+  else situations.push(hand.shotMade || hand.bid >= minBid * 2 ? "opponentMade" : "opponentSmallMade");
   return situations;
 }
 
@@ -61,7 +63,7 @@ export function pickLine(situation: TalkSituation, seed: string, names: { bidder
  * fits in 16 characters, else its first word when that fits, else a 16-character cut.
  */
 function shortName(value: string): string {
-  const clean = value.replace(/[\r\n\t]/g, " ").trim();
+  const clean = value.replace(/\s+/gu, " ").trim();
   const cut = (text: string) => {
     let result = "";
     for (const char of text) {
@@ -71,7 +73,7 @@ function shortName(value: string): string {
     return result;
   };
   if (clean.length <= 16) return clean;
-  const first = clean.split(" ")[0];
+  const first = clean.split(/\s+/u)[0];
   return first.length <= 16 ? first : cut(clean);
 }
 
