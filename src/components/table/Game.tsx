@@ -734,7 +734,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
                     className="group relative block touch-manipulation rounded-[10px] focus-visible:z-20 disabled:pointer-events-none"
                     style={{ transform: sel || lit?.includes(c) ? `translateY(-${LIFT_PX}px)` : undefined, transition: "transform .14s ease" }}>
                     {suggested?.includes(c) && <SuggestedMark />}
-                    <PlayingCard card={c} width={cardW} prefs={cardPrefs} selected={ringed || (lit?.includes(c) ?? false)} dimmed={(view.phase === "playing" && isMyTurn && !playable) || (lit !== null && !lit.includes(c))}
+                    <PlayingCard card={c} width={cardW} prefs={cardPrefs} trump={splitCard(c).suit === view.trump} selected={ringed || (lit?.includes(c) ?? false)} dimmed={(view.phase === "playing" && isMyTurn && !playable) || (lit !== null && !lit.includes(c))}
                       {...(meldable.has(c) && !sel ? { style: { boxShadow: "0 0 0 2px var(--brass), var(--shadow-card)" }, title: `${cardName(c)}, scores in your meld` } : {})} />
                   </button>
                 </span>
@@ -819,7 +819,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
               </div>
               <div className="panel flex flex-col gap-2.5 p-3 text-left">
                 <p className="text-sm font-semibold text-ink">Cards</p>
-                <CardOptionsPanel />
+                <CardOptionsPanel trump={view.trump} />
               </div>
             </div>
           )}
