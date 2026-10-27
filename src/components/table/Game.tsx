@@ -961,6 +961,14 @@ function SuggestedMark() {
   );
 }
 
+/** What a shoot after the pass would stake, against the bid it replaces. */
+function shootStake(view: PlayerView, nameOf: (s: SeatIndex) => string): string {
+  const who = view.bidder === null ? "The bidder" : nameOf(view.bidder);
+  const stake = view.rules.shoot === "game" ? " to win the game" : ` for ${view.rules.shootPoints}`;
+  if (who !== "You") return `${who} may shoot the moon${stake}.`;
+  return `Take every trick${stake}, or play out the ${view.highBid?.amount ?? "bid"}.`;
+}
+
 /** "You are shooting the moon" or "West is shooting the moon". */
 function shootLine(who: string): string {
   return `${who} ${who === "You" ? "are" : "is"} shooting the moon`;
@@ -1229,6 +1237,7 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
       case "declaring_trump": return who === "You" ? "Name trump." : `${who} is naming trump.`;
       case "passing_to_bidder": return who === "You" ? `Pass ${view.legal.mustPassCount ?? ""} cards to your partner.` : `${who} is passing to the bidder.`;
       case "passing_back": return who === "You" ? `Pass ${view.legal.mustPassCount ?? ""} cards back.` : `${who} is passing back.`;
+      case "deciding_shoot": return who === "You" ? "Shoot the moon?" : `Waiting on ${who}.`;
       case "melding": return view.meldConfirmed[view.seat] ? "Meld is in." : "Lay down your meld.";
       case "hand_over": return "Hand over.";
       case "game_over": return view.winner ? `${view.winner === "red" ? "Red" : "Blue"} team wins.` : "Game over.";
@@ -1276,6 +1285,7 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
     {!inPlay && (
       <div className={`flex flex-col items-center gap-0.5 text-center ${compact ? "mt-0.5" : "mt-1 min-h-[4.75rem]"}`}>
         <p className={mine ? "display" : "text-sm text-chalk"} style={mine ? { fontSize: compact ? 19 : 22, color: "var(--brass)" } : undefined}>{prompt}</p>
+        {view.phase === "deciding_shoot" && <p className="text-sm text-chalk-faint">{shootStake(view, nameOf)}</p>}
         {view.highBid && view.phase === "bidding" && (
           <p className="text-sm text-chalk-faint">
             {view.highBid.shoot ? shootLine(nameOf(view.highBid.seat)) : <>{nameOf(view.highBid.seat)} holds {view.highBid.amount}</>}
@@ -1302,6 +1312,7 @@ function yourTurnSentence(view: PlayerView): string | null {
     case "bidding": return `Your bid${view.highBid ? `; ${view.highBid.shoot ? "the moon is shot" : `${view.highBid.amount} is high`}` : ""}`;
     case "declaring_trump": return "Name trump";
     case "passing_to_bidder": case "passing_back": return `Choose ${view.legal.mustPassCount ?? ""} cards to pass`;
+    case "deciding_shoot": return "Shoot the moon, or play it out";
     case "playing": return ["Your play", constraintSentence(view)].filter(Boolean).join(". ");
     default: return null;
   }
@@ -1413,6 +1424,19 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld }: {
             </button>
           ))}
         </span>
+      </Bar>
+    );
+  }
+  if (view.phase === "deciding_shoot") {
+    // Everyone else reads "Waiting on ..." by the board.
+    if (!L.canDeclineShoot) return null;
+    return (
+      <Bar>
+        <button className="btn btn-ghost btn-compact" style={{ color: "var(--brass)", boxShadow: "inset 0 0 0 1.5px var(--brass)" }} disabled={busy || !L.canShoot} aria-label="Shoot the moon"
+          onClick={() => { if (window.confirm("Shoot the moon? Your side must take every trick.")) void act({ type: "shoot" }); }}>
+          Shoot
+        </button>
+        <button className="btn btn-brass" disabled={busy} onClick={() => act({ type: "decline_shoot" })}>Play it out</button>
       </Bar>
     );
   }

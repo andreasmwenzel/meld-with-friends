@@ -44,6 +44,7 @@ export const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("bid"), seat: seatSchema, amount: z.number().int().positive() }).strict(),
   z.object({ type: z.literal("pass_bid"), seat: seatSchema }).strict(),
   z.object({ type: z.literal("shoot"), seat: seatSchema }).strict(),
+  z.object({ type: z.literal("decline_shoot"), seat: seatSchema }).strict(),
   z.object({ type: z.literal("misdeal"), seat: seatSchema }).strict(),
   z.object({ type: z.literal("declare_trump"), seat: seatSchema, suit: z.enum(["S","H","D","C"]) }).strict(),
   z.object({ type: z.literal("pass_cards"), seat: seatSchema, cards }).strict(),

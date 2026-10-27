@@ -2,6 +2,7 @@
 import { applyAction, cardLabel, IllegalAction, newGame, type Action, type GameState, type SeatIndex } from "@/engine";
 import { actors, botAction, buildScenario, SEATS, type ScenarioSpec } from "@/engine/scenario";
 import { presetById } from "@/engine/scenarios";
+import { replayLog } from "@/engine/replay";
 
 export interface LabFlags {
   /** Game's connection prop, to see the reconnecting banner */
@@ -49,6 +50,7 @@ export function describeAction(a: Action): string {
     case "bid": return `${who} bids ${a.amount}`;
     case "pass_bid": return `${who} passes`;
     case "shoot": return `${who} shoots the moon`;
+    case "decline_shoot": return `${who} plays it out`;
     case "misdeal": return `${who} throws in for nines`;
     case "declare_trump": return `${who} names ${{ S: "spades", H: "hearts", D: "diamonds", C: "clubs" }[a.suit]}`;
     case "pass_cards": return `${who} passes ${a.cards.map(cardLabel).join(" ") || "nothing"}`;
@@ -107,8 +109,11 @@ export class LabStore {
       if (!raw) return false;
       const saved = JSON.parse(raw) as Partial<LabSnapshot>;
       if (!saved.base || !saved.actions) return false;
-      this.states = replay(saved.base, saved.actions);
-      this.set({ ...saved, cursor: Math.min(saved.cursor ?? 0, saved.actions.length), notes: [], error: null } as LabSnapshot, { rewrite: true });
+      const played = replayLog(saved.base, saved.actions);
+      // Map the old cursor through its prefix so inserted decisions keep undo/redo in place.
+      const cursor = replayLog(saved.base, saved.actions.slice(0, saved.cursor ?? 0)).actions.length;
+      this.states = played.states;
+      this.set({ ...saved, actions: played.actions, cursor, notes: [], error: null } as LabSnapshot, { rewrite: true });
       return true;
     } catch { return false; }
   }
@@ -210,7 +215,10 @@ const canonical = (value: unknown): string => JSON.stringify(value, (_k, v) => v
  */
 export function parseImport(data: unknown): { base: GameState; actions: Action[]; note: string } {
   const obj = data as { base?: GameState; state?: GameState; actions?: Action[] } & Partial<GameState>;
-  if (obj.base && Array.isArray(obj.actions)) return { base: obj.base, actions: obj.actions, note: `${obj.actions.length} actions` };
+  if (obj.base && Array.isArray(obj.actions)) {
+    const played = replayLog(obj.base, obj.actions);
+    return { base: obj.base, actions: played.actions, note: `${played.actions.length} actions` };
+  }
   const state = obj.state ?? (obj.phase && obj.players ? (obj as GameState) : null);
   if (!state) throw new Error("Expected a GameState, { state, actions } or { base, actions }");
   const actions = obj.actions ?? [];
@@ -218,9 +226,11 @@ export function parseImport(data: unknown): { base: GameState; actions: Action[]
     for (const dealer of SEATS) {
       try {
         const start = newGame(state.seed, state.rules, dealer);
-        const end = actions.reduce(applyAction, start);
-        if (end.rev === state.rev && canonical(end.players) === canonical(state.players) && canonical(end.score) === canonical(state.score)) {
-          return { base: start, actions, note: `Rebuilt from seed with ${actions.length} actions` };
+        // Older logs lack the bidder's shoot decision after the pass; replayLog fills it in.
+        const played = replayLog(start, actions, state);
+        const end = played.states.at(-1)!;
+        if (end.rev - (played.actions.length - actions.length) === state.rev && end.phase === state.phase && canonical(end.players) === canonical(state.players) && canonical(end.score) === canonical(state.score)) {
+          return { base: start, actions: played.actions, note: `Rebuilt from seed with ${played.actions.length} actions` };
         }
       } catch { /* try the next dealer */ }
     }

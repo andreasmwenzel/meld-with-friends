@@ -41,6 +41,7 @@ const MY_MOVE: Partial<Record<Phase, string>> = {
   declaring_trump: "Your turn to name trump",
   passing_to_bidder: "Your turn to pass cards",
   passing_back: "Your turn to pass cards back",
+  deciding_shoot: "Your call: shoot or play it out",
   playing: "Your turn to play",
 };
 const THEIR_MOVE: Partial<Record<Phase, string>> = {
@@ -48,6 +49,7 @@ const THEIR_MOVE: Partial<Record<Phase, string>> = {
   declaring_trump: "to name trump",
   passing_to_bidder: "to pass cards",
   passing_back: "to pass cards back",
+  deciding_shoot: "to decide on a shoot",
   playing: "to play",
 };
 

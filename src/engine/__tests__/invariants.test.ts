@@ -16,6 +16,7 @@ function candidates(state: GameState, rng: () => number): Action[] {
     if (legal.canBid && legal.minBid! <= 100) actions.push({ type: 'bid', seat, amount: legal.minBid! });
     if (legal.canPassBid) actions.push({ type: 'pass_bid', seat });
     if (legal.canShoot && state.handNumber === 1) actions.push({ type: 'shoot', seat });
+    if (legal.canDeclineShoot) actions.push({ type: 'decline_shoot', seat });
     if (legal.canMisdeal) actions.push({ type: 'misdeal', seat });
     if (legal.canDeclareTrump) for (const suit of SUITS) actions.push({ type: 'declare_trump', seat, suit });
     if (legal.mustPassCount !== null) actions.push({ type: 'pass_cards', seat, cards: seededShuffle(state.players[seat].hand, String(rng())).slice(0, legal.mustPassCount) });
@@ -66,7 +67,7 @@ it('plays 200 seeded random full games with conservation, legal actions, illegal
       expect(legal).toEqual(legalActionsFor(state, action.seat));
       if (action.type === 'play_card') expect(legal.playableCards).toContain(action.card);
       else if (action.type === 'pass_cards') expect(action.cards).toHaveLength(legal.mustPassCount!);
-      else expect(legal[({ bid: 'canBid', pass_bid: 'canPassBid', shoot: 'canShoot', misdeal: 'canMisdeal', declare_trump: 'canDeclareTrump', declare_meld: 'canDeclareMeld', confirm_meld: 'canConfirmMeld', next_hand: 'canAdvanceHand' } as const)[action.type]]).toBe(true);
+      else expect(legal[({ bid: 'canBid', pass_bid: 'canPassBid', shoot: 'canShoot', decline_shoot: 'canDeclineShoot', misdeal: 'canMisdeal', declare_trump: 'canDeclareTrump', declare_meld: 'canDeclareMeld', confirm_meld: 'canConfirmMeld', next_hand: 'canAdvanceHand' } as const)[action.type]]).toBe(true);
       const seat = seats[Math.floor(rng() * 4)];
       const forbidden = buildDeck().filter(card => !legalActionsFor(state, seat).playableCards.includes(card));
       const illegal: Action = { type: 'play_card', seat, card: forbidden[Math.floor(rng() * forbidden.length)] as CardId };

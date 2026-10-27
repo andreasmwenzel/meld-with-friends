@@ -104,6 +104,7 @@ async function runSmoke() {
       if (L.canShoot && seat === 1 && v.bids.length === 0) view = await act(seat, { type: "shoot" });
       else if (L.canBid && v.bids.length === 0) view = await act(seat, { type: "bid", amount: L.minBid });
       else if (L.canPassBid) view = await act(seat, { type: "pass_bid" });
+      else if (L.canDeclineShoot) view = await act(seat, { type: "decline_shoot" });
       else if (L.canDeclareTrump) view = await act(seat, { type: "declare_trump", suit: "H" });
       else if (L.mustPassCount) view = await act(seat, { type: "pass_cards", cards: v.hand.slice(0, L.mustPassCount) });
       else if (L.playableCards.length) view = await act(seat, { type: "play_card", card: L.playableCards[0] });

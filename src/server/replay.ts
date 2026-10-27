@@ -34,7 +34,7 @@ export async function getReplay(gameId: string, viewerId: string | null): Promis
   const actions = ((logResult.data ?? []) as { action: Action }[]).map(row => row.action);
   const rebuilt = rebuildFromLog(game.state, actions);
   if (!rebuilt) throw new ApiError(422, "This game's record can no longer be replayed.");
-  const replay = buildReplay(rebuilt.states, actions);
+  const replay = buildReplay(rebuilt.states, rebuilt.actions);
   if (!replay) throw new ApiError(404, "No hand has finished yet. Come back after the first hand.");
 
   const result = resultResult.data as { code: string; seats: SnapshotSeat[]; finished_at: string } | null;

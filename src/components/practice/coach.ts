@@ -66,6 +66,11 @@ export function coachLines(view: PlayerView, autoMeld = true): string[] {
       return ["The other side is swapping cards, bidder and partner. You have nothing to do but watch."];
     }
 
+    case "deciding_shoot":
+      return L.canShoot
+        ? ["You hold the passed cards. Shooting the moon promises your side every trick; playing it out keeps your bid."]
+        : [`${bidder !== null ? nm(bidder) : "The bidder"} is deciding whether to shoot the moon.`];
+
     case "melding": {
       const total = view.trump ? computeMeld(view.hand, view.trump, view.rules).total : 0;
       if (view.meldConfirmed[0]) return ["Your meld is down. Once everyone has melded, the table shows each player’s meld before the first lead."];

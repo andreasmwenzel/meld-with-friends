@@ -43,6 +43,9 @@ export const PRESETS: Preset[] = [
     spec: { dealer: 0, bidder: 2, bid: 28, trump: 'H', to: 'passing_to_bidder' } },
   { id: 'pass-back', group: 'Trump & passing', title: 'Pass back', note: 'You hold 16 after your partner passed; return four.',
     spec: { dealer: 3, bidder: 0, bid: 32, trump: 'D', to: 'passing_back' } },
+  { id: 'shoot-after-pass', group: 'Trump & passing', title: 'Shoot after the pass', note: 'You won at 29 in spades and hold the passed cards; shoot the moon or play it out.',
+    spec: { dealer: 3, bidder: 0, bid: 29, trump: 'S', rules: { scoring: 'modern', shoot: 'points', shootPoints: 100 },
+      hands: { 0: ['AS', 'AS', 'TS', 'TS', 'KS', 'QS', 'JS', 'AH', 'AD', 'TD', 'AC', 'KC'] }, to: 'deciding_shoot' } },
   { id: 'pass-waiting', group: 'Trump & passing', title: 'Waiting on a pass', note: 'East won and West is choosing cards; nothing for you to do.',
     spec: { dealer: 2, bidder: 3, bid: 26, trump: 'C', to: 'passing_to_bidder' } },
 

@@ -15,6 +15,7 @@ export type Phase =
   | "declaring_trump"
   | "passing_to_bidder" // partner passes N cards to bidder
   | "passing_back" // bidder passes N cards back to partner
+  | "deciding_shoot" // the bidder, holding the passed cards, shoots the moon or plays the contract out (shooting on, not shot in the auction)
   | "melding" // each player chooses which cards to lay down as meld (any time before trick play starts)
   | "playing"
   | "hand_over"
@@ -213,7 +214,8 @@ export interface GameState {
 export type Action =
   | { type: "bid"; seat: SeatIndex; amount: number }
   | { type: "pass_bid"; seat: SeatIndex }
-  | { type: "shoot"; seat: SeatIndex }
+  | { type: "shoot"; seat: SeatIndex } // in the auction, or by the bidder after the pass
+  | { type: "decline_shoot"; seat: SeatIndex } // the bidder plays the contract out instead of shooting
   | { type: "misdeal"; seat: SeatIndex } // throw in five or more nines and no other meld; the same dealer redeals
   | { type: "declare_trump"; seat: SeatIndex; suit: Suit }
   | { type: "pass_cards"; seat: SeatIndex; cards: CardId[] }
@@ -265,8 +267,13 @@ export interface LegalActions {
   canBid: boolean;
   minBid: number | null;
   canPassBid: boolean;
-  /** may declare a shoot right now (rules.shoot !== "off", bidding, on turn, nobody has shot yet) */
+  /**
+   * may declare a shoot right now: rules.shoot !== "off", nobody has shot yet, and either bidding on
+   * turn or the bidder deciding after the pass
+   */
   canShoot: boolean;
+  /** the bidder may play the contract out instead of shooting (deciding_shoot) */
+  canDeclineShoot: boolean;
   /** may throw the hand in for nines (rules.ninesMisdeal, bidding, on turn, before this seat's first call) */
   canMisdeal: boolean;
   canDeclareTrump: boolean;

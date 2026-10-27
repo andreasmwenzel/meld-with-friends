@@ -1,6 +1,7 @@
 // Dev tooling: play many full games with random rules and real bots, checking every invariant after every move.
 // A failure carries its base state and actions, so it opens in the dev lab exactly as it happened.
 import { applyAction, newGame, viewFor } from './game';
+import { random } from './ai/shared';
 import { actors, botAction, checkState } from './scenario';
 import type { Action, CardId, GameState, RulesConfig, SeatIndex } from './types';
 
@@ -53,8 +54,19 @@ export function fuzzRules(n: number): Partial<RulesConfig> {
   };
 }
 
-export function fuzz(games: number, prefix = 'fuzz', maxActions = 3000): { played: number; actions: number; failures: FuzzFailure[] } {
+/** Bots rarely hold a hand to shoot with, so at the decision after the pass the fuzzer shoots about one time in ten. */
+function fuzzAction(state: GameState, seat: SeatIndex): Action {
+  if (state.phase === 'deciding_shoot' && random(`${state.seed}:${state.rev}`)() < 0.1) return { type: 'shoot', seat };
+  return botAction(state, seat);
+}
+
+export function fuzz(games: number, prefix = 'fuzz', maxActions = 3000): {
+  played: number; actions: number; failures: FuzzFailure[];
+  /** how often each action type was played, so a run shows it reached every decision */
+  kinds: Record<string, number>;
+} {
   const failures: FuzzFailure[] = [];
+  const kinds: Record<string, number> = {};
   let total = 0;
   for (let i = 0; i < games; i++) {
     const seed = `${prefix}:${i}`;
@@ -66,9 +78,11 @@ export function fuzz(games: number, prefix = 'fuzz', maxActions = 3000): { playe
       while (state.phase !== 'game_over' && actions.length < maxActions) {
         const seat = state.phase === 'hand_over' ? 0 : actors(state)[0];
         if (seat === undefined) throw new Error(`Nobody can act in ${state.phase}`);
-        const action = state.phase === 'hand_over' ? { type: 'next_hand', seat } as Action : botAction(state, seat);
+        const action = state.phase === 'hand_over' ? { type: 'next_hand', seat } as Action : fuzzAction(state, seat);
+        const kind = action.type === 'shoot' && state.phase === 'deciding_shoot' ? 'shoot_after_pass' : action.type;
         state = applyAction(state, action);
         actions.push(action);
+        kinds[kind] = (kinds[kind] ?? 0) + 1;
         const problems = checkState(state);
         for (const seat of [0, 1, 2, 3] as const) {
           const leaked = leakedCards(state, seat);
@@ -82,5 +96,5 @@ export function fuzz(games: number, prefix = 'fuzz', maxActions = 3000): { playe
     }
     total += actions.length;
   }
-  return { played: games, actions: total, failures };
+  return { played: games, actions: total, failures, kinds };
 }

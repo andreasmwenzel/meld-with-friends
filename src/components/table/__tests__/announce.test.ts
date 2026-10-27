@@ -20,6 +20,9 @@ describe("announcements", () => {
     expect(speakLine("North passes 4 cards to South", nameOf)).toBe("Walt passes 4 cards to you");
     expect(speakLine("East wins the bid at 260", nameOf)).toBe("June wins the bid at 260");
     expect(speakLine("Red makes 300; hand over", nameOf)).toBe("Red makes 300; hand over");
+    expect(speakLine("South shoots the moon", nameOf)).toBe("You shoot the moon");
+    expect(speakLine("South plays it out", nameOf)).toBe("You play it out");
+    expect(speakLine("West plays it out", nameOf)).toBe("Margaret plays it out");
   });
 
   it("names a seat that starts a clause, not only the line", () => {

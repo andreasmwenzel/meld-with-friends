@@ -11,6 +11,7 @@ const sentences: Partial<Record<Phase, string>> = {
   bidding: "Your bid.", playing: "Your play.", melding: "Lay down your meld.",
   declaring_trump: "Choose trump.", passing_to_bidder: "Pass cards to your partner.",
   passing_back: "Pass cards back to your partner.",
+  deciding_shoot: "Shoot the moon, or play it out?",
 };
 
 /** Called only after successful commits. after() keeps work alive on Vercel. */

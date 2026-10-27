@@ -79,6 +79,9 @@ export function Recap({ view, nameOf, lastSeenRev }: {
     return `${who} ${opened ? "opened" : "raised to"} ${b.amount}`;
   });
 
+  // A shoot after the pass replaces the contract's amount; the auction still says what was won.
+  const won = view.highBid?.shoot ? Math.max(view.rules.minBid, ...r.bids.map((b) => b.amount ?? 0)) : r.bid;
+
   const partner = ((view.seat + 2) % 4) as SeatIndex;
   const iBid = r.bidder === view.seat, iPartner = r.bidder === partner;
   const bidderPartner = r.bidder === null ? null : (((r.bidder + 2) % 4) as SeatIndex);
@@ -93,7 +96,7 @@ export function Recap({ view, nameOf, lastSeenRev }: {
           {bidText.length === 0 ? "Bidding has not begun." : <>{bidText.join(", ")}.</>}
           {r.bidder !== null && r.bid !== null && (r.bids.some((b) => b.shoot)
             ? r.trump && <>{" "}Trump is <Trump suit={r.trump} />.</>
-            : <>{" "}{nameOf(r.bidder)} took it at {r.bid}{r.trump && <> in <Trump suit={r.trump} /></>}.</>)}
+            : <>{" "}{nameOf(r.bidder)} took it at {won}{r.trump && <> in <Trump suit={r.trump} /></>}{view.highBid?.shoot && <>, then shot the moon after the pass</>}.</>)}
         </p>
 
         {r.passing.count > 0 && r.bidder !== null && (
