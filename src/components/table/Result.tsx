@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { PlayerView, SeatIndex, Team } from "@/engine/types";
 import { SUIT_GLYPH } from "@/components/cards/PlayingCard";
@@ -74,8 +74,10 @@ function useModal(ref: React.RefObject<HTMLElement | null>, active: boolean, onE
 }
 
 /** Bottom sheet (phones) or centred card (desktop) over the table once a hand ends. */
-export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, readyInfo, which, setWhich, peek, setPeek, countdown, local = false, replayHref = null }: {
+export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, readyInfo, which, setWhich, peek, setPeek, countdown, local = false, replayHref = null, talk }: {
   local?: boolean;
+  /** table talk's button, which sits on the sheet while it is up (the board behind is out of reach) */
+  talk?: ReactNode;
   /** where to step through every hand of this game, once a hand is complete */
   replayHref?: string | null;
   view: PlayerView; nameOf: (s: SeatIndex) => string; host: string | null; busy: boolean;
@@ -198,6 +200,7 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
             Look at the table
           </button>
           {toggle}
+          {talk}
         </div>
       </section>
     </div>

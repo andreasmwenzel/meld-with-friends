@@ -218,5 +218,12 @@ body {
   }
   .board-action::-webkit-scrollbar { display: none; }
   .board-armed { grid-area: hand; align-self: start; z-index: 30; }
+  /* Table talk keeps to the bottom-right corner: the foot of the action column. */
+  .board-talk { grid-area: action; align-self: end; justify-self: end; margin-bottom: var(--board-bottom); }
+  .board:has(.board-talk) .board-action { padding-bottom: 3.5rem; }
   .board-hand { grid-area: hand; margin-top: 0; }
 }
+
+/* Table talk's popover grows out of its button in the corner. */
+@keyframes chat-pop { from { opacity: 0; transform: translateY(6px) scale(.97); } to { opacity: 1; transform: none; } }
+.chat-pop:not([hidden]) { animation: chat-pop 140ms cubic-bezier(.2,.8,.25,1) both; transform-origin: 100% 100%; }
