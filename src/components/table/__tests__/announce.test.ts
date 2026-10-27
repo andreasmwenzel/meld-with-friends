@@ -21,4 +21,10 @@ describe("announcements", () => {
     expect(speakLine("East wins the bid at 260", nameOf)).toBe("June wins the bid at 260");
     expect(speakLine("Red makes 300; hand over", nameOf)).toBe("Red makes 300; hand over");
   });
+
+  it("names a seat that starts a clause, not only the line", () => {
+    expect(speakLine("Hand 2: East deals", nameOf)).toBe("Hand 2: June deals");
+    expect(speakLine("Hand 3: South deals", nameOf)).toBe("Hand 3: You deal");
+    expect(speakLine("West throws in 5 nines and no meld; South redeals", nameOf)).toBe("Margaret throws in 5 nines and no meld; you redeal");
+  });
 });

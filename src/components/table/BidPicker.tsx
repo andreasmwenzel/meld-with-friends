@@ -19,6 +19,21 @@ export function BidPicker({ min, step, busy, onBid, pass, shoot, misdeal = null 
   const legalCount = Math.floor((Number.MAX_SAFE_INTEGER - min) / step) + 1;
   const amounts = Array.from({ length: Math.min(count, legalCount) }, (_, i) => min + i * step);
   const close = () => dialog.current?.close();
+  const grid = useRef<HTMLDivElement>(null);
+  // Into the dialog at the bid already picked, else the lowest; the dialog would otherwise start on Close.
+  const open = () => {
+    dialog.current?.showModal();
+    (grid.current?.querySelector<HTMLButtonElement>("[aria-pressed=true]") ?? grid.current?.querySelector<HTMLButtonElement>("button"))?.focus();
+  };
+  // Arrow keys walk the grid of amounts: sideways by one, up and down by a row.
+  const walk = (e: React.KeyboardEvent) => {
+    const buttons = [...(grid.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
+    const i = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const by = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: 3, ArrowUp: -3 }[e.key];
+    if (i < 0 || !by || !buttons[i + by]) return;
+    e.preventDefault();
+    buttons[i + by].focus();
+  };
   const alternatives = (inDialog = false) => <>
     {pass && <button type="button" className="btn btn-ghost btn-compact" style={{ color: inDialog ? "var(--ink-soft)" : "var(--chalk-faint)" }} onClick={pass.run} disabled={busy}>{pass.label}</button>}
     {shoot && (
@@ -32,7 +47,7 @@ export function BidPicker({ min, step, busy, onBid, pass, shoot, misdeal = null 
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 px-2 py-1 sm:gap-3 sm:px-3">
-      <button type="button" className="btn btn-chalk" aria-haspopup="dialog" onClick={() => dialog.current?.showModal()} disabled={busy}>
+      <button type="button" className="btn btn-chalk" aria-haspopup="dialog" onClick={open} disabled={busy}>
         {picked === null ? "Choose bid" : `Choose bid (${picked})`}
       </button>
       {alternatives()}
@@ -45,7 +60,7 @@ export function BidPicker({ min, step, busy, onBid, pass, shoot, misdeal = null 
             <button type="button" className="btn btn-ink btn-compact" onClick={close}>Close</button>
           </div>
           <div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-4" role="group" aria-label="Bid amounts">
-            <div className="grid grid-cols-3 gap-2">
+            <div ref={grid} className="grid grid-cols-3 gap-2" onKeyDown={walk}>
               {amounts.map((amount) => (
                 <button type="button" key={amount} className="btn btn-chalk tabular-nums" aria-pressed={picked === amount} disabled={busy}
                   style={{ fontSize: 18, ...(picked === amount ? { background: "var(--brass)", boxShadow: "inset 0 0 0 3px var(--chalk)" } : null) }}

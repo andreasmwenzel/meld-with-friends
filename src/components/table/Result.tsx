@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import type { PlayerView, SeatIndex, Team } from "@/engine/types";
 import { SUIT_GLYPH } from "@/components/cards/PlayingCard";
@@ -36,6 +36,20 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
 }) {
   const [showBreakdown, setShowBreakdown] = useState(true);
   const over = view.phase === "game_over";
+  const titleId = useId();
+  const sheet = useRef<HTMLElement>(null);
+  const back = useRef<HTMLButtonElement>(null);
+  const look = useRef<HTMLButtonElement>(null);
+  const wasPeek = useRef(peek);
+  // Focus follows the sheet: into it when it opens (the board behind goes inert), to "Back to the result"
+  // while looking at the table, and to "Look at the table" on the way back.
+  useEffect(() => {
+    if (peek) back.current?.focus();
+    else (wasPeek.current ? look.current : sheet.current)?.focus();
+    wasPeek.current = peek;
+  }, [peek]);
+  // A button that goes away under focus ("Ready for the next hand") leaves it on the sheet, not the page.
+  useEffect(() => { if (!peek && (!document.activeElement || document.activeElement === document.body)) sheet.current?.focus(); });
   const myTeam = teamOf(view.seat);
   const them: Team = myTeam === "red" ? "blue" : "red";
   const cols: Team[] = [myTeam, them];
@@ -58,7 +72,7 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
     return (
       <div className="fixed inset-x-0 bottom-0 z-30 flex flex-wrap items-center justify-center gap-2 px-3 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-2 sm:bottom-4">
         {toggle}
-        <button type="button" className="btn btn-brass btn-compact" style={{ height: "2.25rem" }} onClick={() => setPeek(false)}>
+        <button ref={back} type="button" className="btn btn-brass btn-compact" style={{ height: "2.25rem" }} onClick={() => setPeek(false)}>
           Back to the result
         </button>
       </div>
@@ -73,9 +87,9 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
 
   return (
     <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/55 sm:items-center sm:p-6">
-      <section role="dialog" aria-label={over ? "Game result" : "Hand result"}
-        className="panel max-h-[78dvh] w-full max-w-md overflow-y-auto rounded-b-none short:max-h-[calc(100dvh-1rem)] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:rounded-b-[inherit] sm:p-5">
-        <p className="display" style={{ fontSize: 26, lineHeight: 1.1 }}>{title}</p>
+      <section ref={sheet} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId}
+        className="panel outline-none max-h-[78dvh] w-full max-w-md overflow-y-auto rounded-b-none short:max-h-[calc(100dvh-1rem)] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:rounded-b-[inherit] sm:p-5">
+        <p id={titleId} className="display" style={{ fontSize: 26, lineHeight: 1.1 }}>{title}</p>
         {over && <p className="mt-1 text-sm tabular-nums text-ink-soft">
           Final: <span style={{ color: teamColor(myTeam) }}>Us {view.score[myTeam].toLocaleString()}</span>, <span style={{ color: teamColor(them) }}>Them {view.score[them].toLocaleString()}</span>
         </p>}
@@ -125,7 +139,7 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
           </p>
         )}
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-chalk-dim pt-3">
-          <button type="button" className="text-sm font-semibold underline underline-offset-2" onClick={() => setPeek(true)}>
+          <button ref={look} type="button" className="text-sm font-semibold underline underline-offset-2" onClick={() => setPeek(true)}>
             Look at the table
           </button>
           {toggle}

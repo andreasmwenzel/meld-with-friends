@@ -7,7 +7,7 @@ const SUIT_OF: Record<string, string> = { "♠": "S", "♥": "H", "♦": "D", "�
 // Third-person verbs the engine log uses, and their form after "You".
 const YOU_VERB: Record<string, string> = {
   bids: "bid", passes: "pass", plays: "play", takes: "take", declares: "declare", melds: "meld",
-  confirms: "confirm", shoots: "shoot", throws: "throw", wins: "win", deals: "deal", is: "are",
+  confirms: "confirm", shoots: "shoot", throws: "throw", wins: "win", deals: "deal", redeals: "redeal", is: "are",
 };
 
 /**
@@ -27,10 +27,12 @@ export function newLogLines(prev: readonly string[], next: readonly string[]): s
 export function speakLine(line: string, nameOf: (seat: SeatIndex) => string): string {
   let out = line.replace(/\b(10|[AKQJ9])([♠♥♦♣])/g, (_m, rank: string, glyph: string) =>
     cardName(`${rank === "10" ? "T" : rank}${SUIT_OF[glyph]}0` as CardId));
-  out = out.replace(/^(South|West|North|East)\b( \w+)?/, (_m, seat: string, verb?: string) => {
+  // A seat starting the line or a clause ("Hand 2: East deals", "...; North redeals") is the subject of its verb.
+  out = out.replace(/(^|[:;] )(South|West|North|East)\b( \w+)?/g, (_m, lead: string, seat: string, verb?: string) => {
     const who = nameOf(SEATS.indexOf(seat as (typeof SEATS)[number]) as SeatIndex);
     const v = verb?.trim();
-    return who === "You" && v && YOU_VERB[v] ? `You ${YOU_VERB[v]}` : `${who}${verb ?? ""}`;
+    const you = lead.startsWith(";") ? "you" : "You";
+    return lead + (who === "You" ? (v && YOU_VERB[v] ? `${you} ${YOU_VERB[v]}` : `${you}${verb ?? ""}`) : `${who}${verb ?? ""}`);
   });
   // Seat names later in the sentence ("passes 4 cards to East", "takes the trick" winners) become names too.
   out = out.replace(/\b(to|for) (South|West|North|East)\b/g, (_m, prep: string, seat: string) => {

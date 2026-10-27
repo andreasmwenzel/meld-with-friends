@@ -21,8 +21,10 @@ export function NextHandCountdown(props: CountdownContext) {
   return (
     <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
       {state.enabled ? <>
+        {/* Said once when it starts, not every second. */}
         <span role="status" className="text-sm tabular-nums text-ink-soft">
-          {state.seconds === null ? "Countdown waiting for everyone to be ready." : `Next hand in ${state.seconds}s.`}
+          <span aria-hidden>{state.seconds === null ? "Countdown waiting for everyone to be ready." : `Next hand in ${state.seconds}s.`}</span>
+          <span className="sr-only">{state.seconds === null ? "Countdown waiting for everyone to be ready." : "Countdown to the next hand started."}</span>
         </span>
         <button type="button" className="btn btn-ink btn-compact" onClick={countdown.cancel}>Pause</button>
       </> : <button type="button" className="btn btn-ink btn-compact" disabled={!props.allowed} onClick={() => { if (!document.hidden) countdown.enable(); }}>
