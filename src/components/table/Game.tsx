@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError, isTransientError, type Profile } from "@/lib/api";
@@ -441,29 +441,23 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   // eslint-disable-next-line react-hooks/set-state-in-effect -- drops a stale choice when the phase moves on
   useEffect(() => { setSelected([]); }, [phaseKey]);
   const handRef = useRef<HTMLDivElement>(null);
-  /** Keyboard users in the hand or action bar stay there: a played card's button, or the remounted action bar, would drop focus to the page. */
+  const handId = useId();
+  /** Keyboard users in the hand, the action bar, the Play button or the result sheet (each a `data-focus-zone`) stay there:
+   *  a played card's button, the remounted action bar or a closed sheet would otherwise drop focus to the page. */
   const handFocused = useRef(false);
   const actionRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
+  /** The card that holds the hand's one tab stop; arrow keys move it. */
+  const [rove, setRove] = useState<CardId | null>(null);
+  /** Into the hand: your playable card, else the card holding the tab stop, else the hand itself. */
+  const focusHand = useCallback(() => {
     const hand = handRef.current;
-    if (!handFocused.current || !hand) return;
-    const active = document.activeElement;
-    if (active && active !== document.body && active !== hand) {
-      if (!hand.contains(active) && !actionRef.current?.contains(active)) handFocused.current = false;
-      return;
-    }
-    // Your playable card, else the first live action (a bid or pass button), else the hand itself.
-    const card = hand.querySelector<HTMLButtonElement>("button:not(:disabled)");
-    const yours = view?.turn === view?.seat || (view?.phase === "melding" && !view.meldConfirmed[view.seat]);
-    const action = yours ? actionRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)") : null;
-    // Melding starts at "Lay down all meld"; picking cards is the less common path.
-    (view?.phase === "melding" ? action ?? card ?? hand : card ?? action ?? hand).focus({ preventScroll: true });
-  }, [view]);
+    const card = hand?.querySelector<HTMLButtonElement>("[data-hand-card]:not([aria-disabled=true])") ?? hand?.querySelector<HTMLButtonElement>("[data-hand-card][tabindex='0']");
+    (card ?? hand)?.focus({ preventScroll: true });
+  }, []);
   const keepFocus = {
+    "data-focus-zone": "",
     onFocus: () => { handFocused.current = true; },
-    onBlur: (e: React.FocusEvent) => {
-      if (e.relatedTarget && !handRef.current?.contains(e.relatedTarget) && !actionRef.current?.contains(e.relatedTarget)) handFocused.current = false;
-    },
+    onBlur: (e: React.FocusEvent) => { if (e.relatedTarget && !inFocusZone(e.relatedTarget)) handFocused.current = false; },
   };
   const [handW, setHandW] = useState(0);
   const hasView = view !== null;
@@ -536,6 +530,23 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     if (unshown) cards.push(unshown);
     return sortHand(cards, view.trump, cardPrefs.sort);
   }, [view, cardPrefs.sort, which, laidOf, unshown]);
+  // After each move, and when a played card leaves the hand (the trick shows it later than the move lands).
+  useEffect(() => {
+    const row = handRef.current;
+    if (!handFocused.current || !row) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && active !== row) {
+      if (!inFocusZone(active)) handFocused.current = false;
+      return;
+    }
+    // Your playable card, else the first live action (a bid or pass button), else the hand's tab stop.
+    const card = row.querySelector<HTMLButtonElement>("[data-hand-card]:not([aria-disabled=true])");
+    const yours = view?.turn === view?.seat || (view?.phase === "melding" && !view.meldConfirmed[view.seat]);
+    const action = yours ? actionRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)") : null;
+    // Melding starts at "Lay down all meld"; picking cards is the less common path.
+    if (action && (view?.phase === "melding" || !card)) action.focus({ preventScroll: true });
+    else focusHand();
+  }, [view, hand, focusHand]);
   const revealedFor = (seat: SeatIndex): CardId[] | undefined => view?.revealed ? sortHand(view.revealed[which][seat] ?? [], view.trump, cardPrefs.sort) : undefined;
 
   // The table has no header, so until the board loads (or if it cannot, say for someone without a seat) keep a way out.
@@ -569,6 +580,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   }
 
   function toggle(card: CardId, timed: boolean) {
+    // One action at a time; a press while the last is in flight would clear the card being sent.
+    if (busy) return;
     if (view!.phase === "playing") {
       if (!view!.legal.playableCards.includes(card)) return;
       if (cardPrefs.confirmPlay) {
@@ -592,6 +605,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const showingLast = !!lastTrick && displayedTrick?.plays.length === 4 && displayedTrick.plays.every((p, i) => p.card === lastTrick.plays[i].card);
   const peek = { last: peeking ? lastTrick : null, can: !!lastTrick && view.phase === "playing" && !showingLast,
     toggle: () => setPeekRev((r) => (r === view.rev ? null : view.rev)) };
+  // The cloth is not read out, so say what the last trick held when it is shown again.
+  const peekSpoken = peeking && lastTrick ? `Last trick, ${nameOf(lastTrick.winner!)} took it: ${lastTrick.plays.map((p) => `${nameOf(p.seat)}, ${cardName(p.card)}`).join("; ")}` : null;
 
   const armedCard = armed && armed.rev === view.rev && isMyTurn && view.phase === "playing" && view.legal.playableCards.includes(armed.card) ? armed.card : null;
   const trickCards = displayedTrick;
@@ -653,13 +668,30 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   };
   const them: Team = myTeam === "red" ? "blue" : "red";
   const peekingResult = over && !recapOpen && peekKey === `${view.handNumber}-${view.phase}`;
+  // The result sheet is modal: while it is up, the board behind it is out of reach.
+  const resultModal = over && !menu && !peekingResult;
+  // The hand's one tab stop: the card last focused, else your first playable card, else the first card.
+  const tabStop = rove && hand.includes(rove) ? rove
+    : hand.find((c) => view.phase === "playing" ? view.legal.playableCards.includes(c) : picking) ?? hand[0];
+  const moveInHand = (e: React.KeyboardEvent) => {
+    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+    const cards = [...(handRef.current?.querySelectorAll<HTMLButtonElement>("[data-hand-card]") ?? [])];
+    const i = cards.indexOf(document.activeElement as HTMLButtonElement);
+    if (i < 0) return;
+    const to = e.key === "ArrowRight" || e.key === "ArrowDown" ? Math.min(cards.length - 1, i + 1)
+      : e.key === "ArrowLeft" || e.key === "ArrowUp" ? Math.max(0, i - 1)
+      : e.key === "Home" ? 0 : e.key === "End" ? cards.length - 1 : -1;
+    if (to < 0) return;
+    e.preventDefault();
+    cards[to].focus();
+  };
   const tabs: [MenuTab, string][] = [["score", "Score"], ["hand", "This hand"], ...(chat ? [["talk", unread > 0 ? `Talk (${unread})` : "Talk"] as [MenuTab, string]] : []), ["options", "Options"]];
   const linkCls = "tap-link text-left text-sm text-chalk-faint underline underline-offset-4 hover:text-chalk disabled:opacity-60";
 
   return (
     <div className="board relative flex min-h-0 w-full flex-1 flex-col overflow-hidden"
       data-motion={motion} style={{ "--pm": `${slideMs}ms`, "--sd": `${holdMs}ms`, "--sm": `${sweepMs}ms`, paddingBottom: peekingResult ? "4.5rem" : undefined } as React.CSSProperties}>
-      <div className={`board-flat flex min-h-0 flex-1 flex-col ${menu ? "lg:pr-[380px]" : ""}`} inert={menu && !wide ? true : undefined}>
+      <div className={`board-flat flex min-h-0 flex-1 flex-col ${menu ? "lg:pr-[380px]" : ""}`} inert={(menu && !wide) || resultModal ? true : undefined}>
         {/* One slim strip: the hand, the score, and the way to everything else. */}
         <div className="board-score flex shrink-0 flex-wrap items-center justify-between gap-x-3 px-3 py-1.5 text-sm tabular-nums sm:px-4">
           <p className="min-w-0 truncate">
@@ -679,7 +711,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           </button>
         </div>
         {paused && (
-          <div role="status" className="board-banner panel mx-2 mb-1 flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5 sm:mx-auto sm:w-[min(100%-1rem,760px)]">
+          <div className="board-banner panel mx-2 mb-1 flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5 sm:mx-auto sm:w-[min(100%-1rem,760px)]">
             <p className="text-sm">
               {canResume
                 ? <>Paused by {paused.by === me.id ? "you" : paused.name}{paused.reason ? `: ${paused.reason}` : ""}.</>
@@ -714,7 +746,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
             <div className="mt-1 flex min-h-11 items-center justify-center">
               {/* Hiding removes the button that had focus; the hand takes it. */}
               <MeldReview key={view.handNumber} melds={view.melds} seat={view.seat} nameOf={nameOf} compact={short}
-                onHide={() => { setMeldHidden(view.handNumber); handRef.current?.focus({ preventScroll: true }); }} />
+                onHide={() => { setMeldHidden(view.handNumber); focusHand(); }} />
             </div>
           )}
           {/* Whose turn it is lives here, by your hand, so the cloth holds only the cards. */}
@@ -735,14 +767,14 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
 
         {/* my hand */}
         {armedCard && (
-          <div className="board-armed relative h-0">
+          <div {...keepFocus} className="board-armed relative h-0">
             <button data-keep-armed="" onClick={() => play(armedCard)} aria-label={`Play ${cardName(armedCard)}`}
               className="btn btn-brass absolute bottom-6 right-1 z-30 whitespace-nowrap shadow-lg" style={{ minHeight: 36, padding: "0 16px" }}>
               Play {SUIT_GLYPH[splitCard(armedCard).suit]}{RANK_LABEL[splitCard(armedCard).rank]}
             </button>
           </div>
         )}
-        <div ref={handRef} tabIndex={-1} {...keepFocus} aria-label="Your hand" className={`board-hand relative mt-1 flex shrink-0 outline-none sm:mt-2 ${scrollHand ? "hand-scroll overflow-x-auto" : "justify-center"}`} style={{ minHeight: (cardW * 7) / 5 + (short ? 8 : 20), paddingTop: scrollHand ? 16 : undefined }}>
+        <div ref={handRef} tabIndex={-1} {...keepFocus} role="group" aria-label="Your hand" onKeyDown={moveInHand} className={`board-hand relative mt-1 flex shrink-0 outline-none sm:mt-2 ${scrollHand ? "hand-scroll overflow-x-auto" : "justify-center"}`} style={{ minHeight: (cardW * 7) / 5 + (short ? 8 : 20), paddingTop: scrollHand ? 16 : undefined }}>
           <div className={`flex items-end ${scrollHand ? "mx-auto w-max" : ""}`} style={{ paddingLeft: overlap }}>
             {hand.map((c) => {
               const playable = view.phase === "playing" ? view.legal.playableCards.includes(c) || c === unshown : picking;
@@ -750,14 +782,18 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
               const sel = selected.includes(c) || isArmed || c === sending || c === unshown;
               // The ring says a tap plays it; a lifted card without one goes back down when tapped.
               const ringed = (sel && !isArmed) || (isArmed && armed!.open);
+              const blocked = view.phase === "playing" && isMyTurn && !playable && !!constraintText;
               return (
                 <span key={c} data-keep-armed={isArmed || armedCard ? "" : undefined} className="shrink-0" style={{ marginLeft: -overlap }} onClick={() => { if (view.phase === "playing" && isMyTurn && !playable) showHint(); }}>
                   <button data-hand-card={c}
                     onPointerDown={(e) => { lastPress.current = { card: c, pointerId: e.pointerId, real: isRealPress(e.pointerType, window.matchMedia("(any-pointer: fine)").matches), upAt: null }; }}
                     onPointerUp={(e) => { lastPress.current = releasePress(lastPress.current, c, e.pointerId, e.timeStamp); }}
                     onPointerCancel={() => { lastPress.current = null; }}
-                    onClick={(e) => { const timed = isTimedActivation(lastPress.current, c, e.timeStamp, e.detail); lastPress.current = null; toggle(c, timed); }} disabled={busy || !playable} aria-pressed={sel}
-                    className="group relative block touch-manipulation rounded-[10px] focus-visible:z-20 disabled:pointer-events-none"
+                    onClick={(e) => { const timed = isTimedActivation(lastPress.current, c, e.timeStamp, e.detail); lastPress.current = null; toggle(c, timed); }}
+                    // Unplayable cards stay focusable, so the hand can be read with the keyboard and a press says why.
+                    aria-disabled={!playable || undefined} aria-pressed={sel} aria-describedby={blocked ? `${handId}-why` : undefined}
+                    tabIndex={c === tabStop ? 0 : -1} onFocus={() => setRove(c)}
+                    className="group relative block touch-manipulation rounded-[10px] focus-visible:z-20 aria-disabled:cursor-default"
                     style={{ transform: sel || lit?.includes(c) ? `translateY(-${LIFT_PX}px)` : undefined, transition: "transform .14s ease" }}>
                     {suggested?.includes(c) && <SuggestedMark />}
                     <PlayingCard card={c} width={cardW} prefs={cardPrefs} trump={splitCard(c).suit === view.trump} selected={ringed || (lit?.includes(c) ?? false)} dimmed={(view.phase === "playing" && isMyTurn && !playable) || (lit !== null && !lit.includes(c))}
@@ -767,21 +803,25 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
               );
             })}
           </div>
-          {(armedCard || cardHint) && view.phase === "playing" && isMyTurn && (
-            <p role="status" className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-chalk-faint whitespace-nowrap">{armedCard ? `${cardName(armedCard)}, ${!armed!.open ? "tap to put it back" : armed!.timed ? "tap again to play" : "press again to play"}` : cardHint}</p>
-          )}
+          {/* Always mounted, so screen readers hear each change; empty when there is nothing to say. */}
+          <p role="status" className="pointer-events-none absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-chalk-faint whitespace-nowrap">
+            {(armedCard || cardHint) && view.phase === "playing" && isMyTurn
+              ? armedCard ? `${cardName(armedCard)}, ${!armed!.open ? "tap to put it back" : armed!.timed ? "tap again to play" : "press again to play"}` : cardHint
+              : ""}
+          </p>
+          {constraintText && <span id={`${handId}-why`} hidden>Not playable. {constraintText}</span>}
         </div>
         </div>
       </div>
       {over && !menu && (() => {
         const key = `${view.handNumber}-${view.phase}`;
-        return <ResultSheet local={local} view={view} nameOf={nameOf} host={isHostNow ? null : snap.seats.find((x) => x.user_id === snap.table.host)?.profile?.display_name ?? "the host"}
+        return <div {...keepFocus}><ResultSheet local={local} view={view} nameOf={nameOf} host={isHostNow ? null : snap.seats.find((x) => x.user_id === snap.table.host)?.profile?.display_name ?? "the host"}
           busy={busy} onNext={() => act({ type: "next_hand" })} onRematch={rematch} readyInfo={readyInfo}
           countdown={{ handKey: `${snap.table.id}-${code}-${key}`, blocked: !!paused || !!error || reconnecting || snap.table.status !== "playing",
             onNext: countdownNext }}
-          which={which} setWhich={setWhich} peek={peekKey === key} setPeek={(p) => setPeekKey(p ? key : null)} replayHref={replayHref} />;
+          which={which} setWhich={setWhich} peek={peekKey === key} setPeek={(p) => setPeekKey(p ? key : null)} replayHref={replayHref} /></div>;
       })()}
-      <Announcer view={view} nameOf={nameOf} />
+      <Announcer view={view} nameOf={nameOf} seats={snap.seats} paused={paused} myId={me.id} peek={peekSpoken} />
 
       {menu && <button type="button" aria-label="Close the menu" tabIndex={-1} onClick={() => setMenu(false)} className="fixed inset-0 z-30 bg-black/50 lg:hidden" />}
       <aside id="table-menu" aria-label="Table menu" hidden={!menu}
@@ -898,7 +938,7 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
         <Avatar name={name} team={team} size={28} bot={bot} />
         {score.dealer && <DealerMark />}
       </span>
-      <span className={`truncate text-xs font-semibold ${compact ? "max-w-[88px]" : "max-w-[96px] sm:text-sm"}`}>{name}{score.dealer && <span className="sr-only">, dealer</span>}</span>
+      <span className={`truncate text-xs font-semibold ${compact ? "max-w-[88px]" : "max-w-[96px] sm:text-sm"}`}>{name}{score.dealer && <span className="sr-only">, dealer</span>}{active && <span className="sr-only">, their turn</span>}</span>
     </>
   );
   if (compact) {
@@ -916,7 +956,7 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
           <ScoreTag score={score} name={name} align={align} />
         </div>
       </div>
-      <div className={`flex ${vertical ? "flex-col" : "flex-row"}`} style={vertical ? { padding: "0 7px" } : undefined} aria-label={`${n} cards`}>
+      <div className={`flex ${vertical ? "flex-col" : "flex-row"}`} style={vertical ? { padding: "0 7px" } : undefined} role={faceUp ? "group" : "img"} aria-label={`${n} cards`}>
         {faceUp ? faceUp.map((c, i) => vertical ? (
           <div key={c} className="relative shrink-0" style={{ width: (REV_W * 7) / 5, height: i === faceUp.length - 1 ? REV_W : 17, zIndex: align === "right" ? faceUp.length - i : i }}>
             <PlayingCard card={c} width={REV_W} style={{ position: "absolute", left: "50%", top: REV_W / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg)` }} />
@@ -959,7 +999,7 @@ function CompactSeat({ className, team, active, name, chip, score, n, faceUp, st
           style={active ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
           {chip}
           {!faceUp && (
-            <span className="flex items-center gap-1 text-xs tabular-nums text-chalk-faint" aria-label={`${n} cards`}>
+            <span className="flex items-center gap-1 text-xs tabular-nums text-chalk-faint" role="img" aria-label={`${n} cards`}>
               <CardBack width={12} team={team} />{n}
             </span>
           )}
@@ -984,7 +1024,7 @@ function SmallFan({ cards, perRow, label, width = MELD_W, lit }: { cards: CardId
   const w = width, h = (w * 7) / 5, peekX = Math.round(w / 2), peekY = Math.round(w * 0.72);
   const cols = Math.min(perRow, cards.length);
   return (
-    <div className="flex flex-wrap" aria-label={label} title={label}
+    <div className="flex flex-wrap" role="group" aria-label={label} title={label}
       style={{ width: w + (cols - 1) * peekX + 0.5, paddingLeft: w - peekX, paddingTop: h - peekY }}>
       {cards.map((c) => <PlayingCard key={c} card={c} width={w} selected={lit?.includes(c) ?? false} style={{ marginLeft: peekX - w, marginTop: peekY - h, flexShrink: 0 }} />)}
     </div>
@@ -1059,7 +1099,7 @@ function MySeat({ view, name, score }: { view: PlayerView; name: string; score: 
             <Avatar name={name} team={teamOf(view.seat)} size={28} />
             {score.dealer && <DealerMark />}
           </span>
-          <span className="text-xs font-semibold sm:text-sm">You{score.dealer && <span className="sr-only">, dealer</span>}</span>
+          <span className="text-xs font-semibold sm:text-sm">You{score.dealer && <span className="sr-only">, dealer</span>}{view.turn === view.seat && <span className="sr-only">, your turn</span>}</span>
         </div>
         {/* Above the side seats' cards, and opening up and over the cloth: below this seat the board ends. */}
         <div className="absolute left-full top-1/2 z-30 ml-1 -translate-y-1/2 whitespace-nowrap">
@@ -1103,7 +1143,7 @@ function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact }: {
       </div>
       <div className="flex h-10 max-w-full flex-wrap content-center items-center justify-center gap-x-3 text-xs leading-5 text-chalk-faint short:h-5">
         {detail && <span className={typeof detail === "string" ? "max-w-full truncate" : line}>{detail}</span>}
-        {(peek.can || peek.last) && <button type="button" onClick={peek.toggle} aria-expanded={!!peek.last} className={link}>{peek.last ? "Back to the table" : "Last trick"}</button>}
+        {(peek.can || peek.last) && <button type="button" onClick={peek.toggle} className={link}>{peek.last ? "Back to the table" : "Last trick"}</button>}
         {stalled && <button type="button" onClick={nudge} className={link}>Nudge the computers</button>}
       </div>
     </div>
@@ -1217,25 +1257,43 @@ function yourTurnSentence(view: PlayerView): string | null {
   }
 }
 
+/** Whether focus sits in the hand, the action bar, the Play button or the result sheet. */
+function inFocusZone(el: EventTarget | null): boolean {
+  return el instanceof Element && !!el.closest("[data-focus-zone]");
+}
+
+type Paused = Snapshot["paused"];
+
 /**
  * Bids, plays, trick winners and your turn, spoken by screen readers without moving focus.
- * Built from the public log, so it says only what everyone at the table can see.
+ * Built from the public log, so it says only what everyone at the table can see; the table's own
+ * changes (a pause, a player leaving) and the last trick shown again are added to it.
  */
-function Announcer({ view, nameOf }: { view: PlayerView; nameOf: (seat: SeatIndex) => string }) {
-  const prev = useRef<{ log: string[]; turn: string | null } | null>(null);
+function Announcer({ view, nameOf, seats, paused, myId, peek }: {
+  view: PlayerView; nameOf: (seat: SeatIndex) => string; seats: Snapshot["seats"]; paused: Paused | null; myId: string;
+  /** the last trick, while it is shown again */
+  peek: string | null;
+}) {
+  const prev = useRef<{ log: string[]; turn: string | null; paused: Paused | null; people: Map<SeatIndex, string>; peek: string | null } | null>(null);
   const [text, setText] = useState("");
   useEffect(() => {
     const before = prev.current;
     const turn = yourTurnSentence(view);
-    prev.current = { log: view.log, turn };
+    // Who sits where, people only: a chair handed to a computer drops out.
+    const people = new Map(seats.filter((x) => x.user_id && x.user_id !== myId).map((x) => [x.seat, x.profile?.display_name ?? SEAT_LABEL[x.seat]]));
+    prev.current = { log: view.log, turn, paused, people, peek };
     if (!before) return; // arriving at the table: the visible board says where things stand
     const spoken = newLogLines(before.log, view.log).filter((l) => !l.endsWith("confirms meld")).map((l) => speakLine(l, nameOf));
+    for (const [seat, name] of before.people) if (!people.has(seat)) spoken.push(`${name} left; a computer plays their cards`);
+    if (paused && !before.paused) spoken.push(`Paused by ${paused.by === myId ? "you" : paused.name}${paused.reason ? `: ${paused.reason}` : ""}`);
+    if (!paused && before.paused) spoken.push("Play resumes");
+    if (peek && peek !== before.peek) spoken.push(peek);
     if (turn && turn !== before.turn) spoken.push(turn);
     // A trailing space alternates so the same words twice in a row are still announced.
     const sentence = spoken.map((part) => part.replace(/\.$/, "")).join(". ");
     if (spoken.length) setText((t) => `${sentence}.${t.endsWith(" ") ? "" : " "}`);
-  }, [view, nameOf]);
-  return <p className="sr-only" aria-live="polite" aria-atomic="true">{text}</p>;
+  }, [view, nameOf, seats, paused, myId, peek]);
+  return <p data-announcer="" className="sr-only" aria-live="polite" aria-atomic="true">{text}</p>;
 }
 
 function constraintSentence(view: PlayerView): string | null {
@@ -1249,6 +1307,7 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld }: {
   act: (a: ClientAction) => Promise<unknown>; nameOf: (s: SeatIndex) => string; autoMeld: boolean;
 }) {
   const L = view.legal;
+  const trumpLabel = useId();
   const misdeal = L.canMisdeal ? () => void act({ type: "misdeal" }) : null;
   // Right after a throw-in, everyone sees the hand that scrapped the deal while the new one is bid.
   const thrown = view.phase === "bidding" && view.misdeal ? (
@@ -1295,9 +1354,9 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld }: {
   if (view.phase === "declaring_trump" && L.canDeclareTrump) {
     return (
       <Bar>
-        <span className="text-chalk-faint mr-2">Trump is</span>
+        <span id={trumpLabel} className="text-chalk-faint mr-2">Trump is</span>
         {/* The four suits stay on one row; on narrow phones the label wraps above them instead. */}
-        <span className="flex gap-2">
+        <span role="group" aria-labelledby={trumpLabel} className="flex gap-2">
           {(["S", "H", "C", "D"] as Suit[]).map((s) => (
             <button key={s} className="btn btn-chalk" style={{ width: 48, padding: 0 }} onClick={() => act({ type: "declare_trump", suit: s })} disabled={busy} aria-label={SUIT_NAME[s]}>
               <span style={{ fontSize: 22, color: s === "H" || s === "D" ? "var(--pip-red)" : "var(--pip-black)" }}>{SUIT_GLYPH[s]}</span>

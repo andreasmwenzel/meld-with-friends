@@ -99,11 +99,13 @@ describe("trick play status above the hand", () => {
     await wait(TRICK_HOLD_MS + TRICK_SWEEP_MS);
     await act(() => { fireEvent.click(screen.getByRole("button", { name: "Last trick" })); });
     expect(text()).toMatch(/^Last trick: .+ took it\./);
+    // The button's words change, so it carries no pressed or expanded state; the cards are said aloud.
     const back = screen.getByRole("button", { name: "Back to the table" });
-    expect(back.getAttribute("aria-expanded")).toBe("true");
+    expect(back.hasAttribute("aria-expanded")).toBe(false);
+    expect(document.querySelector("[data-announcer]")?.textContent).toMatch(/^Last trick, .+ took it: .*You, \w+ of \w+;/);
     await act(() => { fireEvent.click(back); });
     expect(text()).toContain(`${LONG} to play.`);
-    expect(screen.getByRole("button", { name: "Last trick" }).getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByRole("button", { name: "Last trick" })).toBeTruthy();
   });
 
   it("offers a nudge once the computers have been quiet for 20 seconds, and it asks the server again", async () => {
@@ -118,12 +120,13 @@ describe("trick play status above the hand", () => {
     expect(requests.slice(before)).toContain(`/api/tables/${CODE}/view`);
   });
 
-  it("gives the hand focus when the meld row is hidden", async () => {
+  it("gives your playable card focus when the meld row is hidden", async () => {
     await table("play-lead");
     const hide = screen.getByRole("button", { name: "Hide the meld row" });
     hide.focus();
     await act(() => { fireEvent.click(hide); });
     expect(screen.queryByRole("button", { name: "Hide the meld row" })).toBeNull();
-    expect(document.activeElement?.getAttribute("aria-label")).toBe("Your hand");
+    expect(document.activeElement?.closest("[aria-label='Your hand']")).toBeTruthy();
+    expect(document.activeElement?.getAttribute("aria-disabled")).toBeNull();
   });
 });

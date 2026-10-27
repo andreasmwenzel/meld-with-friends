@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import type { PlayerView, SeatIndex, Team } from "@/engine/types";
 import { SUIT_GLYPH } from "@/components/cards/PlayingCard";
@@ -24,6 +24,55 @@ function headline(view: PlayerView, nameOf: (s: SeatIndex) => string) {
   return h.wentSet ? `${who} went set on ${h.bid}.` : `${who} made ${h.bid}${verb("", "")} in ${SUIT_GLYPH[h.trump]}.`;
 }
 
+const FOCUSABLE = "button, a[href], input, select, textarea, [tabindex]";
+const LIVE = "[data-announcer]";
+
+/** Makes everything on the page but `el` (and the table's live region, so moves are still heard) inert.
+ *  Returns the undo. Elements that were inert already are left as they were. */
+function isolate(el: HTMLElement) {
+  const touched: Element[] = [];
+  const walk = (parent: Element) => {
+    for (const child of parent.children) {
+      if (child === el || child.matches(LIVE)) continue;
+      if (child.contains(el) || child.querySelector(LIVE)) walk(child);
+      else if (!child.hasAttribute("inert")) { child.setAttribute("inert", ""); touched.push(child); }
+    }
+  };
+  walk(document.body);
+  return () => touched.forEach((child) => child.removeAttribute("inert"));
+}
+
+/** While `active`: the rest of the page is out of reach, Tab wraps inside `el`, Escape runs `onEscape`, the page holds still. */
+function useModal(ref: React.RefObject<HTMLElement | null>, active: boolean, onEscape: () => void) {
+  const escape = useRef(onEscape);
+  useEffect(() => { escape.current = onEscape; });
+  useEffect(() => {
+    const el = ref.current;
+    if (!active || !el) return;
+    const restore = isolate(el);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      if (e.key === "Escape") { e.preventDefault(); escape.current(); return; }
+      if (e.key !== "Tab") return;
+      const stops = [...el.querySelectorAll<HTMLElement>(FOCUSABLE)]
+        .filter((s) => s.tabIndex >= 0 && !(s as HTMLButtonElement).disabled && !s.closest("[inert], [hidden]"));
+      if (!stops.length) { e.preventDefault(); el.focus(); return; }
+      const at = document.activeElement as HTMLElement | null;
+      const inside = !!at && el.contains(at) && at !== el;
+      if (e.shiftKey && (!inside || at === stops[0])) { e.preventDefault(); stops.at(-1)!.focus(); }
+      else if (!e.shiftKey && (!inside || at === stops.at(-1))) { e.preventDefault(); stops[0].focus(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = overflow;
+      restore();
+    };
+  }, [ref, active]);
+}
+
 /** Bottom sheet (phones) or centred card (desktop) over the table once a hand ends. */
 export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, readyInfo, which, setWhich, peek, setPeek, countdown, local = false, replayHref = null }: {
   local?: boolean;
@@ -36,6 +85,22 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
 }) {
   const [showBreakdown, setShowBreakdown] = useState(true);
   const over = view.phase === "game_over";
+  const titleId = useId();
+  const sheet = useRef<HTMLElement>(null);
+  const back = useRef<HTMLButtonElement>(null);
+  const look = useRef<HTMLButtonElement>(null);
+  const wasPeek = useRef(peek);
+  // Focus follows the sheet: into it when it opens (the board behind goes inert), to "Back to the result"
+  // while looking at the table, and to "Look at the table" on the way back.
+  useEffect(() => {
+    if (peek) back.current?.focus();
+    else (wasPeek.current ? look.current : sheet.current)?.focus();
+    wasPeek.current = peek;
+  }, [peek]);
+  // A button that goes away under focus ("Ready for the next hand") leaves it on the sheet, not the page.
+  useEffect(() => { if (!peek && (!document.activeElement || document.activeElement === document.body)) sheet.current?.focus(); });
+  // Modal while it is up; looking at the table lets go, and Escape is the way to look.
+  useModal(sheet, !peek, () => setPeek(true));
   const myTeam = teamOf(view.seat);
   const them: Team = myTeam === "red" ? "blue" : "red";
   const cols: Team[] = [myTeam, them];
@@ -58,7 +123,7 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
     return (
       <div className="fixed inset-x-0 bottom-0 z-30 flex flex-wrap items-center justify-center gap-2 px-3 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-2 sm:bottom-4">
         {toggle}
-        <button type="button" className="btn btn-brass btn-compact" style={{ height: "2.25rem" }} onClick={() => setPeek(false)}>
+        <button ref={back} type="button" className="btn btn-brass btn-compact" style={{ height: "2.25rem" }} onClick={() => setPeek(false)}>
           Back to the result
         </button>
       </div>
@@ -73,9 +138,9 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
 
   return (
     <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/55 sm:items-center sm:p-6">
-      <section role="dialog" aria-label={over ? "Game result" : "Hand result"}
-        className="panel max-h-[78dvh] w-full max-w-md overflow-y-auto rounded-b-none short:max-h-[calc(100dvh-1rem)] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:rounded-b-[inherit] sm:p-5">
-        <p className="display" style={{ fontSize: 26, lineHeight: 1.1 }}>{title}</p>
+      <section ref={sheet} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId}
+        className="panel outline-none max-h-[78dvh] w-full max-w-md overflow-y-auto rounded-b-none short:max-h-[calc(100dvh-1rem)] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:rounded-b-[inherit] sm:p-5">
+        <p id={titleId} className="display" style={{ fontSize: 26, lineHeight: 1.1 }}>{title}</p>
         {over && <p className="mt-1 text-sm tabular-nums text-ink-soft">
           Final: <span style={{ color: teamColor(myTeam) }}>Us {view.score[myTeam].toLocaleString()}</span>, <span style={{ color: teamColor(them) }}>Them {view.score[them].toLocaleString()}</span>
         </p>}
@@ -125,7 +190,7 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
           </p>
         )}
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-chalk-dim pt-3">
-          <button type="button" className="text-sm font-semibold underline underline-offset-2" onClick={() => setPeek(true)}>
+          <button ref={look} type="button" className="text-sm font-semibold underline underline-offset-2" onClick={() => setPeek(true)}>
             Look at the table
           </button>
           {toggle}

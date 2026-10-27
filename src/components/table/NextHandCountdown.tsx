@@ -18,10 +18,14 @@ export function NextHandCountdown(props: CountdownContext) {
     };
   }, [countdown]);
 
+  // Said once when it starts waiting or counting, not every second; mounted empty beforehand so readers hear the change.
+  const said = !state.enabled ? "" : state.seconds === null ? "Countdown waiting for everyone to be ready." : "Countdown to the next hand started.";
+
   return (
     <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+      <span role="status" className="sr-only">{said}</span>
       {state.enabled ? <>
-        <span role="status" className="text-sm tabular-nums text-ink-soft">
+        <span aria-hidden className="text-sm tabular-nums text-ink-soft">
           {state.seconds === null ? "Countdown waiting for everyone to be ready." : `Next hand in ${state.seconds}s.`}
         </span>
         <button type="button" className="btn btn-ink btn-compact" onClick={countdown.cancel}>Pause</button>

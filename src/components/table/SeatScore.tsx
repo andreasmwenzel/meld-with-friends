@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { Bid, HandRecord, Phase, SeatIndex, Suit, Team } from "@/engine/types";
 import { SUIT_GLYPH } from "@/components/cards/PlayingCard";
 import { teamOf } from "./types";
@@ -76,6 +76,7 @@ export function DealerMark() {
 export function ScoreTag({ score, name, align, placement = "below" }: { score: SeatScore; name: string; align: "left" | "center" | "right"; placement?: "above" | "below" }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  const popId = useId();
   useEffect(() => {
     if (!open) return;
     const away = (e: PointerEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(false); };
@@ -92,21 +93,23 @@ export function ScoreTag({ score, name, align, placement = "below" }: { score: S
       {score.total !== null && <span className="ml-1 rounded-full bg-chalk/15 px-1.5 font-semibold tabular-nums">{score.total}</span>}
     </>
   ) : <span className="tabular-nums text-chalk-faint">{score.small}</span>;
+  // "–" and "moon" read badly aloud: say what they mean.
+  const call = score.main === "–" ? "passed" : score.main === "moon" ? "shooting the moon" : `bid ${score.main}`;
   const label = score.main !== null
-    ? `${name}: bid ${score.main}${score.suit ? ` in ${{ S: "spades", H: "hearts", D: "diamonds", C: "clubs" }[score.suit]}` : ""}${score.total !== null ? `, ${score.total} this hand` : ""}`
+    ? `${name}: ${call}${score.suit ? ` in ${{ S: "spades", H: "hearts", D: "diamonds", C: "clubs" }[score.suit]}` : ""}${score.total !== null ? `, ${score.total} this hand` : ""}`
     : `${name}: meld ${score.small}`;
   const side = align === "left" ? "left-0" : align === "right" ? "right-0" : "left-1/2 -translate-x-1/2";
   const cls = "flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs leading-5";
   // The chip stays 24px tall so nothing round it moves; the button's hit area reaches 44px.
-  if (!detail) return <span aria-label={label} className={cls}>{body}</span>;
+  if (!detail) return <span className={cls}><span aria-hidden className="contents">{body}</span><span className="sr-only">{label}</span></span>;
   return (
     <div ref={root} className="relative">
-      <button type="button" aria-label={label} aria-expanded={open} onClick={() => setOpen(o => !o)}
+      <button type="button" aria-label={label} aria-expanded={open} aria-controls={open ? popId : undefined} onClick={() => setOpen(o => !o)}
         className={`${cls} relative before:absolute before:inset-x-0 before:-inset-y-2.5 before:content-[''] hover:bg-chalk-ghost focus-visible:bg-chalk-ghost`}>
         {body}
       </button>
       {open && (
-        <div role="dialog" aria-label={name === "You" ? "Your side this hand" : `${name}'s side this hand`} className={`panel absolute z-30 min-w-[150px] ${placement === "above" ? "bottom-full mb-1" : "top-full mt-1"} px-3 py-2 text-xs ${side}`}>
+        <div id={popId} role="group" aria-label={name === "You" ? "Your side this hand" : `${name}'s side this hand`} className={`panel absolute z-30 min-w-[150px] ${placement === "above" ? "bottom-full mb-1" : "top-full mt-1"} px-3 py-2 text-xs ${side}`}>
           <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 tabular-nums">
             {score.rows.map(([k, v], i) => (
               <div key={i} className={`contents ${i === score.rows.length - 1 ? "font-semibold" : ""}`}><dt className="text-left text-ink-soft">{k}</dt><dd className="text-right">{v}</dd></div>

@@ -115,6 +115,8 @@ body {
 }
 
 :focus-visible { outline: 3px solid var(--brass); outline-offset: 3px; border-radius: 6px; }
+/* Hand cards: a chalk ring, kept apart from the brass ring that marks a lifted card. */
+[data-hand-card]:focus-visible { outline-color: var(--chalk); outline-offset: 2px; border-radius: 12px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
