@@ -95,6 +95,8 @@ export const PRESETS: Preset[] = [
     spec: { dealer: 3, bidder: 0, bid: 30, trump: 'S', rules: { scoring: 'modern', passCount: 0, target: 500 }, hands: { 0: ALL_SPADES, 1: ['AH', 'AD', 'AC', 'KH', 'QH'] }, to: 'hand_over' } },
   { id: 'hand-shoot-made', group: 'Hand over', title: 'Shoot made', note: 'Every trick taken alone adds the target to your score.',
     spec: { dealer: 3, bidder: 0, shoot: true, trump: 'S', rules: { scoring: 'modern', shoot: 'on', passCount: 0 }, hands: { 0: ALL_SPADES }, to: 'game_over' } },
+  { id: 'hand-shoot-passed', group: 'Hand over', title: 'Shoot after passing', note: 'A shoot declared after the pass: the hands show after passing or as dealt.',
+    spec: { dealer: 3, bidder: 0, bid: 29, trump: 'S', shootAfterPass: true, rules: { scoring: 'modern', shoot: 'on' }, hands: { 0: ALL_SPADES }, to: 'game_over' } },
   { id: 'hand-shoot-missed', group: 'Hand over', title: 'Shoot missed', note: 'The shoot fails on the first lost trick; hands stay part-played.',
     spec: { dealer: 3, bidder: 0, shoot: true, trump: 'H', rules: { scoring: 'modern', shoot: 'on', passCount: 0 },
       hands: { 0: ['9C', '9C', 'JC', 'JC', '9D', '9D', 'JD', 'JD', '9S', '9S', 'JS', 'JS'] }, to: 'game_over' } },

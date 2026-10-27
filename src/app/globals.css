@@ -224,9 +224,15 @@ body {
   .board-hand { grid-area: hand; margin-top: 0; }
 }
 
+/* The board glides to the middle of its room when the action bar below it changes height. */
+.board-lift { transition: transform 220ms cubic-bezier(.2,.8,.25,1); }
+[data-motion="off"] .board-lift { transition: none; }
+
 /* Table talk's popover grows out of its button in the corner. */
 @keyframes chat-pop { from { opacity: 0; transform: translateY(6px) scale(.97); } to { opacity: 1; transform: none; } }
 .chat-pop:not([hidden]) { animation: chat-pop 140ms cubic-bezier(.2,.8,.25,1) both; transform-origin: 100% 100%; }
+@keyframes chat-pop-down { from { opacity: 0; transform: translateY(-6px) scale(.97); } to { opacity: 1; transform: none; } }
+.chat-pop-below:not([hidden]) { animation-name: chat-pop-down; transform-origin: 100% 0; }
 
 /* A shoot sets the partner's hand aside: the fan gathers into a squared stack, which then settles small and quiet.
    The end state is the element's own style, so a reload, motion off or reduced motion show it with no animation. */
