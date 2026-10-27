@@ -3,7 +3,9 @@
 import { useId } from "react";
 import { useCardPrefs, type CardSize, type MotionPref } from "@/lib/cardPrefs";
 import { useOpponentPointsPref } from "@/lib/prefs";
-import type { HandSortOrder, RankDirection } from "@/engine/hand";
+import { suitSequence, type HandSortPrefs, type RankDirection, type SuitOrder, type TrumpPlacement } from "@/engine/hand";
+import type { Suit } from "@/engine/types";
+import { SUIT_GLYPH, SUIT_NAME, suitInk } from "@/components/cards/PlayingCard";
 
 function Row({ label, children, stacked = false, description }: { label: string; children: React.ReactNode; stacked?: boolean; description?: string }) {
   const descriptionId = useId();
@@ -27,12 +29,40 @@ function Pill({ on, onClick, children }: { on: boolean; onClick: () => void; chi
 
 const MOTIONS: [MotionPref, string][] = [["normal", "Normal"], ["quick", "Quick"], ["off", "Off"]];
 const SIZES: [CardSize, string][] = [["s", "S"], ["m", "M"], ["l", "L"]];
-const ORDERS: [HandSortOrder, string][] = [["trump-first", "Trump first"], ["suits", "By suit"], ["alternating", "Alternate colours"]];
+const PLACEMENTS: [TrumpPlacement, string][] = [["left", "Left"], ["right", "Right"], ["off", "Off"]];
+const SUIT_ORDERS: [SuitOrder, string][] = [["fixed", "Fixed order"], ["alternating", "Alternate colours"]];
 const RANKS: [RankDirection, string][] = [["high-first", "High to low"], ["low-first", "Low to high"]];
+/** Shown when no trump is named yet, so the preview still says where trump would go. */
+const EXAMPLE_TRUMP: Suit = "H";
+
+/** The suits left to right as the hand will lay out, trump shaded as it is in the hand. */
+function OrderPreview({ sort, trump, fourColour, tint }: { sort: HandSortPrefs; trump: Suit | null; fourColour: boolean; tint: boolean }) {
+  const shown = trump ?? EXAMPLE_TRUMP;
+  const suits = suitSequence(shown, sort);
+  const trumpName = SUIT_NAME[shown][0].toUpperCase() + SUIT_NAME[shown].slice(1);
+  const words = suits.map((suit) => SUIT_NAME[suit]).join(", ");
+  return (
+    <div className="flex items-center gap-3">
+      <div aria-hidden className="flex shrink-0 gap-1">
+        {suits.map((suit) => (
+          <span key={suit} style={{ color: suitInk(suit, fourColour) }}
+            className={`flex h-[30px] w-[22px] items-center justify-center rounded-[3px] text-[15px] leading-none shadow-[0_0_0_1px_rgba(36,29,29,.18)] ${tint && suit === shown ? "bg-chalk-trump" : "bg-chalk"}`}>
+            {SUIT_GLYPH[suit]}
+          </span>
+        ))}
+      </div>
+      <p className="text-xs text-ink-soft">
+        <span className="sr-only">Left to right: {words}. </span>
+        {trump ? `${trumpName} are trump` : `If ${SUIT_NAME[shown]} were trump`}; {sort.ranks === "high-first" ? "aces" : "nines"} first in each suit.
+      </p>
+    </div>
+  );
+}
 
 /** Every card and table preference, as rows of pills. The table's menu shows it inline. */
-export function CardOptionsPanel() {
+export function CardOptionsPanel({ trump = null }: { trump?: Suit | null }) {
   const { prefs, size, update } = useCardPrefs();
+  const sort = (patch: Partial<HandSortPrefs>) => update({ sort: { ...prefs.sort, ...patch } });
   const { hideOpponentPoints, setHideOpponentPoints } = useOpponentPointsPref();
   return (
     <>
@@ -46,6 +76,10 @@ export function CardOptionsPanel() {
       </Row>
       <Row label="Size">
         {SIZES.map(([s, l]) => <Pill key={s} on={size === s} onClick={() => update({ size: s })}>{l}</Pill>)}
+      </Row>
+      <Row label="Trump tint">
+        <Pill on={prefs.trumpTint} onClick={() => update({ trumpTint: true })}>On</Pill>
+        <Pill on={!prefs.trumpTint} onClick={() => update({ trumpTint: false })}>Off</Pill>
       </Row>
       <Row label="Tap twice to play" stacked description={prefs.confirmPlay ? "The first tap lifts a card. Tap it again quickly to play it, or later to put it back." : "A tap plays the card."}>
         <Pill on={prefs.confirmPlay} onClick={() => update({ confirmPlay: true })}>On</Pill>
@@ -62,14 +96,18 @@ export function CardOptionsPanel() {
       <Row label="Motion" stacked description="Off also follows your device's reduced-motion setting.">
         {MOTIONS.map(([motion, label]) => <Pill key={motion} on={prefs.motion === motion} onClick={() => update({ motion })}>{label}</Pill>)}
       </Row>
-      <div role="group" aria-label="Sorting" className="flex flex-col gap-2.5">
-        <p className="text-sm text-ink-soft">Sorting</p>
-        <Row label="Order" stacked description="Trump moves to the left once it is named.">
-          {ORDERS.map(([order, label]) => <Pill key={order} on={prefs.sort.order === order} onClick={() => update({ sort: { ...prefs.sort, order } })}>{label}</Pill>)}
+      <div role="group" aria-label="Hand order" className="flex flex-col gap-2.5">
+        <p className="text-sm text-ink-soft">Hand order</p>
+        <Row label="Trump" stacked>
+          {PLACEMENTS.map(([placement, label]) => <Pill key={placement} on={prefs.sort.trump === placement} onClick={() => sort({ trump: placement })}>{label}</Pill>)}
         </Row>
-        <Row label="Ranks" stacked>
-          {RANKS.map(([ranks, label]) => <Pill key={ranks} on={prefs.sort.ranks === ranks} onClick={() => update({ sort: { ...prefs.sort, ranks } })}>{label}</Pill>)}
+        <Row label="Other suits" stacked>
+          {SUIT_ORDERS.map(([suits, label]) => <Pill key={suits} on={prefs.sort.suits === suits} onClick={() => sort({ suits })}>{label}</Pill>)}
         </Row>
+        <Row label="Card order" stacked>
+          {RANKS.map(([ranks, label]) => <Pill key={ranks} on={prefs.sort.ranks === ranks} onClick={() => sort({ ranks })}>{label}</Pill>)}
+        </Row>
+        <OrderPreview sort={prefs.sort} trump={trump} fourColour={prefs.fourColour} tint={prefs.trumpTint} />
       </div>
     </>
   );

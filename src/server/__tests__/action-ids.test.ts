@@ -12,6 +12,7 @@ import { act } from '../game';
 let state: GameState;
 let duplicate: boolean;
 beforeEach(() => {
+  for (const [key, value] of Object.entries({ NEXT_PUBLIC_SUPABASE_URL: "https://meld.supabase.co", NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon", SUPABASE_SERVICE_ROLE_KEY: "service-role", CRON_SECRET: "cron" })) vi.stubEnv(key, value);
   vi.clearAllMocks();
   state = newGame('action-ids'); duplicate = false;
   mocks.from.mockImplementation((name: string) => {
@@ -44,9 +45,18 @@ it('returns the current view when the transaction detects a concurrent duplicate
   expect(mocks.broadcast).not.toHaveBeenCalled();
   expect(mocks.notify).not.toHaveBeenCalled();
 });
-it('returns a 409 PlayerView when a competing action wins the database revision guard', async () => {
-  mocks.rpc.mockImplementation(async () => { state.rev = 2; return { error: { code: '40001', message: 'changed' } }; });
+it.each([
+  ['40001', 'changed'],
+  ['PT409', 'Game changed; refresh and retry'],
+  ['PT409', 'Table is not playing this game'],
+])('returns a 409 PlayerView when a competing action wins the database revision guard (%s %s)', async (code, message) => {
+  mocks.rpc.mockImplementation(async () => { state.rev = 2; return { error: { code, message } }; });
   await expect(act('ABC234', 'human', action, 0, requestId)).rejects.toMatchObject({ status: 409, data: { rev: 2 } });
   expect(mocks.broadcast).not.toHaveBeenCalled();
   expect(mocks.notify).not.toHaveBeenCalled();
+});
+it('keeps the message of other PT409 conflicts from the commit', async () => {
+  mocks.rpc.mockResolvedValue({ error: { code: 'PT409', message: 'Every human must be ready for the next hand.' } });
+  await expect(act('ABC234', 'human', action, 0, requestId))
+    .rejects.toMatchObject({ status: 409, message: 'Every human must be ready for the next hand.', data: undefined });
 });

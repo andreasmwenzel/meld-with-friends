@@ -4,7 +4,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError, isTransientError, type Profile } from "@/lib/api";
-import { useTableChannel, useDisconnectedPolling } from "@/lib/realtime/useTableChannel";
+import { ViewSync, type GameFeed } from "./viewSync";
+import { applyPublicMove, type PublicMove } from "@/engine/publicMove";
+import { openMove } from "@/lib/moveAuth";
 import type { Action, CardId, PlayerView, SeatIndex, Suit, Team } from "@/engine/types";
 import { PlayingCard, CardBack, SUIT_GLYPH, SUIT_NAME, RANK_LABEL, splitCard, cardName } from "@/components/cards/PlayingCard";
 import { Avatar } from "@/components/site/Avatar";
@@ -26,6 +28,7 @@ import { describeConstraint } from "@/engine/rules";
 import { cardLabel } from "@/engine/deck";
 import { motionTimings, flyFrom, sweepTo } from "./motion";
 import { newLogLines, speakLine } from "./announce";
+import { DOUBLE_TAP_MS, isRealPress, isTimedActivation, releasePress, secondPress, type Armed, type Press } from "./tapTwice";
 
 type ClientAction = Action extends infer A ? (A extends Action ? Omit<A, "seat"> : never) : never;
 
@@ -35,8 +38,6 @@ const subscribeWide = (cb: () => void) => { const mq = window.matchMedia(WIDE); 
 const readWide = () => window.matchMedia(WIDE).matches;
 type MenuTab = "score" | "hand" | "talk" | "options";
 const TURN_PREFIX = "Your turn · ";
-/** With tap twice to play, a second tap on a lifted card within this long plays it; a later one puts it down. */
-const DOUBLE_TAP_MS = 500;
 /** How far a lifted card rises out of the hand. */
 const LIFT_PX = 14;
 
@@ -48,8 +49,14 @@ function countersIn(trick: NonNullable<PlayerView["currentTrick"]>, rules: Playe
   }, 0);
 }
 
-export function Game({ code, me, snap, rev, onTableChange, connection = "ok", local = false, suggested, chat }: {
-  code: string; me: Profile; snap: Snapshot; rev: number; onTableChange: () => void; connection?: "ok" | "reconnecting"; local?: boolean;
+export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connection = "ok", local = false, suggested, chat }: {
+  code: string; me: Profile; snap: Snapshot; onTableChange: () => void; connection?: "ok" | "reconnecting"; local?: boolean;
+  /** boards without a channel (lab, practice) reload whenever this changes */
+  rev?: number;
+  /** the table room's channel events; the board fetches once per game event */
+  feed?: GameFeed;
+  /** lab only: sees every view the board applies, fetched or built from a broadcast move */
+  inspect?: (view: PlayerView) => void;
   /** cards a coach suggests, outlined in the hand (practice) */
   suggested?: CardId[];
   /** table talk for the menu's Talk tab, and how many messages are unread */
@@ -64,7 +71,9 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   const [busy, setBusy] = useState(false);
   /** Card lifted awaiting a second tap; only valid for the view revision it was lifted in.
    *  While `open`, a second tap plays it (the card wears its ring); once the window closes a tap puts it down. */
-  const [armed, setArmed] = useState<{ card: CardId; rev: number; open: boolean; timed: boolean } | null>(null);
+  const [armed, setArmed] = useState<Armed | null>(null);
+  /** The last pointer press on a hand card; a click not just after it was let go is a keyboard or screen-reader press. */
+  const lastPress = useRef<Press | null>(null);
   /** The card you just played, held up in your hand while the play is sent. */
   const [sending, setSending] = useState<CardId | null>(null);
   /** Where that card sat in your hand, so it flies to the table from there. */
@@ -73,13 +82,15 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (hintTimer.current) clearTimeout(hintTimer.current); }, []);
   const [degraded, setDegraded] = useState(false);
-  const requests = useRef({ issued: 0, applied: 0, rev: -1 });
-  const applyView = useCallback((next: PlayerView, request: number) => {
-    if (request < requests.current.applied || next.rev < requests.current.rev) return;
-    requests.current.applied = request;
-    requests.current.rev = next.rev;
-    setView(next); setDegraded(false);
-  }, []);
+  const [sync] = useState(() => new ViewSync<PlayerView, PublicMove>({
+    fetchView: () => api<PlayerView>(`/api/tables/${code}/view`),
+    applyMove: applyPublicMove,
+    apply: (next) => { inspect?.(next); setView(next); setDegraded(false); },
+    onError: (e) => {
+      if (isTransientError(e)) setDegraded(true);
+      else setError(e instanceof ApiError && e.status === 404 ? "No table has this code." : (e as Error).message);
+    },
+  }));
   const reconnecting = connection === "reconnecting" || degraded;
   const { prefs: cardPrefs, width: cardW, short, reducedMotion } = useCardPrefs();
   useEffect(() => {
@@ -97,48 +108,56 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   const { slideMs, holdMs, sweepMs } = motionTimings(motion);
   const router = useRouter();
 
-  const load = useCallback(async () => {
-    const request = ++requests.current.issued;
-    try {
-      const next = await api<PlayerView>(`/api/tables/${code}/view`);
-      applyView(next, request);
-    } catch (e) {
-      if (request < requests.current.applied) return;
-      requests.current.applied = request;
-      if (isTransientError(e)) setDegraded(true);
-      else setError(e instanceof ApiError && e.status === 404 ? "No table has this code." : (e as Error).message);
-    }
-  }, [code, applyView]);
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch, state is set after await
+  const load = useCallback(() => sync.load(), [sync]);
+  // Leaving the board (or a rematch remounting it) cancels its grace timers and late answers.
+  useEffect(() => { sync.start(); return () => sync.dispose(); }, [sync]);
   useEffect(() => { void load(); }, [load, rev]);
-  const { status } = useTableChannel(code, event => { if (event.type === "resync" || event.type === "game") void load(); });
-  useDisconnectedPolling(status, load);
+  // Public moves apply locally, other game events fetch once at most; seat events (ready checks) and
+  // resyncs (reconnect, tab shown, polling) always fetch.
+  const opening = useRef<Promise<void>>(Promise.resolve());
+  const gameId = snap.table.current_game_id;
+  useEffect(() => feed?.subscribe((event) => {
+    if (event.type !== "game") { sync.handle(event); return; }
+    // Check signatures in arrival order; a move that does not check out counts as a bare revision.
+    opening.current = opening.current.then(async () => {
+      // The server's public key for broadcast moves comes with the view.
+      const key = (sync.latest as (PlayerView & { moveKey?: string }) | null)?.moveKey;
+      const move = key && gameId && event.move ? await openMove(key, gameId, event.move, event.sig) : null;
+      sync.event(event.rev, move ?? undefined);
+    }).catch(() => sync.event(event.rev)); // never let one bad event stop the ones after it
+  }), [feed, sync, gameId]);
+  const live = !!feed && connection === "ok";
+  // The game ending also finishes the table; game events no longer refetch the table, so ask once.
+  const tableEnding = view?.phase === "game_over" && snap.table.status === "playing";
+  useEffect(() => { if (tableEnding) onTableChange(); }, [tableEnding, onTableChange]);
 
   /** Sends an action; resolves to the view it brought back, or null if nothing came back. */
   async function act(action: ClientAction): Promise<PlayerView | null> {
     if (!view || busy) return null;
-    const request = ++requests.current.issued;
+    const request = sync.begin();
     const body = { action: { ...action, seat: view.seat }, expectedRev: view.rev, requestId: crypto.randomUUID() };
     setBusy(true); setError(null);
-    try {
-      let next: PlayerView;
-      try { next = await api<PlayerView>(`/api/tables/${code}/act`, { body }); }
-      catch (e) {
-        if (e instanceof ApiError) throw e;
-        next = await api<PlayerView>(`/api/tables/${code}/act`, { body });
-      }
-      applyView(next, request); setSelected([]);
-      if (next.phase === "game_over") onTableChange();
-      return next;
-    } catch (e) {
-      if (request < requests.current.applied) return null;
-      if (e instanceof ApiError && e.status === 409 && e.data && typeof (e.data as PlayerView).rev === "number") {
-        applyView(e.data as PlayerView, request); setSelected([]);
-        return e.data as PlayerView;
-      } else if (isTransientError(e)) setDegraded(true);
-      else setError((e as Error).message);
-      return null;
-    } finally { setBusy(false); }
+    // The response carries the new view, so the broadcast for this move needs no fetch.
+    return sync.act(async () => {
+      try {
+        let next: PlayerView;
+        try { next = await api<PlayerView>(`/api/tables/${code}/act`, { body }); }
+        catch (e) {
+          if (e instanceof ApiError) throw e;
+          next = await api<PlayerView>(`/api/tables/${code}/act`, { body });
+        }
+        sync.accept(next, request); setSelected([]);
+        return next;
+      } catch (e) {
+        if (!sync.current(request)) return null;
+        if (e instanceof ApiError && e.status === 409 && e.data && typeof (e.data as PlayerView).rev === "number") {
+          sync.accept(e.data as PlayerView, request); setSelected([]);
+          return e.data as PlayerView;
+        } else if (isTransientError(e)) setDegraded(true);
+        else setError((e as Error).message);
+        return null;
+      } finally { setBusy(false); }
+    });
   }
 
   async function countdownNext(signal: AbortSignal) {
@@ -152,14 +171,14 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
       if (signal.aborted || document.hidden || !canCountdownAdvance(table, latest, {
         tableId: snap.table.id, userId: me.id, handNumber: view.handNumber, rev: view.rev,
       })) return;
-      const request = ++requests.current.issued;
+      const request = sync.begin();
       submitted = true;
       setBusy(true);
       // One normal action request, with the freshly checked revision and no retry.
       const next = await api<PlayerView>(`/api/tables/${code}/act`, { body: {
         action: { type: "next_hand", seat: latest.seat }, expectedRev: latest.rev, requestId: crypto.randomUUID(),
       } });
-      applyView(next, request);
+      sync.accept(next, request);
       setSelected([]);
     } catch (e) {
       if (submitted || !signal.aborted) setError((e as Error).message);
@@ -200,7 +219,11 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
         if (cancelled) return;
         tickFailures.current = 0;
         if (typeof r.delayMs === "number") setPace(r.delayMs);
-        if (r.acted || r.rev > requests.current.rev) await load();
+        // With a live channel the broadcast brings the move; fetch only if it has not arrived shortly.
+        if (r.acted || r.rev > sync.rev) {
+          if (live) sync.expect(r.rev, 2000);
+          else await load();
+        }
       } catch {
         if (cancelled) return;
         setDegraded(true);
@@ -211,9 +234,11 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
     timer = setTimeout(run, nudgePending.current ? 0 : delay);
     nudgePending.current = false;
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [botTurn, view, code, load, leader, pace, nudgeVersion]);
+  }, [botTurn, view, code, load, sync, live, leader, pace, nudgeVersion]);
 
   const [displayedTrick, setDisplayedTrick] = useState<PlayerView["currentTrick"]>(null);
+  /** The revision at which you asked to see the last trick again; any move puts the table back. */
+  const [peekRev, setPeekRev] = useState<number | null>(null);
   const trickHold = useRef<{ key: string; until: number }>({ key: "", until: 0 });
   // Before paint, so a card you play never shows gone from your hand and not yet on the table.
   useLayoutEffect(() => {
@@ -313,8 +338,12 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
   async function postReady() {
     setError(null);
     try {
-      await api(`/api/tables/${code}/ready`, { body: {} });
-      await load();
+      // The answer is the table, not the view: ask for one view fetch, which the seat broadcast for
+      // this same change shares if it arrives first.
+      await sync.act(async () => {
+        await api(`/api/tables/${code}/ready`, { body: {} });
+        sync.invalidate();
+      });
     } catch (e) { setError((e as Error).message); }
   }
   async function pauseTable() {
@@ -400,18 +429,13 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- act is recreated each render; the revision key runs each step once
   }, [view, busy, error, snap.paused, cardPrefs.autoMeld]);
-  // Everyone's meld opens by itself when trick play starts and stays up through the first trick,
-  // unless dismissed; after that "Review meld" brings it back.
+  // Everyone's meld opens by itself when trick play starts and stays up through the first trick, unless
+  // dismissed. After that the seat chips carry each side's meld, and the menu's "This hand" lists it.
   const [meldHidden, setMeldHidden] = useState<number | null>(null);
-  const [meldAsked, setMeldAsked] = useState<number | null>(null);
   // A rematch starts again at hand 1 without remounting, so forget the choice when a game ends.
   const gameOver = view?.phase === "game_over";
   // eslint-disable-next-line react-hooks/set-state-in-effect -- resets per-game display choices
-  useEffect(() => { if (gameOver) { setMeldHidden(null); setMeldAsked(null); } }, [gameOver]);
-  // Hide removes the button that had focus; hand it to the "Review meld" link that replaces the row.
-  const reviewLink = useRef<HTMLButtonElement>(null);
-  const focusReview = useRef(false);
-  useEffect(() => { if (focusReview.current) { focusReview.current = false; reviewLink.current?.focus(); } });
+  useEffect(() => { if (gameOver) setMeldHidden(null); }, [gameOver]);
   // A choice made in one phase never carries into the next (an outside move, such as the practice coach, can change it).
   const phaseKey = view ? `${view.handNumber}:${view.phase}` : "";
   // eslint-disable-next-line react-hooks/set-state-in-effect -- drops a stale choice when the phase moves on
@@ -548,11 +572,12 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
     if (view!.phase === "playing") {
       if (!view!.legal.playableCards.includes(card)) return;
       if (cardPrefs.confirmPlay) {
-        const again = armed && armed.card === card && armed.rev === view!.rev;
         // A quick second tap plays the card; coming back to it later puts it down. Keyboard and screen-reader
-        // presses (untimed) can't be quick, so for them any second press plays. The Play button always plays.
-        if (!again) { setArmed({ card, rev: view!.rev, open: true, timed }); return; }
-        if (!armed.open && timed) { setArmed(null); return; }
+        // presses (untimed, see isTimedActivation) can't be quick, so for them any second press plays.
+        // The Play button always plays.
+        const next = secondPress(armed, card, view!.rev, timed);
+        if (next === "arm") { setArmed({ card, rev: view!.rev, open: true, timed }); return; }
+        if (next === "put-back") { setArmed(null); return; }
       }
       play(card);
       return;
@@ -560,6 +585,13 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
     if (!picking) return;
     setSelected((s) => (s.includes(card) ? s.filter((c) => c !== card) : [...s, card]));
   }
+
+  // Seeing the last trick again: the centre shows it, the status above your hand says who took it.
+  const lastTrick = view.lastTrick && view.lastTrick.plays.length === 4 && view.lastTrick.winner !== null ? view.lastTrick : null;
+  const peeking = !!lastTrick && view.phase === "playing" && peekRev === view.rev;
+  const showingLast = !!lastTrick && displayedTrick?.plays.length === 4 && displayedTrick.plays.every((p, i) => p.card === lastTrick.plays[i].card);
+  const peek = { last: peeking ? lastTrick : null, can: !!lastTrick && view.phase === "playing" && !showingLast,
+    toggle: () => setPeekRev((r) => (r === view.rev ? null : view.rev)) };
 
   const armedCard = armed && armed.rev === view.rev && isMyTurn && view.phase === "playing" && view.legal.playableCards.includes(armed.card) ? armed.card : null;
   const trickCards = displayedTrick;
@@ -619,31 +651,22 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
     const seat = seatAt(r);
     return { seat, view, name: nameOf(seat), bot: isBot(seat), score: scoreOf(seat), faceUp: revealedFor(seat), laid: laidOf(seat).length, standIn: standInFor(seat), makeHost: makeHostFor(seat), compact: short };
   };
-  const myContract = view.bidder === view.seat && view.highBid !== null && view.phase !== "bidding";
   const them: Team = myTeam === "red" ? "blue" : "red";
-  const peeking = over && !recapOpen && peekKey === `${view.handNumber}-${view.phase}`;
+  const peekingResult = over && !recapOpen && peekKey === `${view.handNumber}-${view.phase}`;
   const tabs: [MenuTab, string][] = [["score", "Score"], ["hand", "This hand"], ...(chat ? [["talk", unread > 0 ? `Talk (${unread})` : "Talk"] as [MenuTab, string]] : []), ["options", "Options"]];
   const linkCls = "tap-link text-left text-sm text-chalk-faint underline underline-offset-4 hover:text-chalk disabled:opacity-60";
 
   return (
     <div className="board relative flex min-h-0 w-full flex-1 flex-col overflow-hidden"
-      data-motion={motion} style={{ "--pm": `${slideMs}ms`, "--sd": `${holdMs}ms`, "--sm": `${sweepMs}ms`, paddingBottom: peeking ? "4.5rem" : undefined } as React.CSSProperties}>
+      data-motion={motion} style={{ "--pm": `${slideMs}ms`, "--sd": `${holdMs}ms`, "--sm": `${sweepMs}ms`, paddingBottom: peekingResult ? "4.5rem" : undefined } as React.CSSProperties}>
       <div className={`board-flat flex min-h-0 flex-1 flex-col ${menu ? "lg:pr-[380px]" : ""}`} inert={menu && !wide ? true : undefined}>
         {/* One slim strip: the hand, the score, and the way to everything else. */}
         <div className="board-score flex shrink-0 flex-wrap items-center justify-between gap-x-3 px-3 py-1.5 text-sm tabular-nums sm:px-4">
-          {/* Your own chair has no chip, so once you hold the bid your contract and side's total sit here. */}
-          {myContract ? (
-            <div className="flex min-w-0 items-center gap-1">
-              <p className="min-w-0 truncate"><span className="font-semibold">Hand {view.handNumber}</span><span className="text-chalk-faint"> · You</span></p>
-              <ScoreTag score={scoreOf(view.seat)} name="You" align="left" />
-            </div>
-          ) : (
-            <p className="min-w-0 truncate">
-              <span className="font-semibold">Hand {view.handNumber}</span>
-              {view.dealer === view.seat && view.phase === "bidding" && <span className="text-chalk-faint"> · you deal</span>}
-              {view.highBid && <span className="text-chalk-faint"> · <span className="text-chalk">{view.highBid.shoot ? "moon" : view.highBid.amount}</span>{view.trump && <span style={{ color: view.trump === "H" || view.trump === "D" ? "var(--deck-red-soft)" : "var(--chalk)" }}>{SUIT_GLYPH[view.trump]}</span>} {nameOf(view.highBid.seat)}</span>}
-            </p>
-          )}
+          <p className="min-w-0 truncate">
+            <span className="font-semibold">Hand {view.handNumber}</span>
+            {view.dealer === view.seat && view.phase === "bidding" && <span className="text-chalk-faint"> · you deal</span>}
+            {view.highBid && <span className="text-chalk-faint"> · <span className="text-chalk">{view.highBid.shoot ? "moon" : view.highBid.amount}</span>{view.trump && <span style={{ color: view.trump === "H" || view.trump === "D" ? "var(--deck-red-soft)" : "var(--chalk)" }}>{SUIT_GLYPH[view.trump]}</span>} {nameOf(view.highBid.seat)}</span>}
+          </p>
           <p className="whitespace-nowrap short:order-last short:basis-full">
             <span className={myTeam === "red" ? "text-deck-red-soft" : "text-deck-blue-soft"}>Us</span> {view.score[myTeam].toLocaleString()}
             <span className="px-1.5 text-chalk-faint">·</span>
@@ -675,8 +698,9 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
               <OpponentRow className="board-north" align="center" {...seatProps(2)} />
               <div className="board-flat grid grid-cols-[minmax(64px,auto)_minmax(0,1fr)_minmax(64px,auto)] items-center gap-2">
                 <OpponentRow className="board-west" align="left" {...seatProps(1)} />
-                <Centre compact={short} view={view} trick={trickCards} rel={rel} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge}
-                  laid={{ 0: laidOf(seatAt(0)), 1: laidOf(seatAt(1)), 2: laidOf(seatAt(2)), 3: laidOf(seatAt(3)) }} lit={lit} />
+                <Centre compact={short} view={view} trick={trickCards} rel={rel} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge} peek={peek}
+                  laid={{ 0: laidOf(seatAt(0)), 1: laidOf(seatAt(1)), 2: laidOf(seatAt(2)), 3: laidOf(seatAt(3)) }} lit={lit}
+                  mySeat={<MySeat view={view} name={me.display_name} score={scoreOf(view.seat)} />} />
                 <OpponentRow className="board-east" align="right" {...seatProps(3)} />
               </div>
             </div>
@@ -685,18 +709,17 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
 
         {/* action bar */}
         <div ref={actionRef} {...keepFocus} className="board-action mt-1 min-h-[64px] shrink-0 sm:mt-2 sm:min-h-[88px]">
-          <ActionBar key={view.rev} view={view} isMyTurn={isMyTurn} selected={selected} busy={busy} act={act} nameOf={nameOf} autoMeld={cardPrefs.autoMeld} />
-          {/* One slot of the same height whether the meld row or the "Review meld" link is in it, so the hand never moves. */}
-          {view.phase === "playing" && (
+          <ActionBar key={view.rev} view={view} selected={selected} busy={busy} act={act} nameOf={nameOf} autoMeld={cardPrefs.autoMeld} />
+          {view.phase === "playing" && view.playedCards.length < 4 && meldHidden !== view.handNumber && (
             <div className="mt-1 flex min-h-11 items-center justify-center">
-              {(view.playedCards.length < 4 && meldHidden !== view.handNumber) || meldAsked === view.handNumber ? (
-                <MeldReview key={view.handNumber} melds={view.melds} seat={view.seat} nameOf={nameOf} compact={short}
-                  onHide={() => { focusReview.current = true; setMeldHidden(view.handNumber); setMeldAsked(null); }} />
-              ) : (
-                <button ref={reviewLink} type="button" className="tap-link text-xs text-chalk-faint underline underline-offset-4 hover:text-chalk"
-                  onClick={() => setMeldAsked(view.handNumber)}>Review meld</button>
-              )}
+              {/* Hiding removes the button that had focus; the hand takes it. */}
+              <MeldReview key={view.handNumber} melds={view.melds} seat={view.seat} nameOf={nameOf} compact={short}
+                onHide={() => { setMeldHidden(view.handNumber); handRef.current?.focus({ preventScroll: true }); }} />
             </div>
+          )}
+          {/* Whose turn it is lives here, by your hand, so the cloth holds only the cards. */}
+          {view.phase === "playing" && (
+            <PlayStatus view={view} trick={trickCards} nameOf={nameOf} peek={peek} stalled={stalled && !paused} nudge={nudge} compact={short} />
           )}
           {(view.phase === "bidding" || (view.phase === "melding" && view.trump)) && (
             <MeldLine key={view.phase} rules={view.rules} hand={view.hand} trump={view.phase === "melding" ? view.trump : null} lit={lit} setLit={setLit} />
@@ -729,11 +752,15 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
               const ringed = (sel && !isArmed) || (isArmed && armed!.open);
               return (
                 <span key={c} data-keep-armed={isArmed || armedCard ? "" : undefined} className="shrink-0" style={{ marginLeft: -overlap }} onClick={() => { if (view.phase === "playing" && isMyTurn && !playable) showHint(); }}>
-                  <button data-hand-card={c} onClick={(e) => toggle(c, e.detail !== 0)} disabled={busy || !playable} aria-pressed={sel}
+                  <button data-hand-card={c}
+                    onPointerDown={(e) => { lastPress.current = { card: c, pointerId: e.pointerId, real: isRealPress(e.pointerType, window.matchMedia("(any-pointer: fine)").matches), upAt: null }; }}
+                    onPointerUp={(e) => { lastPress.current = releasePress(lastPress.current, c, e.pointerId, e.timeStamp); }}
+                    onPointerCancel={() => { lastPress.current = null; }}
+                    onClick={(e) => { const timed = isTimedActivation(lastPress.current, c, e.timeStamp, e.detail); lastPress.current = null; toggle(c, timed); }} disabled={busy || !playable} aria-pressed={sel}
                     className="group relative block touch-manipulation rounded-[10px] focus-visible:z-20 disabled:pointer-events-none"
                     style={{ transform: sel || lit?.includes(c) ? `translateY(-${LIFT_PX}px)` : undefined, transition: "transform .14s ease" }}>
                     {suggested?.includes(c) && <SuggestedMark />}
-                    <PlayingCard card={c} width={cardW} prefs={cardPrefs} selected={ringed || (lit?.includes(c) ?? false)} dimmed={(view.phase === "playing" && isMyTurn && !playable) || (lit !== null && !lit.includes(c))}
+                    <PlayingCard card={c} width={cardW} prefs={cardPrefs} trump={splitCard(c).suit === view.trump} selected={ringed || (lit?.includes(c) ?? false)} dimmed={(view.phase === "playing" && isMyTurn && !playable) || (lit !== null && !lit.includes(c))}
                       {...(meldable.has(c) && !sel ? { style: { boxShadow: "0 0 0 2px var(--brass), var(--shadow-card)" }, title: `${cardName(c)}, scores in your meld` } : {})} />
                   </button>
                 </span>
@@ -818,7 +845,7 @@ export function Game({ code, me, snap, rev, onTableChange, connection = "ok", lo
               </div>
               <div className="panel flex flex-col gap-2.5 p-3 text-left">
                 <p className="text-sm font-semibold text-ink">Cards</p>
-                <CardOptionsPanel />
+                <CardOptionsPanel trump={view.trump} />
               </div>
             </div>
           )}
@@ -844,9 +871,9 @@ function SuggestedMark() {
   );
 }
 
-/** "You are shooting the moon", "West is shooting the moon", or "shot" once the hand is over. */
-function shootLine(who: string, over: boolean): string {
-  return over ? `${who} shot the moon` : `${who} ${who === "You" ? "are" : "is"} shooting the moon`;
+/** "You are shooting the moon" or "West is shooting the moon". */
+function shootLine(who: string): string {
+  return `${who} ${who === "You" ? "are" : "is"} shooting the moon`;
 }
 
 const REV_W = 36;
@@ -1019,9 +1046,75 @@ function MeldLine({ rules, hand, trump, lit, setLit }: { rules: PlayerView["rule
   );
 }
 
-function Centre({ view, trick, rel, nameOf, stalled, nudge, compact = false, laid, lit }: {
+/** Seeing the last trick again: `last` is set while it shows, `can` when there is one to see. */
+type Peek = { last: NonNullable<PlayerView["lastTrick"]> | null; can: boolean; toggle: () => void };
+
+/** Your own chair below the cloth: the same name and score chip as the other three. */
+function MySeat({ view, name, score }: { view: PlayerView; name: string; score: SeatScore }) {
+  return (
+    <div className="flex justify-center py-1">
+      <div className="relative flex items-center">
+        <div className="flex items-center gap-1 rounded-2xl px-2 py-1 sm:gap-2" style={view.turn === view.seat ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
+          <span className="relative shrink-0">
+            <Avatar name={name} team={teamOf(view.seat)} size={28} />
+            {score.dealer && <DealerMark />}
+          </span>
+          <span className="text-xs font-semibold sm:text-sm">You{score.dealer && <span className="sr-only">, dealer</span>}</span>
+        </div>
+        {/* Above the side seats' cards, and opening up and over the cloth: below this seat the board ends. */}
+        <div className="absolute left-full top-1/2 z-30 ml-1 -translate-y-1/2 whitespace-nowrap">
+          <ScoreTag score={score} name="You" align="right" placement="above" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** A player's name within a line, cut short with an ellipsis when it would not fit; the text keeps all of it for screen readers. */
+function Name({ name }: { name: string }) {
+  return <span className="min-w-0 truncate" title={name}>{name}</span>;
+}
+
+/**
+ * Trick play's status, just above your hand: whose turn it is, then what the last trick brought,
+ * the rule you must follow, and the way to see the last trick again. Fixed height, so the hand never moves:
+ * a long name is cut short, and on an upright phone the second row keeps room for two lines.
+ */
+function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact }: {
+  view: PlayerView; trick: PlayerView["currentTrick"]; nameOf: (s: SeatIndex) => string; peek: Peek;
+  stalled: boolean; nudge: () => void; compact: boolean;
+}) {
+  const mine = view.turn === view.seat;
+  const done = !peek.last && !!trick && trick.plays.length === 4 && trick.winner !== null;
+  const took = done ? countersIn(trick, view.rules) : 0;
+  const detail = peek.last ? null
+    : done ? <><Name name={nameOf(trick.winner!)} />{` took it${took > 0 ? `, ${took} ${took === 1 ? "counter" : "counters"}` : ", no counters"}.`}</>
+    : mine ? constraintSentence(view) ?? "Tap a card to play it."
+    : null;
+  const link = "whitespace-nowrap text-xs text-chalk-faint underline underline-offset-4 hover:text-chalk";
+  // Each line is a single row of text, so a name can shrink inside it while the words round it stay whole.
+  const line = "flex min-w-0 max-w-full whitespace-pre";
+  return (
+    <div data-play-status="" className="flex w-full flex-col items-center text-center pb-5 short:pb-0">
+      <div className="flex h-8 max-w-full items-center">
+        {peek.last ? <p className={`display text-chalk ${line}`} style={{ fontSize: compact ? 17 : 19 }}>Last trick: <Name name={nameOf(peek.last.winner!)} /> took it.</p>
+          : mine ? <p className={`display ${line}`} style={{ fontSize: compact ? 19 : 22, color: "var(--brass)" }}>Your play.</p>
+          : <p className={`text-sm text-chalk ${line}`}><Name name={nameOf(view.turn!)} /> to play.</p>}
+      </div>
+      <div className="flex h-10 max-w-full flex-wrap content-center items-center justify-center gap-x-3 text-xs leading-5 text-chalk-faint short:h-5">
+        {detail && <span className={typeof detail === "string" ? "max-w-full truncate" : line}>{detail}</span>}
+        {(peek.can || peek.last) && <button type="button" onClick={peek.toggle} aria-expanded={!!peek.last} className={link}>{peek.last ? "Back to the table" : "Last trick"}</button>}
+        {stalled && <button type="button" onClick={nudge} className={link}>Nudge the computers</button>}
+      </div>
+    </div>
+  );
+}
+
+function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = false, laid, lit, mySeat }: {
   view: PlayerView; trick: PlayerView["currentTrick"]; rel: (s: SeatIndex) => 0 | 1 | 2 | 3; nameOf: (s: SeatIndex) => string;
-  stalled: boolean; nudge: () => void; compact?: boolean;
+  stalled: boolean; nudge: () => void; peek: Peek; compact?: boolean;
+  /** your own chair, below the cloth */
+  mySeat: React.ReactNode;
   /** each seat's meld lying on the cloth in front of them, by position round the table from you */
   laid: Record<0 | 1 | 2 | 3, CardId[]>;
   /** your meld cards lit from the meld readout */
@@ -1047,26 +1140,20 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, compact = false, lai
       case "passing_to_bidder": return who === "You" ? `Pass ${view.legal.mustPassCount ?? ""} cards to your partner.` : `${who} is passing to the bidder.`;
       case "passing_back": return who === "You" ? `Pass ${view.legal.mustPassCount ?? ""} cards back.` : `${who} is passing back.`;
       case "melding": return view.meldConfirmed[view.seat] ? "Meld is in." : "Lay down your meld.";
-      case "playing": return who === "You" ? "Your play." : `${who} to play.`;
       case "hand_over": return "Hand over.";
       case "game_over": return view.winner ? `${view.winner === "red" ? "Red" : "Blue"} team wins.` : "Game over.";
       default: return "";
     }
   })();
   const mine = view.turn === view.seat && view.phase !== "hand_over" && view.phase !== "game_over";
-  const last = view.lastTrick && view.lastTrick.plays.length === 4 && view.lastTrick.winner !== null ? view.lastTrick : null;
   const inPlay = view.phase === "playing";
-  const [peekRev, setPeekRev] = useState<number | null>(null);
-  const peeking = !!last && inPlay && peekRev === view.rev;
-  const shown = peeking ? last : trick;
-  const showingLast = !!last && shown?.plays.length === 4 && shown.plays.every((p, i) => p.card === last.plays[i].card);
-  const canPeek = !!last && inPlay && !showingLast;
-  const togglePeek = () => setPeekRev((r) => (r === view.rev ? null : view.rev));
-  const emptyTap = canPeek && !trick?.plays.length;
+  const peeking = !!peek.last;
+  const shown = peek.last ?? trick;
+  const emptyTap = peek.can && !trick?.plays.length;
   return (
     <div className="board-centre mx-auto w-full max-w-[420px]">
     <div className={`relative mx-auto w-full ${compact ? "max-w-[240px]" : "max-w-[300px]"} ${emptyTap ? "cursor-pointer" : ""}`} style={{ height: compact ? 2 * trickW * 1.4 + 14 : 246 }}
-      onClick={emptyTap ? togglePeek : undefined}>
+      onClick={emptyTap ? peek.toggle : undefined}>
       <div className="absolute inset-x-[2%] inset-y-[8%] rounded-[46%] border-[5px] border-cloth-edge"
         style={{ background: "radial-gradient(ellipse at 50% 40%, #6b2530, var(--cloth-deep))", boxShadow: "inset 0 10px 30px rgba(0,0,0,.35)" }} />
       {view.trump && inPlay && (
@@ -1093,33 +1180,25 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, compact = false, lai
         );
       })}
     </div>
-    {/* Room for three lines kept, so the board does not grow and shrink (and rescale) as lines come and go. */}
-    <div className={`flex flex-col items-center gap-0.5 text-center ${compact ? "mt-0.5" : "mt-1 min-h-[4.75rem]"}`}>
-      {peeking && last ? (
-        <p className="display text-chalk" style={{ fontSize: 18 }}>Last trick: {nameOf(last.winner!)} took it.</p>
-      ) : (
+    {mySeat}
+    {/* During trick play the status sits above your hand. Otherwise room for three lines is kept here, so the
+        board does not grow and shrink (and rescale) as lines come and go. The chips carry the contract once bidding ends. */}
+    {!inPlay && (
+      <div className={`flex flex-col items-center gap-0.5 text-center ${compact ? "mt-0.5" : "mt-1 min-h-[4.75rem]"}`}>
         <p className={mine ? "display" : "text-sm text-chalk"} style={mine ? { fontSize: compact ? 19 : 22, color: "var(--brass)" } : undefined}>{prompt}</p>
-      )}
-      {!peeking && view.highBid && view.phase !== "game_over" && (
-        <p className="text-sm text-chalk-faint">
-          {view.highBid.shoot
-            ? <>{shootLine(nameOf(view.highBid.seat), view.phase === "hand_over")}</>
-            : <>{nameOf(view.highBid.seat)} {view.phase === "bidding" ? "holds" : "took it at"} {view.highBid.amount}</>}
-          {view.trump && <> in <span className={view.trump === "H" || view.trump === "D" ? "text-deck-red-soft" : "text-chalk"}>{SUIT_GLYPH[view.trump]}</span></>}
-        </p>
-      )}
-      {!peeking && done && (
-        <p className="text-xs text-chalk-faint" style={{ opacity: dim ? 0.7 : 1 }}>
-          {nameOf(trick.winner!)} took it{took > 0 ? `, ${took} ${took === 1 ? "counter" : "counters"}` : ", no counters"}.
-        </p>
-      )}
-      {(canPeek || peeking) && (
-        <button type="button" onClick={togglePeek} aria-expanded={peeking} className="text-xs text-chalk-faint underline hover:text-chalk">
-          {peeking ? "Back to the table" : "Last trick"}
-        </button>
-      )}
-      {stalled && <button type="button" onClick={nudge} className="text-xs text-chalk-faint underline hover:text-chalk">Nudge the computers</button>}
-    </div>
+        {view.highBid && view.phase === "bidding" && (
+          <p className="text-sm text-chalk-faint">
+            {view.highBid.shoot ? shootLine(nameOf(view.highBid.seat)) : <>{nameOf(view.highBid.seat)} holds {view.highBid.amount}</>}
+          </p>
+        )}
+        {done && (
+          <p className="text-xs text-chalk-faint" style={{ opacity: dim ? 0.7 : 1 }}>
+            {nameOf(trick.winner!)} took it{took > 0 ? `, ${took} ${took === 1 ? "counter" : "counters"}` : ", no counters"}.
+          </p>
+        )}
+        {stalled && <button type="button" onClick={nudge} className="text-xs text-chalk-faint underline hover:text-chalk">Nudge the computers</button>}
+      </div>
+    )}
     </div>
   );
 }
@@ -1165,8 +1244,8 @@ function constraintSentence(view: PlayerView): string | null {
   return describeConstraint(c, SUIT_NAME);
 }
 
-function ActionBar({ view, isMyTurn, selected, busy, act, nameOf, autoMeld }: {
-  view: PlayerView; isMyTurn: boolean; selected: CardId[]; busy: boolean;
+function ActionBar({ view, selected, busy, act, nameOf, autoMeld }: {
+  view: PlayerView; selected: CardId[]; busy: boolean;
   act: (a: ClientAction) => Promise<unknown>; nameOf: (s: SeatIndex) => string; autoMeld: boolean;
 }) {
   const L = view.legal;
@@ -1185,7 +1264,7 @@ function ActionBar({ view, isMyTurn, selected, busy, act, nameOf, autoMeld }: {
     return (<>
       {thrown}
       <Bar>
-        {!stuck && <span className="text-chalk-faint">{shooter ? `${shootLine(shooter, false)}.` : "If everyone passes, redeal."}</span>}
+        {!stuck && <span className="text-chalk-faint">{shooter ? `${shootLine(shooter)}.` : "If everyone passes, redeal."}</span>}
         <button className="btn btn-ghost btn-compact" style={{ color: "var(--chalk-faint)" }} onClick={() => act({ type: "pass_bid" })} disabled={busy}>
           {stuck ? `Take it at ${view.rules.minBid}` : "Pass"}
         </button>
@@ -1256,10 +1335,7 @@ function ActionBar({ view, isMyTurn, selected, busy, act, nameOf, autoMeld }: {
       </Bar>
     );
   }
-  if (view.phase === "playing") {
-    return <Bar><span className="text-chalk-faint">{isMyTurn ? (constraintSentence(view) ?? "Tap a card to play it.") : "Waiting on the table."}</span></Bar>;
-  }
-  if (view.phase === "hand_over" || view.phase === "game_over") return null;
+  // Trick play's status is PlayStatus, above the hand.
   return null;
 }
 

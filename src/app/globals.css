@@ -10,6 +10,7 @@
   --cloth-edge: #7a2a33;
   --chalk: #f5efe3;        /* card stock */
   --chalk-dim: #e6dccb;
+  --chalk-trump: #e2e8d6;  /* trump in your hand: card stock with a faint celadon wash */
   --chalk-faint: rgba(245, 239, 227, 0.62);
   --chalk-ghost: rgba(245, 239, 227, 0.14);
   --pip-red: #c1272d;
@@ -34,6 +35,7 @@
   --color-cloth-edge: var(--cloth-edge);
   --color-chalk: var(--chalk);
   --color-chalk-dim: var(--chalk-dim);
+  --color-chalk-trump: var(--chalk-trump);
   --color-chalk-faint: var(--chalk-faint);
   --color-chalk-ghost: var(--chalk-ghost);
   --color-pip-red: var(--pip-red);

@@ -5,11 +5,13 @@ import { getSettings } from "./settings";
 import { enforce } from "./limits";
 import { chooseAction } from "@/engine/ai";
 import { applyAction, viewFor } from "@/engine";
+import { publicMove } from "@/engine/publicMove";
+import { movePublicKey, signMove } from "./moveSigning";
 import type { Action, GameState, PlayerView, SeatIndex } from "@/engine/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ApiError, checkDb } from "./errors";
 import { tableByCode } from "./tables";
-import { broadcastTable } from "./realtime";
+import { broadcastTable, type GameEvent } from "./realtime";
 import { recordGameResult } from "./history";
 
 async function loadGame(code: string, userId: string) {
@@ -25,11 +27,12 @@ async function loadGame(code: string, userId: string) {
   return { table, seat: seat.seat as SeatIndex, game: game as { id: string; state: GameState; rev: number; ready?: SeatIndex[] } };
 }
 
-export type TablePlayerView = PlayerView & { ready: SeatIndex[] };
+/** A seat's view plus table facts; `moveKey` is the public key that checks the moves broadcast for the game. */
+export type TablePlayerView = PlayerView & { ready: SeatIndex[]; moveKey: string };
 
 export async function getView(code: string, userId: string): Promise<TablePlayerView> {
   const { seat, game } = await loadGame(code, userId);
-  return { ...viewFor(game.state, seat), ready: game.ready ?? [] };
+  return { ...viewFor(game.state, seat), ready: game.ready ?? [], moveKey: movePublicKey() };
 }
 
 export async function act(code: string, userId: string, action: Action, expectedRev: number, requestId: string): Promise<TablePlayerView> {
@@ -43,7 +46,7 @@ export async function act(code: string, userId: string, action: Action, expected
   if (table.status !== "playing") throw new ApiError(409, "Table is not playing");
   if (expectedRev !== game.rev) {
     bump("act_conflict");
-    throw new ApiError(409, "Game changed", { ...viewFor(game.state, seat), ready: game.ready ?? [] });
+    throw new ApiError(409, "Game changed", { ...viewFor(game.state, seat), ready: game.ready ?? [], moveKey: movePublicKey() });
   }
   if (action.type === "next_hand" && game.state.phase === "hand_over" && table.host !== userId) {
     const result = await admin.from("seats").select("seat,user_id").eq("table_id", table.id);
@@ -59,7 +62,7 @@ export async function act(code: string, userId: string, action: Action, expected
     p_game: game.id, p_user: userId, p_old_rev: game.rev, p_state: next, p_action: action, p_request_id: requestId,
   });
   if (error?.message === "The table is paused.") throw new ApiError(409, error.message);
-  if (error?.code === "40001") {
+  if (isStaleCommit(error)) {
     if (error.message.startsWith("Game changed")) bump("act_conflict");
     throw new ApiError(409, "Game changed", await getView(code, userId));
   }
@@ -67,12 +70,33 @@ export async function act(code: string, userId: string, action: Action, expected
   if (committed === null) return getView(code, userId);
   scheduleTurnNotification(game.id);
   if (next.phase === "game_over") void recordGameResult(game.id).catch(error => console.error("Game result recording failed", error));
-  await broadcastTable(table.code, { type: "game", rev: next.rev });
+  await broadcastTable(table.code, gameEvent(game.id, game.state, next, action));
   if (next.phase === "melding") {
     await runBotTick(code, true);
     return getView(code, userId);
   }
-  return { ...viewFor(next, seat), ready: next.phase === "hand_over" ? game.ready ?? [] : [] };
+  return { ...viewFor(next, seat), ready: next.phase === "hand_over" ? game.ready ?? [] : [], moveKey: movePublicKey() };
+}
+
+/**
+ * The game broadcast for a committed move. When nothing private changed it carries the signed public
+ * move, so seated clients apply it without fetching; otherwise (or if signing fails) just the revision.
+ */
+export function gameEvent(gameId: string, prev: GameState, next: GameState, action: Action): GameEvent {
+  const event: GameEvent = { type: "game", rev: next.rev };
+  try {
+    const move = publicMove(prev, next, action);
+    return move ? { ...event, ...signMove(gameId, move) } : event;
+  } catch (error) { console.error("Public move failed", error); return event; }
+}
+
+/**
+ * The commit lost a revision or table race. Migration 0017 raises these as PT409 (40001 is retried by
+ * the database API); 40001 is still accepted until that migration is applied everywhere.
+ */
+function isStaleCommit(error: { code?: string; message: string } | null): error is { code?: string; message: string } {
+  return error?.code === "40001" || (error?.code === "PT409"
+    && (error.message.startsWith("Game changed") || error.message.startsWith("Table is not playing")));
 }
 
 /** Service-only worker. The HTTP route verifies the caller is a seated human. */
@@ -118,7 +142,7 @@ async function performBotTick(code: string, meldingOnly: boolean): Promise<{ act
     const next = applyAction(state, action);
     const { data: committedRev, error } = await admin.rpc("commit_bot_action", { p_game: game.id, p_old_rev: state.rev, p_state: next, p_action: action });
     if (error?.message === "The table is paused.") throw new ApiError(409, error.message);
-    if (error?.code === "40001" || (!error && committedRev === null)) {
+    if (isStaleCommit(error) || (!error && committedRev === null)) {
       const current = await admin.from("games").select("rev").eq("id", game.id).single();
       checkDb(current.error);
       return { acted: false, rev: current.data!.rev };
@@ -126,8 +150,8 @@ async function performBotTick(code: string, meldingOnly: boolean): Promise<{ act
     checkDb(error);
     if (next.phase === "game_over") void recordGameResult(game.id).catch(error => console.error("Game result recording failed", error));
     scheduleTurnNotification(game.id);
+    await broadcastTable(table.code, gameEvent(game.id, state, next, action));
     state = next; acted = true;
-    await broadcastTable(table.code, { type: "game", rev: state.rev });
   }
   return { acted, rev: state.rev };
 }
