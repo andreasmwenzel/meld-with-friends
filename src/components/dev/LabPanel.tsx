@@ -5,7 +5,7 @@ import { buildDeck, cardLabel, sortHand, type CardId, type GameState, type Phase
 import { checkState, SEATS, type ScenarioSpec, type ScenarioTarget } from "@/engine/scenario";
 import { resolveRules, changeScoring } from "@/components/rules/rules";
 import { PRESETS, presetById } from "@/engine/scenarios";
-import { describeAction, encodeSpec, labStore, parseImport, type LabSnapshot } from "./labStore";
+import { describeAction, encodeSpec, exportTimeline, labStore, parseImport, type LabSnapshot } from "./labStore";
 
 const NAMES = ["South", "West", "North", "East"] as const;
 const SHORT = ["S", "W", "N", "E"] as const;
@@ -377,12 +377,12 @@ function StateTab({ snap, state, problems }: { snap: LabSnapshot; state: GameSta
   const [msg, setMsg] = useState<string | null>(null);
   const refresh = () => fetch("/dev/states").then(r => r.json()).then((d: { names: string[] }) => setSaved(d.names)).catch(() => setSaved([]));
   useEffect(() => { void refresh(); }, []);
-  const exportData = () => JSON.stringify({ base: snap.base, actions: snap.actions.slice(0, snap.cursor) }, null, 1);
+  const exportData = () => exportTimeline(snap);
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(null), 2000); };
   const doImport = (raw: string, label: string) => {
     try {
       const parsed = parseImport(JSON.parse(raw));
-      labStore.load(parsed.base, parsed.actions, { kind: "import", name: label }, { notes: [parsed.note] });
+      labStore.load(parsed.base, parsed.actions, { kind: "import", name: label }, { legacyShoots: parsed.legacyShoots, notes: [parsed.note] });
       flash(parsed.note);
     } catch (e) { flash(`Import failed: ${(e as Error).message}`); }
   };

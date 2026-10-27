@@ -1,7 +1,7 @@
 // Game replay: rebuild a game from its action log, cut it at the last completed hand, and strip
 // everything a browser could use to deal the hand still in progress. Pure; no I/O.
 import { cardLabel } from './deck';
-import { legacyShootRules } from './scoring';
+import { legacyShootRules, resolveRules } from './scoring';
 import { applyAction, applyLegacyAction, newGame, viewFor } from './game';
 import type { Action, CardId, GameState, HandRecord, SeatIndex, Suit, Trick } from './types';
 
@@ -43,7 +43,7 @@ function sameGame(a: GameState, b: GameState): boolean {
  * after the dealer, so the first logged action names the dealer; the other seats are tried in case
  * an older game disagrees. Returns null when the log no longer replays, for example after an engine change.
  */
-export function rebuildFromLog(final: GameState, actions: Action[]): { start: GameState; states: GameState[]; actions: Action[] } | null {
+export function rebuildFromLog(final: GameState, actions: Action[]): ({ start: GameState } & ReturnType<typeof replayLog>) | null {
   const first = actions[0]?.seat;
   const guess = first === undefined ? 0 : ((first + 3) % 4) as SeatIndex;
   const dealers = [guess, ...SEATS.filter(seat => seat !== guess)];
@@ -66,14 +66,20 @@ export function rebuildFromLog(final: GameState, actions: Action[]): { start: Ga
  * the pass existed went straight to meld, so where the log moves on without a decision the bidder is
  * taken to have played it out. So is a log that ends on the pass into meld when the stored game
  * (`final`, if given) is no longer waiting on the decision. Returns every state and the actions
- * actually applied; each inserted decision adds a revision the stored game never had.
+ * actually applied; each inserted decision adds a revision the stored game never had. Legacy shoot
+ * indexes travel with the timeline so a truncated log keeps each declaration's original rules.
  */
-export function replayLog(start: GameState, actions: readonly Action[], final?: Pick<GameState, 'phase'>): { states: GameState[]; actions: Action[] } {
+export function replayLog(start: GameState, actions: readonly Action[], final?: Pick<GameState, 'phase'>, legacyShoots: readonly number[] = []): { states: GameState[]; actions: Action[]; legacyShoots: number[] } {
   const rawMode = (start.rules as unknown as Record<string, unknown>).shoot;
-  if (rawMode === 'game' || rawMode === 'points') start = { ...start, legacyShootRules: legacyShootRules(start.rules) };
+  if (rawMode === 'game' || rawMode === 'points') start = { ...start, legacyShootRules: legacyShootRules(start.rules), rules: resolveRules(start.rules, true) };
   const states = [start];
   const applied: Action[] = [];
-  const apply = (action: Action, legacy = false) => { states.push((legacy ? applyLegacyAction : applyAction)(states[states.length - 1], action)); applied.push(action); };
+  const declarations: number[] = [];
+  const apply = (action: Action, legacy = false) => {
+    states.push((legacy ? applyLegacyAction : applyAction)(states[states.length - 1], action));
+    if (legacy) declarations.push(applied.length);
+    applied.push(action);
+  };
   const declineIfSkipped = (next?: Action) => {
     const at = states[states.length - 1];
     if (at.phase === 'deciding_shoot' && at.bidder !== null && next?.type !== 'shoot' && next?.type !== 'decline_shoot') {
@@ -85,13 +91,13 @@ export function replayLog(start: GameState, actions: readonly Action[], final?: 
     declineIfSkipped(action);
     const at = states[states.length - 1];
     const next = actions[i + 1];
-    const oldDecision = action.type === 'shoot' && (at.phase === 'bidding'
+    const oldDecision = action.type === 'shoot' && (legacyShoots.includes(i) || at.phase === 'bidding'
       || next?.type === 'declare_meld' || next?.type === 'confirm_meld'
       || !next && (final?.phase === 'melding' || rawMode === 'game' || rawMode === 'points'));
     apply(action, oldDecision);
   }
   if (final && final.phase !== 'deciding_shoot') declineIfSkipped();
-  return { states, actions: applied };
+  return { states, actions: applied, legacyShoots: declarations };
 }
 
 /** The state without its seed, so nobody can deal the next hand from it. */
