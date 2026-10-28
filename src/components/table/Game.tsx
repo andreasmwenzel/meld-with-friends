@@ -547,16 +547,25 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   // The board scales down to the room between the score strip and your actions, so the page never scrolls.
   const stage = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
-  const [fit, setFit] = useState({ scale: 1, w: 0, h: 0 });
+  const [fit, setFit] = useState({ scale: 1, w: 0, h: 0, top: 0 });
   useLayoutEffect(() => {
     const measure = () => {
       const s = stage.current, b = boardRef.current;
       if (!s || !b) return;
       // Sideways on a phone the board's pieces sit straight in the page grid, and nothing scales.
       const flat = getComputedStyle(s).display === "contents";
-      const w = b.offsetWidth, h = b.offsetHeight, room = s.clientHeight - parseFloat(getComputedStyle(s).paddingTop || "0");
-      const scale = flat ? 1 : Math.min(1, room / Math.max(1, h), s.clientWidth / Math.max(1, w));
-      setFit((prev) => (prev.scale === scale && prev.w === w && prev.h === h ? prev : { scale, w, h }));
+      const cs = getComputedStyle(s);
+      const padY = parseFloat(cs.paddingTop || "0") + parseFloat(cs.paddingBottom || "0");
+      const padX = parseFloat(cs.paddingLeft || "0") + parseFloat(cs.paddingRight || "0");
+      const w = b.offsetWidth, h = b.offsetHeight, room = s.clientHeight - padY;
+      const scale = flat ? 1 : Math.min(1, room / Math.max(1, h), (s.clientWidth - padX) / Math.max(1, w));
+      // The felt goes in the middle of the room between the score strip and your actions, as far as the whole board
+      // still fits: the felt holds still while lines come and go under it. Whole pixels, so the cards stay crisp.
+      const felt = b.querySelector<HTMLElement>("[data-felt]");
+      const box = b.getBoundingClientRect(), shown = box.height / Math.max(1, h);
+      const mid = felt ? (felt.getBoundingClientRect().top + felt.getBoundingClientRect().height / 2 - box.top) / Math.max(0.01, shown) : h / 2;
+      const top = flat ? 0 : Math.max(0, Math.min(room - h * scale, Math.floor(room / 2 - mid * scale)));
+      setFit((prev) => (prev.scale === scale && prev.w === w && prev.h === h && prev.top === top ? prev : { scale, w, h, top }));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -762,12 +771,28 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     cards[to].focus();
   };
   const tabs: [MenuTab, string][] = [["score", "Score"], ["hand", "This hand"], ["options", "Options"]];
+  // What scripts/overlap.mjs should find on screen, so a hand that fails to render (or to be found) fails the check
+  // instead of passing it with nothing measured: the hands drawn as cards (a sideways phone shows the others as a count
+  // until they are face up), the phase, whether a card of yours can be played now, and whether the end is a claim.
+  const myStack = view.sittingOut === view.seat && view.phase === "playing" ? view.handCounts[view.seat] : 0;
+  const drawnHands: string[] = ([1, 2, 3] as const).filter((r) => {
+    const seat = seatAt(r), faceUp = revealedFor(seat);
+    return (faceUp?.length ?? view.handCounts[seat] - laidOf(seat).length) > 0 && (!short || !!faceUp);
+  }).map((r) => SIDE[r === 1 ? "left" : r === 2 ? "center" : "right"]);
+  if (hand.length + myStack > 0) drawnHands.push("mine");
+  // A shooter's claim shows no cards for the partner sitting out (Claim.tsx), so that seat may have no hand at the end.
+  const outSeat = view.sittingOut ?? (over ? view.history.at(-1)?.sittingOut ?? null : null);
+  const outSide = outSeat == null || outSeat === view.seat ? undefined : SIDE[rel(outSeat) === 1 ? "left" : rel(outSeat) === 2 ? "center" : "right"];
+  const layoutFacts = { "data-phase": view.phase, "data-hands": drawnHands.join(" "), "data-sitting-out": outSide,
+    "data-can-play": view.phase === "playing" && isMyTurn && view.legal.playableCards.length > 0 ? "" : undefined, "data-claim": view.claim ? "" : undefined };
   const talk = chat && <ChatDock chat={chat} open={talkOpen} setOpen={setTalkOpen} text={talkDraft} setText={setTalkDraft} />;
   const linkCls = "tap-link text-left text-sm text-chalk-faint underline underline-offset-4 hover:text-chalk disabled:opacity-60";
 
   return (
-    <div ref={claimRoot} aria-busy={updating || undefined} className="board relative flex min-h-0 w-full flex-1 flex-col overflow-hidden"
-      data-motion={motion} style={{ "--pm": `${slideMs}ms`, "--sd": `${holdMs}ms`, "--sm": `${sweepMs}ms`, paddingBottom: peekingResult ? "4.5rem" : undefined } as React.CSSProperties}>
+    // Looking at the table after a hand, the result's buttons run along the bottom (Result.tsx), so the board keeps
+    // clear of them; sideways phones put them in the action column instead.
+    <div ref={claimRoot} aria-busy={updating || undefined} className={`board relative flex min-h-0 w-full flex-1 flex-col overflow-hidden ${peekingResult ? "pb-[4.5rem] short:pb-0" : ""}`}
+      data-motion={motion} {...layoutFacts} style={{ "--pm": `${slideMs}ms`, "--sd": `${holdMs}ms`, "--sm": `${sweepMs}ms` } as React.CSSProperties}>
       <div className={`board-flat flex min-h-0 flex-1 flex-col ${menu ? "lg:pr-[380px]" : ""}`} inert={(menu && !wide) || resultModal ? true : undefined}>
         {/* One slim strip: the hand, the score, and the way to everything else. */}
         <div inert={updating || undefined} className="board-score flex shrink-0 flex-wrap items-center justify-between gap-x-3 px-3 py-1.5 text-sm tabular-nums sm:px-4">
@@ -781,7 +806,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
             <span className="px-1.5 text-chalk-faint">·</span>
             <span className={them === "red" ? "text-deck-red-soft" : "text-deck-blue-soft"}>Them</span> {hidePoints ? "Hidden" : view.score[them].toLocaleString()}
           </p>
-          <button ref={menuButton} type="button" onClick={() => setMenu((o) => !o)} aria-expanded={menu} aria-controls="table-menu"
+          <button ref={menuButton} type="button" data-overlay="menu" onClick={() => setMenu((o) => !o)} aria-expanded={menu} aria-controls="table-menu"
             className="tap-link -mr-1 text-sm text-chalk-faint underline underline-offset-4 hover:text-chalk">
             Menu
           </button>
@@ -805,10 +830,23 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
         {updating ? <p role="status" className="board-note mb-1 shrink-0 text-center text-xs text-chalk-faint">Updating the table…</p>
           : reconnecting && <p role="status" className="board-note mb-1 shrink-0 text-center text-xs text-chalk-faint">Reconnecting to the table.</p>}
         <div aria-disabled={paused || updating ? true : undefined} inert={paused || updating ? true : undefined} className={`board-flat flex min-h-0 min-w-0 flex-1 flex-col px-3 pb-[max(.5rem,env(safe-area-inset-bottom))] sm:px-4 ${paused ? "pointer-events-none opacity-70" : ""}`}>
-        {/* Anchored at the top: when the action bar grows or shrinks, the room below the board changes, not the board. */}
-        <div ref={stage} className="board-flat flex min-h-0 flex-1 items-start justify-center overflow-hidden pt-[clamp(0px,calc((100dvh-44rem)/2),3rem)]">
-          <div className="board-flat" style={fit.scale < 1 ? { width: fit.w * fit.scale, height: fit.h * fit.scale } : undefined}>
-            <div ref={boardRef} className="board-flat w-[min(100vw-1.5rem,760px)] origin-top-left" style={{ transform: fit.scale < 1 ? `scale(${fit.scale})` : undefined }}>
+        {/* Table talk never lies on a hand (scripts/overlap.mjs checks every position and size). On an upright phone or
+            tablet it sits in the cloth's top-right corner, under Menu: the partner's row across is narrower than the
+            screen and the side seats start below it, so that corner is empty in every phase, while the bottom corner
+            meets the right-hand seat's cards on shorter phones and in a hand shown face up. Sideways phones put it at
+            the foot of the action column (globals.css). At hand end it moves onto the result sheet. */}
+        {talk && !resultModal && !paused && (
+          <div className="board-talk relative z-[25] h-0 shrink-0">
+            {/* Wide screens centre a narrow hand, which leaves the screen's own bottom corner free. */}
+            <div className={`absolute right-0 top-1 short:top-auto short:bottom-1 lg:fixed lg:top-auto lg:bottom-[max(1.25rem,env(safe-area-inset-bottom))] ${menu ? "lg:right-[400px]" : "lg:right-5"}`}>{talk}</div>
+          </div>
+        )}
+        {/* Centred between the score strip and your actions. When the action bar grows or shrinks the board glides to the
+            new middle (globals.css, .board-lift) rather than jumping. The stage's padding keeps the side seats' turn rings,
+            which stand 2px outside their plates, inside the stage's clip. */}
+        <div ref={stage} className="board-flat flex min-h-0 flex-1 items-start justify-center overflow-hidden p-1">
+          <div className="board-flat board-lift" style={{ ...(fit.scale < 1 ? { width: fit.w * fit.scale, height: fit.h * fit.scale } : null), transform: fit.top ? `translateY(${fit.top}px)` : undefined }}>
+            <div ref={boardRef} className="board-flat w-[min(100vw-2rem,760px)] origin-top-left" style={{ transform: fit.scale < 1 ? `scale(${fit.scale})` : undefined, "--board-scale": fit.scale } as React.CSSProperties}>
               {/* partner across */}
               <OpponentRow className="board-north" align="center" {...seatProps(2)} />
               <div className="board-flat grid grid-cols-[minmax(64px,auto)_minmax(0,1fr)_minmax(64px,auto)] items-center gap-2">
@@ -822,17 +860,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           </div>
         </div>
 
-        {/* Table talk sits on the cloth's bottom-right corner, just above the action bar: clear of the hand, the bid and
-            play controls, and the Play button (which rises out of the hand). Sideways phones put it at the foot of the
-            action column (globals.css). At hand end it moves onto the result sheet. */}
-        {talk && !resultModal && !paused && (
-          <div className="board-talk relative z-20 h-0 shrink-0">
-            {/* Wide screens centre a narrow hand, which leaves the screen's own corner free. */}
-            <div className={`absolute bottom-1 right-0 lg:fixed lg:bottom-[max(1.25rem,env(safe-area-inset-bottom))] ${menu ? "lg:right-[400px]" : "lg:right-5"}`}>{talk}</div>
-          </div>
-        )}
-        {/* action bar */}
-        <div ref={actionRef} {...keepFocus} className="board-action mt-1 min-h-[64px] shrink-0 sm:mt-2 sm:min-h-[88px]">
+        {/* action bar: as tall as what it holds, so a waiting player's board has the whole room to centre in. */}
+        <div ref={actionRef} {...keepFocus} data-overlay-zone="action" className="board-action mt-1 shrink-0 sm:mt-2">
           <ActionBar key={view.rev} view={view} selected={selected} busy={busy || updating} act={act} nameOf={nameOf} autoMeld={cardPrefs.autoMeld} />
           {view.phase === "playing" && view.sittingOut == null && view.playedCards.length < 4 && meldHidden !== view.handNumber && (
             <div className="mt-1 flex min-h-11 items-center justify-center">
@@ -844,7 +873,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           {/* Whose turn it is lives here, by your hand, so the cloth holds only the cards. */}
           {view.phase === "playing" && (
             <PlayStatus view={view} trick={trickCards} nameOf={nameOf} peek={peek} stalled={stalled && !paused} nudge={nudge} compact={short}
-              busy={busy || updating} claim={() => void act({ type: "claim" })} />
+              busy={busy || updating} claim={() => void act({ type: "claim" })} armed={armedCard ? { card: armedCard, play: () => play(armedCard) } : null} />
           )}
           {(view.phase === "bidding" || (view.phase === "melding" && view.trump)) && (
             <MeldLine key={view.phase} rules={view.rules} hand={view.hand} trump={view.phase === "melding" ? view.trump : null} lit={lit} setLit={setLit} />
@@ -859,15 +888,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
         </div>
 
         {/* my hand */}
-        {armedCard && (
-          <div {...keepFocus} className="board-armed relative h-0">
-            <button data-keep-armed="" onClick={() => play(armedCard)} aria-label={`Play ${cardName(armedCard)}`}
-              className="btn btn-brass absolute bottom-6 right-1 z-30 whitespace-nowrap shadow-lg" style={{ minHeight: 36, padding: "0 16px" }}>
-              Play {SUIT_GLYPH[splitCard(armedCard).suit]}{RANK_LABEL[splitCard(armedCard).rank]}
-            </button>
-          </div>
-        )}
-        <div ref={handRef} tabIndex={-1} {...keepFocus} role="group" aria-label="Your hand" onKeyDown={moveInHand} className={`board-hand relative mt-1 flex shrink-0 outline-none sm:mt-2 ${scrollHand ? "hand-scroll overflow-x-auto" : "justify-center"}`} style={{ minHeight: (cardW * 7) / 5 + (short ? 8 : 20), paddingTop: scrollHand ? 16 : undefined }}>
+        <div ref={handRef} tabIndex={-1} {...keepFocus} data-hand="mine" data-hand-cards={hand.length + myStack} role="group" aria-label="Your hand" onKeyDown={moveInHand} className={`board-hand relative mt-1 flex shrink-0 outline-none sm:mt-2 ${scrollHand ? "hand-scroll overflow-x-auto" : "justify-center"}`} style={{ minHeight: (cardW * 7) / 5 + (short ? 8 : 20), paddingTop: scrollHand ? 16 : undefined }}>
           <div className={`flex items-end ${scrollHand ? "mx-auto w-max" : ""}`} style={{ paddingLeft: overlap }}>
             {/* Your partner is shooting: your cards are set aside in a small stack, in the room the fan had. */}
             {view.sittingOut === view.seat && view.phase === "playing" && (
@@ -1019,6 +1040,8 @@ function shootLine(who: string): string {
 }
 
 const REV_W = 36;
+/** Where a seat sits from your chair, for `data-hand` (scripts/overlap.mjs finds the hands by it). */
+const SIDE = { left: "west", center: "north", right: "east" } as const;
 const MELD_W = 28;
 
 /** A player round the table: the name chip with its score tag, then their cards (backs while playing, face up at the end). */
@@ -1036,6 +1059,7 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
   const sittingOut = view.sittingOut === seat;
   const active = view.turn === seat;
   const vertical = align !== "center";
+  const side = SIDE[align];
   const items = align === "left" ? "items-start" : align === "right" ? "items-end" : "items-center";
   const chip = (
     <>
@@ -1043,17 +1067,20 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
         <Avatar name={name} team={team} size={28} bot={bot} />
         {score.dealer && <DealerMark />}
       </span>
-      {sittingOut && <span className="text-xs text-chalk-faint">sitting out</span>}
       <span className={`truncate text-xs font-semibold ${compact ? "max-w-[88px]" : "max-w-[96px] sm:text-sm"}`}>{name}{score.dealer && <span className="sr-only">, dealer</span>}{active && <span className="sr-only">, their turn</span>}</span>
+      {/* After the name, as your own chip reads ("You sitting out"). */}
+      {sittingOut && <span className="text-xs text-chalk-faint">sitting out</span>}
     </>
   );
   if (compact) {
     return <CompactSeat {...{ seat, className, team, active, name, chip, score, n, faceUp, standIn, align }} setAside={sittingOut && !faceUp} />;
   }
   return (
-    <div data-claim-seat={seat} className={`group flex flex-col ${items} gap-1 py-1 sm:gap-1.5 sm:py-2 min-w-0 ${className}`}>
+    // Side seats hang from the same line at the top of their row, so a longer fan (sixteen cards while passing, a bid under
+    // the name) grows downwards on its own side and never pushes its plate out of line with the other side's.
+    <div data-claim-seat={seat} className={`group flex flex-col ${items} gap-1 py-1 sm:gap-1.5 sm:py-2 min-w-0 ${vertical ? "self-start pt-6 sm:pt-8" : ""} ${className}`}>
       <div className={`relative flex max-w-full items-center ${vertical ? "flex-col" : "flex-row"}`}>
-        <div className={`flex ${vertical ? "flex-col" : "flex-row"} items-center gap-1 sm:gap-2 rounded-2xl px-2 py-1 max-w-full`}
+        <div data-seat-plate={side} className={`flex ${vertical ? "flex-col" : "flex-row"} items-center gap-1 sm:gap-2 rounded-2xl px-2 py-1 max-w-full`}
           style={active ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
           {chip}
         </div>
@@ -1065,8 +1092,8 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
       {/* A shoot sets this hand aside: a small stack where the fan was, until the hand is shown at the end. */}
       {sittingOut && !faceUp ? (
         <SitOutStack n={n} team={team} cardW={34} step={vertical ? (34 * 7) / 5 - 40 : 10} pad={7} orient={vertical ? align as "left" | "right" : "row"}
-          fold={fold} label={`${name} sits this hand out; cards set aside`} />
-      ) : <div className={`flex ${vertical ? "flex-col" : "flex-row"}`} style={vertical ? { padding: "0 7px" } : undefined} role={faceUp ? "group" : "img"} aria-label={`${n} cards`}>
+          fold={fold} label={`${name} sits this hand out; cards set aside`} hand={side} handCards={n} />
+      ) : <div data-hand={side} data-hand-cards={n} className={`flex ${vertical ? "flex-col" : "flex-row"}`} style={vertical ? { padding: "0 7px" } : undefined} role={faceUp ? "group" : "img"} aria-label={`${n} cards`}>
         {faceUp ? faceUp.map((c, i) => vertical ? (
           <div key={c} data-claim-card={view.claim ? c : undefined} className="relative shrink-0" style={{ width: (REV_W * 7) / 5, height: i === faceUp.length - 1 ? REV_W : 17, zIndex: align === "right" ? faceUp.length - i : i }}>
             <PlayingCard card={c} width={REV_W} style={{ position: "absolute", left: "50%", top: REV_W / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg)` }} />
@@ -1095,7 +1122,8 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
 
 /**
  * An opponent on a phone held sideways: name, turn ring and a card count in place of the fanned backs.
- * Hands shown at the end stay face up in a tight overlapping fan.
+ * Hands shown at the end stay face up in a tight overlapping fan; across the table it goes under the name, since
+ * beside it the fan would be squeezed into a tall column down the middle of the screen.
  */
 function CompactSeat({ seat, className, team, active, name, chip, score, n, faceUp, standIn, align, setAside }: {
   seat: SeatIndex; setAside: boolean;
@@ -1104,9 +1132,9 @@ function CompactSeat({ seat, className, team, active, name, chip, score, n, face
 }) {
   const across = align === "center";
   return (
-    <div data-claim-seat={seat} className={`flex min-w-0 items-center gap-2 ${across ? "flex-row justify-center" : "flex-col"} ${className}`}>
+    <div data-claim-seat={seat} className={`flex min-w-0 items-center ${!across ? "flex-col gap-2" : faceUp ? "flex-col gap-1" : "flex-row justify-center gap-2"} ${className}`}>
       <div className={`relative flex max-w-full items-center ${across ? "flex-row" : "flex-col"}`}>
-        <div className={`flex max-w-full items-center gap-x-2 gap-y-0.5 rounded-2xl px-2 py-1 ${across ? "flex-row" : "flex-col"}`}
+        <div data-seat-plate={SIDE[align]} className={`flex max-w-full items-center gap-x-2 gap-y-0.5 rounded-2xl px-2 py-1 ${across ? "flex-row" : "flex-col"}`}
           style={active ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
           {chip}
           {!faceUp && (
@@ -1124,7 +1152,7 @@ function CompactSeat({ seat, className, team, active, name, chip, score, n, face
           <ScoreTag score={score} name={name} align={align} />
         </div>
       </div>
-      {faceUp && faceUp.length > 0 && <SmallFan cards={faceUp} perRow={across ? faceUp.length : 5} label={`${n} cards`} />}
+      {faceUp && faceUp.length > 0 && <SmallFan cards={faceUp} perRow={across ? faceUp.length : 5} label={`${n} cards`} hand={SIDE[align]} />}
       {/* As on an upright phone: no hover here, so the hand-off shows once a seat seems away, and making a host waits for a bigger screen. */}
       {standIn?.away && (
         <button type="button" onClick={standIn.run} className="tap max-w-[120px] text-center text-xs text-chalk-faint underline hover:text-chalk">
@@ -1136,11 +1164,11 @@ function CompactSeat({ seat, className, team, active, name, chip, score, n, face
 }
 
 /** Small face-up cards overlapping so each shows only its corner index, wrapping after `perRow`. */
-function SmallFan({ cards, perRow, label, width = MELD_W, lit }: { cards: CardId[]; perRow: number; label: string; width?: number; lit?: CardId[] | null }) {
+function SmallFan({ cards, perRow, label, width = MELD_W, lit, hand }: { cards: CardId[]; perRow: number; label: string; width?: number; lit?: CardId[] | null; hand?: string }) {
   const w = width, h = (w * 7) / 5, peekX = Math.round(w / 2), peekY = Math.round(w * 0.72);
   const cols = Math.min(perRow, cards.length);
   return (
-    <div className="flex flex-wrap" role="group" aria-label={label} title={label}
+    <div data-hand={hand} data-hand-cards={hand ? cards.length : undefined} className="flex flex-wrap" role="group" aria-label={label} title={label}
       style={{ width: w + (cols - 1) * peekX + 0.5, paddingLeft: w - peekX, paddingTop: h - peekY }}>
       {cards.map((c) => <span key={c} data-claim-card={c} style={{ marginLeft: peekX - w, marginTop: peekY - h, flexShrink: 0 }}><PlayingCard card={c} width={w} selected={lit?.includes(c) ?? false} /></span>)}
     </div>
@@ -1162,13 +1190,13 @@ function MeldLine({ rules, hand, trump, lit, setLit }: { rules: PlayerView["rule
     const mine = all.find((x) => x.suit === trump);
     if (!mine || mine.items.length === 0) return <p className="mt-2 text-center text-xs text-chalk-faint">No meld in {SUIT_NAME[trump]}.</p>;
     return (
-      <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 text-xs text-chalk-faint">
+      <div className="mt-2 mb-1.5 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-3 text-xs text-chalk-faint">
         <span>Your meld, tap to see it:</span>
         {mine.items.map((it, i) => {
           const key = `${i}`, on = open === key && same(it.cards);
           return (
             <button key={key} type="button" aria-pressed={on} onClick={() => pick(key, it.cards)}
-              className={`rounded-full px-2.5 py-1 text-chalk ${on ? "bg-chalk text-[color:var(--pip-black)]" : "bg-white/10 hover:bg-white/20"}`}>
+              className={`hit inline-flex h-8 min-w-11 items-center justify-center rounded-full px-2.5 text-chalk ${on ? "bg-chalk text-[color:var(--pip-black)]" : "bg-white/10 hover:bg-white/20"}`}>
               {itemLabel(it)} {it.points}
             </button>
           );
@@ -1180,13 +1208,13 @@ function MeldLine({ rules, hand, trump, lit, setLit }: { rules: PlayerView["rule
   const shown = worth.find((x) => x.suit === open);
   return (
     <div className="mt-2 text-center text-xs text-chalk-faint">
-      <div className="flex flex-wrap items-center justify-center gap-1.5">
+      <div className="mb-1.5 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-3">
         <span>Your meld, tap a suit:</span>
         {worth.map((x) => {
           const on = open === x.suit;
           return (
             <button key={x.suit} type="button" aria-pressed={on} onClick={() => pick(x.suit, x.cards)}
-              className={`rounded-full px-2.5 py-1 ${on ? "bg-chalk" : "bg-white/10 hover:bg-white/20"}`}>
+              className={`hit inline-flex h-8 min-w-11 items-center justify-center gap-1 rounded-full px-2.5 ${on ? "bg-chalk" : "bg-white/10 hover:bg-white/20"}`}>
               <span style={{ color: on ? suitColour(x.suit) : undefined }} className={on ? "" : x.suit === "H" || x.suit === "D" ? "text-deck-red-soft" : "text-chalk"}>{SUIT_GLYPH[x.suit]}</span>
               {" "}<span className={on ? "text-[color:var(--pip-black)]" : "text-chalk"}>{x.total}</span>
             </button>
@@ -1210,7 +1238,7 @@ function MySeat({ view, name, score }: { view: PlayerView; name: string; score: 
   return (
     <div data-claim-seat={view.seat} className="flex justify-center py-1">
       <div className="relative flex items-center">
-        <div className="flex items-center gap-1 rounded-2xl px-2 py-1 sm:gap-2" style={view.turn === view.seat ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
+        <div data-seat-plate="mine" className="flex items-center gap-1 rounded-2xl px-2 py-1 sm:gap-2" style={view.turn === view.seat ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
           <span className="relative shrink-0">
             <Avatar name={name} team={teamOf(view.seat)} size={28} />
             {score.dealer && <DealerMark />}
@@ -1236,10 +1264,12 @@ function Name({ name }: { name: string }) {
  * the rule you must follow, and the way to see the last trick again. Fixed height, so the hand never moves:
  * a long name is cut short, and on an upright phone the second row keeps room for two lines.
  */
-function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact, busy, claim }: {
+function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact, busy, claim, armed }: {
   view: PlayerView; trick: PlayerView["currentTrick"]; nameOf: (s: SeatIndex) => string; peek: Peek;
   stalled: boolean; nudge: () => void; compact: boolean;
   busy: boolean; claim: () => void;
+  /** a card of yours lifted by a first tap: its Play button takes the place of "Your play." */
+  armed: { card: CardId; play: () => void } | null;
 }) {
   const mine = view.turn === view.seat;
   const done = !peek.last && !!trick && trick.winner !== null;
@@ -1252,18 +1282,25 @@ function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact, busy, 
     : done ? <><Name name={nameOf(trick.winner!)} />{` took it${took > 0 ? `, ${took} ${took === 1 ? "counter" : "counters"}` : view.sittingOut == null ? ", no counters" : ""}.`}</>
     : mine ? shootStatus ?? constraintSentence(view) ?? "Tap a card to play it."
     : shootStatus;
-  const link = "whitespace-nowrap text-xs text-chalk-faint underline underline-offset-4 hover:text-chalk";
+  const link = "hit whitespace-nowrap text-xs text-chalk-faint underline underline-offset-4 hover:text-chalk";
   // Each line is a single row of text, so a name can shrink inside it while the words round it stay whole.
   const line = "flex min-w-0 max-w-full whitespace-pre";
   return (
     <div data-play-status="" className="flex w-full flex-col items-center text-center pb-5 short:pb-0">
-      <div className="flex h-8 max-w-full items-center gap-3">
+      {/* Rows 44px tall, so each row's controls take a full tap without reaching into the other row's. */}
+      <div className="flex h-11 max-w-full items-center gap-3">
         {peek.last ? <p className={`display text-chalk ${line}`} style={{ fontSize: compact ? 17 : 19 }}>Last trick: <Name name={nameOf(peek.last.winner!)} /> took it.</p>
+          // In the status's own row, not floating over it: a Play button laid over the bar covered "Last trick" and
+          // "Claim all" (scripts/overlap.mjs, the armed screen).
+          : mine && armed ? <button type="button" data-keep-armed="" data-overlay="play" data-own-card={armed.card} onClick={armed.play} aria-label={`Play ${cardName(armed.card)}`}
+            className="hit btn btn-brass whitespace-nowrap" style={{ height: 32, minHeight: 32, padding: "0 16px" }}>
+            Play {SUIT_GLYPH[splitCard(armed.card).suit]}{RANK_LABEL[splitCard(armed.card).rank]}
+          </button>
           : mine ? <p className={`display ${line}`} style={{ fontSize: compact ? 19 : 22, color: "var(--brass)" }}>Your play.</p>
           : <p className={`text-sm text-chalk ${line}`}><Name name={nameOf(view.turn!)} /> to play.</p>}
         {view.legal.canClaim && <ClaimButton busy={busy} onClaim={claim} />}
       </div>
-      <div className="flex h-10 max-w-full flex-wrap content-center items-center justify-center gap-x-3 text-xs leading-5 text-chalk-faint short:h-5">
+      <div className="flex h-11 max-w-full flex-wrap content-center items-center justify-center gap-x-3 text-xs leading-5 text-chalk-faint">
         {detail && <span className={typeof detail === "string" ? "max-w-full truncate" : line}>{detail}</span>}
         {(peek.can || peek.last) && <button type="button" onClick={peek.toggle} className={link}>{peek.last ? "Back to the table" : "Last trick"}</button>}
         {stalled && <button type="button" onClick={nudge} className={link}>Nudge the computers</button>}
@@ -1315,7 +1352,7 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
   const emptyTap = peek.can && !trick?.plays.length;
   return (
     <div className="board-centre mx-auto w-full max-w-[420px]">
-    <div className={`relative mx-auto w-full ${compact ? "max-w-[240px]" : "max-w-[300px]"} ${emptyTap ? "cursor-pointer" : ""}`} style={{ height: compact ? 2 * trickW * 1.4 + 14 : 246 }}
+    <div data-felt="" className={`relative mx-auto w-full ${compact ? "max-w-[240px]" : "max-w-[300px]"} ${emptyTap ? "cursor-pointer" : ""}`} style={{ height: compact ? 2 * trickW * 1.4 + 14 : 246 }}
       onClick={emptyTap ? peek.toggle : undefined}>
       <div className="absolute inset-x-[2%] inset-y-[8%] rounded-[46%] border-[5px] border-cloth-edge"
         style={{ background: "radial-gradient(ellipse at 50% 40%, #6b2530, var(--cloth-deep))", boxShadow: "inset 0 10px 30px rgba(0,0,0,.35)" }} />

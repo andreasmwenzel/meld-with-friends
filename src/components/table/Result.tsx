@@ -115,17 +115,20 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
   const toggle = passing && (
     <div className="flex gap-1 text-xs" role="group" aria-label="Which cards to show">
       {([["atPlay", "After passing"], ["dealt", "As dealt"]] as const).map(([w, label]) => (
-        <button key={w} type="button" aria-pressed={which === w} onClick={() => setWhich(w)}
-          className={`rounded-full px-2.5 py-1 ${which === w ? "bg-ink text-chalk" : "bg-chalk/90 text-ink"}`}>{label}</button>
+        <button key={w} type="button" data-overlay="peek" data-reveal={w} aria-pressed={which === w} onClick={() => setWhich(w)}
+          className={`hit rounded-full px-2.5 py-1 ${which === w ? "bg-ink text-chalk" : "bg-chalk/90 text-ink"}`}>{label}</button>
       ))}
     </div>
   );
 
   if (peek) {
     return (
-      <div className="fixed inset-x-0 bottom-0 z-30 flex flex-wrap items-center justify-center gap-2 px-3 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-2 sm:bottom-4">
+      // Along the bottom, under your hand; on a phone held sideways, in the action column above table talk's button.
+      // Under table talk (z-[25] in Game.tsx), so its popover opens over these buttons.
+      <div className="fixed inset-x-0 bottom-0 z-20 flex flex-wrap items-center justify-center gap-x-2 gap-y-4 px-3 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-2 sm:bottom-4
+        short:left-auto short:right-[max(.75rem,env(safe-area-inset-right))] short:w-[clamp(15.5rem,33vw,18rem)] short:justify-end short:px-0 short:pb-0 short:bottom-[calc(max(.375rem,env(safe-area-inset-bottom))+3.5rem)]!">
         {toggle}
-        <button ref={back} type="button" className="btn btn-brass btn-compact" style={{ height: "2.25rem" }} onClick={() => setPeek(false)}>
+        <button ref={back} type="button" data-overlay="peek" data-action="back-to-result" className="hit btn btn-brass btn-compact" style={{ height: "2.25rem" }} onClick={() => setPeek(false)}>
           Back to the result
         </button>
       </div>
@@ -196,7 +199,7 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
           </p>
         )}
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-chalk-dim pt-3">
-          <button ref={look} type="button" className="text-sm font-semibold underline underline-offset-2" onClick={() => setPeek(true)}>
+          <button ref={look} type="button" data-action="look-at-table" className="text-sm font-semibold underline underline-offset-2" onClick={() => setPeek(true)}>
             Look at the table
           </button>
           {toggle}

@@ -104,10 +104,21 @@ const POP_SHADOW = "0 0 0 1px rgba(36,29,29,.14), 0 14px 40px rgba(0,0,0,.45)";
 
 interface Place { top: number; right: number; width: number; height: number; tail: number | null; below: boolean }
 
+/** The top of your own hand's cards under the stretch of screen from `left` to `right`, if any lie there. */
+function handTopUnder(left: number, right: number): number {
+  let top = Infinity;
+  for (const card of document.querySelectorAll('[data-hand="mine"] svg')) {
+    const r = card.getBoundingClientRect();
+    if (r.width > 0 && r.right > left && r.left < right) top = Math.min(top, r.top);
+  }
+  return top;
+}
+
 /**
  * Where the popover goes: above the button, right edges lined up, inside what the visual viewport shows.
  * With a phone keyboard up the visual viewport is short, so the popover shrinks and rises with it and the
- * message field stays in view. A button near the top (on the pause banner) opens it downwards instead.
+ * message field stays in view. A button near the top (the corner of an upright phone's cloth, the pause banner)
+ * opens it downwards instead. Either way it stops short of your own hand while that leaves it a usable height.
  */
 function placeNear(button: HTMLElement): Place {
   const r = button.getBoundingClientRect();
@@ -118,14 +129,19 @@ function placeNear(button: HTMLElement): Place {
   const width = Math.min(MAX_W, pageW - 2 * 12);
   const right = Math.min(Math.max(12, pageW - r.right), pageW - width - 12);
   const tailAt = pageW - right - (r.left + r.width / 2);
+  const hand = handTopUnder(pageW - right - width, pageW - right) - GAP;
   const roomBelow = vBottom - EDGE - (r.bottom + GAP);
   if (r.top - GAP - (vTop + EDGE) < MIN_H && roomBelow >= MIN_H) {
-    return { top: r.bottom + GAP, right, width, height: Math.min(MAX_H, roomBelow), tail: tailAt, below: true };
+    const top = r.bottom + GAP;
+    const clear = hand - top;
+    return { top, right, width, height: Math.min(MAX_H, roomBelow, clear >= MIN_H ? clear : Infinity), tail: tailAt, below: true };
   }
   const under = r.top - GAP;
   let bottom = Math.min(under, vBottom - EDGE);
   // Too little room above the button (a short screen, or the keyboard covering it): use all that is visible.
   if (bottom - (vTop + EDGE) < MIN_H) bottom = vBottom - EDGE;
+  // A button beside or below the hand (a wide screen's corner): lift the popover clear of the cards if it still fits.
+  if (bottom > hand && hand - (vTop + EDGE) >= MIN_H) bottom = hand;
   const height = Math.min(MAX_H, bottom - (vTop + EDGE));
   // The tail points at the button only while the popover sits right on top of it.
   const tail = Math.abs(bottom - under) < 1 ? tailAt : null;
@@ -204,20 +220,20 @@ export function ChatDock({ chat, open, setOpen, text, setText }: {
 
   return (
     <div className="relative" onKeyDown={onKeyDown}>
-      <button ref={button} type="button" data-keep-armed="" onClick={() => (open ? close(true) : setOpen(true))}
+      <button ref={button} type="button" data-keep-armed="" data-overlay="chat" onClick={() => (open ? close(true) : setOpen(true))}
         aria-label={unreadLabel(unread)} aria-expanded={open} aria-controls={popId} aria-haspopup="dialog"
         className={`relative grid size-11 place-items-center rounded-full shadow-[0_2px_10px_rgba(0,0,0,.28)] transition-colors ${open
           ? "bg-chalk text-ink"
           : "bg-cloth-deep/85 text-chalk ring-1 ring-chalk-ghost hover:bg-cloth-deep hover:ring-chalk-faint"}`}>
         <TalkIcon />
         {unread > 0 && !open && (
-          <span aria-hidden className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-brass px-1 text-[11px] font-bold leading-none text-ink tabular-nums ring-2 ring-cloth-deep">
+          <span aria-hidden data-overlay="chat-badge" className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-brass px-1 text-[11px] font-bold leading-none text-ink tabular-nums ring-2 ring-cloth-deep">
             {unread > 9 ? "9+" : unread}
           </span>
         )}
       </button>
-      <div ref={pop} id={popId} role="dialog" aria-labelledby={titleId} hidden={!open || !place}
-        className="chat-pop panel fixed z-40 flex flex-col overflow-visible"
+      <div ref={pop} id={popId} role="dialog" data-overlay="chat-popover" aria-labelledby={titleId} hidden={!open || !place}
+        className={`chat-pop panel fixed z-40 flex flex-col overflow-visible ${place?.below ? "chat-pop-below" : ""}`}
         style={place ? { top: place.top, right: place.right, width: place.width, height: place.height, boxShadow: POP_SHADOW } : undefined}>
         <div className="flex shrink-0 items-center justify-between border-b border-chalk-dim py-1 pl-4 pr-2">
           <h2 id={titleId} className="display" style={{ fontSize: 21 }}>Table talk</h2>

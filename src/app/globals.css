@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+/* A control drawn small that still takes a tap over at least 44x44: the hit area grows round its middle, the layout
+   does not. Raised a step, so the grown area is not lost under whatever follows (a fan of backs, the hand's row);
+   neighbouring controls keep apart by spacing. Inside a board scaled down to fit (--board-scale, Game.tsx) the area
+   grows by as much again, so it is still 44px on the screen. scripts/overlap.mjs checks every control on the table. */
+@utility hit {
+  position: relative; z-index: 15;
+  &::after {
+    content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: max(100%, calc(44px / var(--board-scale, 1))); height: max(100%, calc(44px / var(--board-scale, 1)));
+  }
+}
+
 /* A phone held sideways. Keep in step with SHORT_QUERY in src/lib/cardPrefs.ts. */
 @custom-variant short (@media (orientation: landscape) and (max-height: 500px));
 
@@ -217,16 +229,21 @@ body {
     padding-bottom: .25rem;
   }
   .board-action::-webkit-scrollbar { display: none; }
-  .board-armed { grid-area: hand; align-self: start; z-index: 30; }
   /* Table talk keeps to the bottom-right corner: the foot of the action column. */
   .board-talk { grid-area: action; align-self: end; justify-self: end; margin-bottom: var(--board-bottom); }
   .board:has(.board-talk) .board-action { padding-bottom: 3.5rem; }
   .board-hand { grid-area: hand; margin-top: 0; }
 }
 
+/* The board glides to the middle of its room when the action bar below it changes height. */
+.board-lift { transition: transform 220ms cubic-bezier(.2,.8,.25,1); }
+[data-motion="off"] .board-lift { transition: none; }
+
 /* Table talk's popover grows out of its button in the corner. */
 @keyframes chat-pop { from { opacity: 0; transform: translateY(6px) scale(.97); } to { opacity: 1; transform: none; } }
 .chat-pop:not([hidden]) { animation: chat-pop 140ms cubic-bezier(.2,.8,.25,1) both; transform-origin: 100% 100%; }
+@keyframes chat-pop-down { from { opacity: 0; transform: translateY(-6px) scale(.97); } to { opacity: 1; transform: none; } }
+.chat-pop-below:not([hidden]) { animation-name: chat-pop-down; transform-origin: 100% 0; }
 
 /* A shoot sets the partner's hand aside: the fan gathers into a squared stack, which then settles small and quiet.
    The end state is the element's own style, so a reload, motion off or reduced motion show it with no animation. */
