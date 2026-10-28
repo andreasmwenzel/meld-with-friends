@@ -101,9 +101,8 @@ describe("accessible names and states at the table", () => {
     }
     expect(cards().filter((c) => c.tabIndex === 0)).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Menu" }).getAttribute("aria-expanded")).toBe("false");
-    const meld = screen.getByRole("group", { name: "Meld this hand" });
-    expect(within(meld).getByRole("button", { name: /^You, \d+ meld$/ }).getAttribute("aria-expanded")).toBe("false");
-    expect(within(meld).getByRole("button", { name: "Hide the meld row" })).toBeTruthy();
+    // Meld lives in the seat chips' breakdowns, not in a row of its own under the cloth.
+    expect(screen.queryByRole("group", { name: "Meld this hand" })).toBeNull();
     // Your chip below the cloth says the turn is yours, as the brass ring round it shows.
     expect([...document.querySelectorAll("span")].some((el) => el.textContent === "You, your turn")).toBe(true);
   });
@@ -148,7 +147,7 @@ describe("accessible names and states at the table", () => {
 describe("keyboard play", () => {
   it("Tab reaches the hand, arrows move along it, Enter lifts a card and Enter again plays it", async () => {
     await table("play-lead");
-    act(() => { screen.getByRole("button", { name: "Hide the meld row" }).focus(); });
+    act(() => { screen.getByRole("button", { name: "Menu" }).focus(); });
     // The hand is a single stop after the controls above it.
     let focused = tab();
     while (!focused.hasAttribute("data-hand-card")) focused = tab();
