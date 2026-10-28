@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { Bid, CardId, HandRecord, MeldItem, Phase, Rank, SeatIndex, Suit, Team } from "@/engine/types";
 import { RANK_LABEL, SUIT_GLYPH, cardName, splitCard, suitInk } from "@/components/cards/PlayingCard";
 import { useCardPrefs } from "@/lib/cardPrefs";
@@ -138,6 +138,16 @@ export function ScoreTag({ score, name, align, placement = "below" }: { score: S
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const popId = useId();
+  const pop = useRef<HTMLDivElement>(null);
+  // Wide meld rows can push the breakdown past a phone's edge: nudge it back inside, 8px clear.
+  const [nudge, setNudge] = useState(0);
+  useLayoutEffect(() => {
+    if (!open || !pop.current) return;
+    const r = pop.current.getBoundingClientRect();
+    const left = r.left - nudge, right = r.right - nudge;
+    const shift = right > window.innerWidth - 8 ? window.innerWidth - 8 - right : left < 8 ? 8 - left : 0;
+    if (shift !== nudge) setNudge(shift);
+  }, [open, nudge]);
   useEffect(() => {
     if (!open) return;
     const away = (e: PointerEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(false); };
@@ -170,7 +180,7 @@ export function ScoreTag({ score, name, align, placement = "below" }: { score: S
         {body}
       </button>
       {open && (
-        <div id={popId} role="group" aria-label={name === "You" ? "Your side this hand" : `${name}'s side this hand`} className={`panel absolute z-30 w-max min-w-[150px] max-w-[min(280px,calc(100vw-16px))] ${placement === "above" ? "bottom-full mb-1" : "top-full mt-1"} px-3 py-2 text-xs ${side}`}>
+        <div ref={pop} id={popId} role="group" style={nudge ? { transform: `translateX(${nudge}px)` } : undefined} aria-label={name === "You" ? "Your side this hand" : `${name}'s side this hand`} className={`panel absolute z-30 w-max min-w-[150px] max-w-[min(280px,calc(100vw-16px))] ${placement === "above" ? "bottom-full mb-1" : "top-full mt-1"} px-3 py-2 text-xs ${side}`}>
           <Rows rows={score.top} />
           {score.meld.length > 0 && (
             <div className={score.top.length ? "mt-1 border-t border-ink/10 pt-1" : ""}>
