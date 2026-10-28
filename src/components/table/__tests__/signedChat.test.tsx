@@ -166,6 +166,21 @@ it("does not let a failed send's late broadcast hide a later identical send", as
   await act(async () => { second.resolve(mine("b", "👍")); await b; });
   expect(chat.messages.map(m => m.id)).toEqual(["a", "b"]);
 });
+it("does not let a failure that released another send's early copy hide a later send", async () => {
+  render(<Harness />);
+  const first = deferred(), second = deferred(), third = deferred();
+  mocks.api.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise).mockReturnValueOnce(third.promise);
+  let a!: Promise<void>, b!: Promise<void>, c!: Promise<void>;
+  act(() => { a = chat.send("👍") as Promise<void>; b = chat.send("👍") as Promise<void>; });
+  await emit(mine("b", "👍"));
+  await act(async () => { first.reject(new Error("Network")); await expect(a).rejects.toThrow("Network"); });
+  await act(async () => { second.resolve(mine("b", "👍")); await b; });
+  act(() => { c = chat.send("👍") as Promise<void>; });
+  await emit(mine("a", "👍"));
+  expect(sending()).toBe(1);
+  await act(async () => { third.resolve(mine("c", "👍")); await c; });
+  expect(chat.messages.map(m => m.id)).toEqual(["b", "a", "c"]);
+});
 it("leaves the talk as it was when a send fails, even at the message cap", async () => {
   render(<Harness />);
   for (let i = 0; i < 100; i++) await emit(signed("BCDFGH", keys.privateKey, { ...line, id: `m${i}` }));

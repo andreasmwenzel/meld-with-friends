@@ -90,15 +90,16 @@ export function useTableChat(code: string, me: Profile, enabled: boolean, public
         setEarly((prev) => prev.filter((x) => x.id !== m.id));
       }
     } catch (e) {
-      // The failed send may have been broadcast before its response was lost: release one early copy
-      // of its text, so another send of the same text keeps its sending mark (at worst it shows twice briefly).
-      // If none has come yet, the next one to come is let through instead.
+      // The failed send may have been broadcast already, or may still be: release one early copy of its text
+      // and let one later broadcast of it through too. Which copy was its own can't be told, so this errs
+      // towards showing a sending row beside its confirmed copy for a moment, never towards hiding one.
       const i = earlyRef.current.findIndex((x) => x.text === t);
       if (i >= 0) {
         const gone = earlyRef.current[i];
         earlyRef.current = earlyRef.current.filter((x) => x !== gone);
         setEarly((prev) => prev.filter((x) => x !== gone));
-      } else owed.current = [...owed.current, { text: t, until: Date.now() + CHAT_FRESH_MS }];
+      }
+      owed.current = [...owed.current, { text: t, until: Date.now() + CHAT_FRESH_MS }];
       throw e;
     } finally {
       pendingRef.current = pendingRef.current.filter((x) => x.id !== id);
