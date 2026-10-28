@@ -133,7 +133,18 @@ describe("table talk at the board", () => {
     expect(screen.getByRole("button", { name: "Menu" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Menu" }));
     const tabs = within(screen.getByRole("tablist", { name: "Menu" })).getAllByRole("tab").map((t) => t.textContent);
-    expect(tabs).toEqual(["Score", "This hand", "Options"]);
+    expect(tabs).toEqual(["Score", "This hand", "Rules", "Options"]);
+  });
+
+  it("shows the table's house rules in the menu's Rules tab", async () => {
+    // This preset turns passing off and shooting on, so default rules would read differently.
+    await table("bid-shoot");
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Rules" }));
+    const panel = screen.getByRole("tabpanel", { name: "Rules" });
+    expect(panel.textContent).toContain("No passing.");
+    expect(panel.textContent).toContain("Shoot after passing");
+    expect(panel.tabIndex).toBe(0);
   });
 
   it("closes when the menu opens, so messages hidden behind the menu count as unread", async () => {
