@@ -98,7 +98,7 @@ describe("staleBuild", () => {
 /** Renders seat 0 with the server stamping each view with `build()`; returns a way to make the table fetch again. */
 async function table(build: () => string | undefined, intercept?: (
   url: string, init: RequestInit | undefined, view: PlayerView,
-) => Promise<Response> | undefined, options: { feed?: GameFeed; moveKey?: string; inspect?: (view: PlayerView) => void; preset?: string } = {}) {
+) => Promise<Response> | undefined, options: { feed?: GameFeed; moveKey?: string; inspect?: (view: PlayerView) => void; preset?: string; local?: boolean } = {}) {
   const { preset = "play-lead", ...gameOptions } = options;
   const { state } = buildScenario(PRESETS.find((p) => p.id === preset)!.spec);
   const snap = {
@@ -225,6 +225,14 @@ describe("a table left open across a deploy", () => {
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Menu" })); });
     await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Options" })); });
     expect(screen.getByRole("button", { name: "Leave the game" })).toBeTruthy();
+  });
+
+  it("offers no Leave or Pause in a practice hand, which has no server to ask", async () => {
+    await table(() => BUILD_ID, undefined, { preset: "bid-open", local: true });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Menu" })); });
+    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Options" })); });
+    expect(screen.queryByRole("button", { name: "Leave the game" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Pause the table" })).toBeNull();
   });
 
   it("ignores new card actions while waiting to reload with no mutation running", async () => {
