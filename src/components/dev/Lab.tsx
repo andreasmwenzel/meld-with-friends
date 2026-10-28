@@ -5,7 +5,7 @@ import { viewFor, type Action, type GameState, type SeatIndex } from "@/engine";
 import { buildScenario, checkState, SEATS, type ScenarioSpec } from "@/engine/scenario";
 import { PRESETS } from "@/engine/scenarios";
 import { Game } from "@/components/table/Game";
-import type { ChatMessage, TableChat } from "@/components/table/ChatDock";
+import type { ShownMessage, TableChat } from "@/components/table/ChatDock";
 import type { Snapshot } from "@/components/table/types";
 import { decodeSpec, encodeSpec, labStore, parseImport, type LabSnapshot } from "./labStore";
 import { LabPanel } from "./LabPanel";
@@ -83,10 +83,10 @@ const SAMPLE_TALK: [SeatIndex, string][] = [
 /**
  * ?chat=1: a local stand-in for table talk, so the board's talk button and popover can be checked without a
  * Realtime channel. Sample messages from the other seats arrive unread (`?unread=N`, default 3); what you send
- * stays in the browser. `meld.say("text", seat)` posts a message from another seat.
+ * stays in the browser (`?chatlag=ms` holds it as sending first). `meld.say("text", seat)` posts a message from another seat.
  */
 function useLabChat(enabled: boolean, view: SeatIndex): TableChat | undefined {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ShownMessage[]>([]);
   const [unread, setUnread] = useState(0);
   const visible = useRef(false);
   useEffect(() => {
@@ -102,7 +102,18 @@ function useLabChat(enabled: boolean, view: SeatIndex): TableChat | undefined {
     setMessages((prev) => [...prev.slice(-99), { id: crypto.randomUUID(), from: `lab${from}`, name: NAMES[from], text: text.trim().slice(0, 300), at: Date.now() }]);
     if (from !== view && !visible.current) setUnread((u) => u + 1);
   }, [view]);
-  const send = useCallback((text: string) => { if (text.trim()) add(view, text); }, [add, view]);
+  // ?chatlag=ms: what you send shows as sending for that long, as it does while a live table's server answers.
+  const send = useCallback(async (text: string) => {
+    if (!text.trim()) return;
+    const lag = Number(new URLSearchParams(window.location.search).get("chatlag") ?? 0);
+    if (lag > 0) {
+      const id = `pending-${crypto.randomUUID()}`;
+      setMessages((prev) => [...prev.slice(-99), { id, from: `lab${view}`, name: NAMES[view], text: text.trim(), at: Date.now(), pending: true }]);
+      await new Promise((r) => setTimeout(r, lag));
+      setMessages((prev) => prev.filter((m) => m.id !== id));
+    }
+    add(view, text);
+  }, [add, view]);
   useEffect(() => {
     if (!enabled) return;
     const meld = (window as unknown as { meld?: Record<string, unknown> }).meld;

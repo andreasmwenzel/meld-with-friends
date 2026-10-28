@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { api, type Profile } from "@/lib/api";
-import { canVerifyChat, openChat, type SignedChat } from "@/lib/chatAuth";
-import { ChatBody, type ChatMessage, type TableChat } from "./ChatDock";
+import { CHAT_FRESH_MS, canVerifyChat, openChat, type ChatMessage, type SignedChat } from "@/lib/chatAuth";
+import { ChatBody, type ShownMessage, type TableChat } from "./ChatDock";
 
 export type { TableChat } from "./ChatDock";
 
@@ -17,7 +17,7 @@ export function useTableChat(code: string, me: Profile, enabled: boolean, public
   // How far this device's clock is from the server's, from the snapshot: freshness is judged on the server's clock.
   const offset = useRef(0);
   useEffect(() => { if (serverNow) offset.current = serverNow - Date.now(); }, [serverNow]);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ShownMessage[]>([]);
   const [unread, setUnread] = useState(0);
   const visibleRef = useRef(false);
   const setVisible = useCallback((visible: boolean) => {
@@ -25,19 +25,42 @@ export function useTableChat(code: string, me: Profile, enabled: boolean, public
     if (visible) setUnread(0);
   }, []);
   const [unsupported, setUnsupported] = useState(false);
-  const receiver = useRef<((payload: Partial<SignedChat>) => Promise<void>) | null>(null);
+  const receiver = useRef<((payload: Partial<SignedChat>) => Promise<ChatMessage | null>) | null>(null);
+  // Your messages still on their way, kept apart from the talk so a failed send leaves the talk as it was.
+  const [pending, setPending] = useState<ShownMessage[]>([]);
+  const pendingRef = useRef(pending);
+  useEffect(() => { pendingRef.current = pending; }, [pending]);
+  // Your messages whose broadcast came before their response: each hides one pending copy of its text
+  // until the response says which send it was. `answered` holds the ids whose response is in.
+  const [early, setEarly] = useState<ChatMessage[]>([]);
+  const earlyRef = useRef(early);
+  const answered = useRef(new Set<string>());
+  // Failed sends whose broadcast may still come: each lets one later own broadcast of its text pass unmatched.
+  // A broadcast older than CHAT_FRESH_MS is refused anyway, so each lasts that long.
+  const owed = useRef<{ text: string; until: number }[]>([]);
 
   useEffect(() => {
     if (!enabled || !publicKey) return;
     let active = true;
     const seen = new Set<string>();
     const receive = async (payload: Partial<SignedChat>) => {
-      if (!payload || typeof payload !== "object") return;
+      if (!payload || typeof payload !== "object") return null;
       const m = await openChat(publicKey, code, payload.message, payload.sig, Date.now() + offset.current);
-      if (!active || !m || seen.has(m.id)) return;
+      if (!active || !m) return null;
+      if (seen.has(m.id)) return m;
       seen.add(m.id);
       setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev.slice(-99), m]));
+      if (m.from === me.id && !answered.current.has(m.id) && pendingRef.current.some((p) => p.text === m.text)) {
+        owed.current = owed.current.filter((o) => o.until > Date.now());
+        const o = owed.current.findIndex((x) => x.text === m.text);
+        if (o >= 0) owed.current = owed.current.filter((_, j) => j !== o);
+        else {
+          earlyRef.current = [...earlyRef.current, m];
+          setEarly((prev) => [...prev, m]);
+        }
+      }
       if (m.from !== me.id && !visibleRef.current) setUnread((n) => n + 1);
+      return m;
     };
     receiver.current = receive;
     void canVerifyChat(publicKey).then(ok => { if (active) setUnsupported(!ok); });
@@ -49,15 +72,59 @@ export function useTableChat(code: string, me: Profile, enabled: boolean, public
     return () => { active = false; receiver.current = null; void db.removeChannel(channel); };
   }, [code, me.id, enabled, publicKey]);
 
+  // Shows the message at once, marked as sending, so Enter and a reaction answer straight away.
   const send = useCallback(async (text: string) => {
     const t = text.trim();
     const receive = receiver.current;
     if (!t || !enabled || !receive) return;
-    const signed = await api<SignedChat>(`/api/tables/${code}/chat`, { body: { text: t } });
-    await receive(signed);
-  }, [code, enabled]);
+    const id = `pending-${crypto.randomUUID()}`;
+    const entry = { id, from: me.id, name: me.display_name, text: t, at: Date.now(), pending: true };
+    pendingRef.current = [...pendingRef.current, entry];
+    setPending((prev) => [...prev, entry]);
+    try {
+      const signed = await api<SignedChat>(`/api/tables/${code}/chat`, { body: { text: t } });
+      const m = await receive(signed);
+      if (m) {
+        answered.current.add(m.id);
+        earlyRef.current = earlyRef.current.filter((x) => x.id !== m.id);
+        setEarly((prev) => prev.filter((x) => x.id !== m.id));
+      }
+    } catch (e) {
+      // The failed send may have been broadcast already, or may still be: release one early copy of its text
+      // and let one later broadcast of it through too. Which copy was its own can't be told, so this errs
+      // towards showing a sending row beside its confirmed copy for a moment, never towards hiding one.
+      const i = earlyRef.current.findIndex((x) => x.text === t);
+      if (i >= 0) {
+        const gone = earlyRef.current[i];
+        earlyRef.current = earlyRef.current.filter((x) => x !== gone);
+        setEarly((prev) => prev.filter((x) => x !== gone));
+      }
+      owed.current = [...owed.current, { text: t, until: Date.now() + CHAT_FRESH_MS }];
+      throw e;
+    } finally {
+      pendingRef.current = pendingRef.current.filter((x) => x.id !== id);
+      setPending((prev) => prev.filter((x) => x.id !== id));
+      // A broadcast whose response was lost must not hide a later send of the same text.
+      if (!pendingRef.current.some((x) => x.text === t)) {
+        earlyRef.current = earlyRef.current.filter((x) => x.text !== t);
+        setEarly((prev) => prev.filter((x) => x.text !== t));
+      }
+    }
+  }, [code, enabled, me.id, me.display_name]);
 
-  return { messages, unread, setVisible, send, me: me.id, unsupported };
+  const shown = useMemo(() => {
+    if (pending.length === 0) return messages;
+    const hide = new Map<string, number>();
+    for (const m of early) hide.set(m.text, (hide.get(m.text) ?? 0) + 1);
+    const waiting = pending.filter((p) => {
+      const n = hide.get(p.text) ?? 0;
+      if (n > 0) hide.set(p.text, n - 1);
+      return n === 0;
+    });
+    return [...messages, ...waiting];
+  }, [messages, pending, early]);
+
+  return { messages: shown, unread, setVisible, send, me: me.id, unsupported };
 }
 
 /**
