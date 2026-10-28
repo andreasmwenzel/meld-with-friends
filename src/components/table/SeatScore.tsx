@@ -135,7 +135,7 @@ export function DealerMark() {
 export function ScoreTag({ score, name, align, placement = "below" }: { score: SeatScore; name: string; align: "left" | "center" | "right"; placement?: "above" | "below" }) {
   const four = useCardPrefs().prefs.fourColour;
   // Wide meld rows can push the breakdown past a phone's edge: the popover nudges it back inside.
-  const { open, setOpen, root, trigger, pop, id: popId, above, style: nudged } = usePopover(placement);
+  const { open, setOpen, root, trigger, pop, id: popId, above, style: nudged } = usePopover(placement, JSON.stringify(score));
   if (score.main === null && score.small === null) return null;
   const detail = score.top.length + score.meld.length + score.rows.length > 0;
   const body = score.main !== null ? (

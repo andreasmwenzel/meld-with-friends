@@ -39,11 +39,13 @@ export function PlayerMenu({ person, team, actions, align, placement = "below", 
   placement?: "above" | "below";
   className: string; style?: CSSProperties; plate: string; children: ReactNode;
 }) {
-  const { open, setOpen, close: dismiss, root, trigger, pop, id, above, style: fit } = usePopover(placement);
-  // Opening moves focus into the menu, so Tab reaches its actions next; Escape hands it back to the chip.
-  useEffect(() => { if (open) pop.current?.focus(); }, [open, pop]);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // Rows come and go while the menu is open (friend status arrives, an error shows): each change measures it again.
+  const { open, setOpen, close: dismiss, root, trigger, pop, id, above, style: fit } = usePopover(placement,
+    [actions.friend?.status, note, !!actions.makeHost, !!actions.standIn, !!actions.profileHref].join("|"));
+  // Opening moves focus into the menu, so Tab reaches its actions next; Escape hands it back to the chip.
+  useEffect(() => { if (open) pop.current?.focus(); }, [open, pop]);
   const handle = (person.bot ? botTag(person.name) : null) ?? person.handle;
   const run = async (fn: () => Promise<void>) => {
     setBusy(true); setNote(null);

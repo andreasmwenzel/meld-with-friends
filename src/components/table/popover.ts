@@ -21,8 +21,10 @@ function visibleBox(el: HTMLElement) {
  * A small panel that opens from a chip round the table. Escape, a tap elsewhere, or a resize closes it; Escape hands
  * focus back to `trigger`. The panel opens on the `prefer` side unless the other has more room, stays 8px inside
  * whatever clips it, and scrolls when even the roomier side is too short. Put `root` on the element holding both.
+ * `content` is any string that changes with what the panel shows, so a row arriving while it is open (friend status,
+ * an error) measures it again.
  */
-export function usePopover<R extends HTMLElement = HTMLDivElement>(prefer: "above" | "below" = "below") {
+export function usePopover<R extends HTMLElement = HTMLDivElement>(prefer: "above" | "below" = "below", content = "") {
   const [open, setOpen] = useState(false);
   const root = useRef<R>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -44,7 +46,7 @@ export function usePopover<R extends HTMLElement = HTMLDivElement>(prefer: "abov
     const room = Math.max(80, Math.floor(up ? above : below));
     const next = { nudge, above: up, maxHeight: h > room ? room : undefined };
     if (next.nudge !== fit.nudge || next.above !== fit.above || next.maxHeight !== fit.maxHeight) setFit(next);
-  }, [open, fit, prefer]);
+  }, [open, fit, prefer, content]);
   useEffect(() => {
     if (!open) return;
     const away = (e: PointerEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(false); };
