@@ -65,7 +65,7 @@ export function TableRoom({ code, me, guest = false }: { code: string; me: Profi
   if (atBoard) {
     return (
       <main className="flex h-dvh flex-col overflow-hidden">
-        <Game key={snap.table.current_game_id ?? ""} connection={connection} code={code} me={me} snap={snap} feed={feed} onTableChange={refresh}
+        <Game key={snap.table.current_game_id ?? ""} connection={connection} code={code} me={me} snap={snap} guest={guest} feed={feed} onTableChange={refresh}
           chat={snap.mySeat !== null ? chat : undefined} />
       </main>
     );

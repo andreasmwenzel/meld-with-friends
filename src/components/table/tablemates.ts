@@ -1,25 +1,42 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, type FriendsPayload } from "@/lib/api";
 
 export type TablemateStatus = "friend" | "pending_out" | "pending_in" | "none" | "guest";
 
 /**
- * Where you stand with each person seated here, fetched once per table. `null` while loading, and for good when
- * the viewer may not use friends (a guest gets a 403) or the board has no server (`off`, the lab and practice).
+ * Where you stand with each person seated here. Fetched when the table or the people seated at it change (`seated`
+ * is any string that changes with them), and again on `refresh` (opening a player's menu), since a friend request
+ * can arrive mid-game. `null` while loading, and for good when the board has no server or the viewer is a guest
+ * (`off`): guests cannot add friends.
  */
-export function useTablemates(code: string, off = false) {
+export function useTablemates(code: string, off = false, seated = "") {
   const [mates, setMates] = useState<Record<string, TablemateStatus> | null>(null);
+  // Only the latest request may write: a slow answer must not overwrite a newer one, or a request just sent.
+  const latest = useRef(0);
+  const load = useCallback(async () => {
+    const ticket = ++latest.current;
+    try {
+      const list = await api<{ userId: string; status: TablemateStatus }[]>(`/api/tables/${code}/tablemates`);
+      if (ticket === latest.current) setMates(Object.fromEntries(list.map((m) => [m.userId, m.status])));
+    } catch (e) {
+      if (!(e instanceof ApiError && e.status === 403)) console.warn("tablemates", e);
+    }
+  }, [code]);
   useEffect(() => {
     if (off) return;
-    let active = true;
-    api<{ userId: string; status: TablemateStatus }[]>(`/api/tables/${code}/tablemates`)
-      .then((list) => { if (active) setMates(Object.fromEntries(list.map((m) => [m.userId, m.status]))); })
-      .catch((e) => { if (!(e instanceof ApiError && e.status === 403)) console.warn("tablemates", e); });
-    return () => { active = false; };
-  }, [code, off]);
-  const set = (userId: string, status: TablemateStatus) => setMates((m) => (m ? { ...m, [userId]: status } : m));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch, state is set after await
+    void load();
+    // A counter, not a node: bumping it on cleanup drops the answer to a request this effect started.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { latest.current++; };
+  }, [load, off, seated]);
+  const refresh = useCallback(() => { if (!off) void load(); }, [load, off]);
+  const set = (userId: string, status: TablemateStatus) => {
+    latest.current++;
+    setMates((m) => (m ? { ...m, [userId]: status } : m));
+  };
   const addFriend = useCallback(async (userId: string) => {
     await api("/api/friends", { body: { userId } });
     set(userId, "pending_out");
@@ -32,5 +49,5 @@ export function useTablemates(code: string, off = false) {
     await api(`/api/friends/${request.id}`, { body: { accept: true } });
     set(userId, "friend");
   }, []);
-  return { mates, addFriend, acceptFriend };
+  return { mates: off ? null : mates, refresh, addFriend, acceptFriend };
 }

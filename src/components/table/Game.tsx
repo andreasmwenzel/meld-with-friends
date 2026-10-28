@@ -55,8 +55,10 @@ function countersIn(trick: NonNullable<PlayerView["currentTrick"]>, rules: Playe
   }, 0);
 }
 
-export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connection = "ok", local = false, suggested, chat }: {
+export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connection = "ok", local = false, guest = false, suggested, chat }: {
   code: string; me: Profile; snap: Snapshot; onTableChange: () => void; connection?: "ok" | "reconnecting"; local?: boolean;
+  /** a guest viewer: no friend actions, since guests cannot add friends */
+  guest?: boolean;
   /** boards without a channel (lab, practice) reload whenever this changes */
   rev?: number;
   /** the table room's channel events; the board fetches once per game event */
@@ -235,8 +237,9 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     return s?.profile?.display_name ?? s?.bot ?? SEAT_LABEL[seat];
   }, [snap.seats, me.id]);
   const isBot = useCallback((seat: SeatIndex | null) => seat !== null && !!snap.seats.find((x) => x.seat === seat)?.bot, [snap.seats]);
-  // Friend status for each player's menu; boards without a server (lab, practice) have none.
-  const { mates, addFriend, acceptFriend } = useTablemates(code, local);
+  // Friend status for each player's menu; boards without a server (lab, practice) and guests have none.
+  const seatedIds = snap.seats.map((x) => x.user_id ?? "").join(",");
+  const { mates, refresh: refreshMates, addFriend, acceptFriend } = useTablemates(code, local || guest, seatedIds);
 
   // Computer players move one card at a time, paced by the table so everyone can follow the trick.
   const botTurn = !!view && (view.phase === "melding" ? snap.seats.some((x) => x.bot && !view.meldConfirmed[x.seat]) : isBot(view.turn)) && view.phase !== "hand_over" && view.phase !== "game_over";
@@ -754,7 +757,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     const standIn = standInFor(seat), makeHost = makeHostFor(seat);
     const actions: SeatActions = {
       friend: uid && status ? { status, add: () => addFriend(uid), accept: () => acceptFriend(uid) } : undefined,
-      makeHost, standIn,
+      makeHost, standIn, refresh: uid ? refreshMates : undefined,
     };
     return { seat, view, name: person.name, person, actions, score: scoreOf(seat), faceUp: revealedFor(seat), laid: laidOf(seat).length, standIn, compact: short, fold };
   };

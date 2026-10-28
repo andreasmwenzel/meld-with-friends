@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import type { Team } from "@/engine/types";
 import { Avatar } from "@/components/site/Avatar";
 import { botTag } from "@/lib/bots/profiles";
@@ -23,6 +23,8 @@ export interface SeatActions {
   friend?: { status: TablemateStatus; add: () => Promise<void>; accept: () => Promise<void> };
   makeHost?: () => void;
   standIn?: { run: () => void };
+  /** fetch fresh friend status as the menu opens */
+  refresh?: () => void;
   /** your own chip: where you change your name and handle, opened in a new tab so the game stays put */
   profileHref?: string;
 }
@@ -37,7 +39,9 @@ export function PlayerMenu({ person, team, actions, align, placement = "below", 
   placement?: "above" | "below";
   className: string; style?: CSSProperties; plate: string; children: ReactNode;
 }) {
-  const { open, setOpen, root, pop, id, style: nudged } = usePopover();
+  const { open, setOpen, close: dismiss, root, trigger, pop, id, above, style: fit } = usePopover(placement);
+  // Opening moves focus into the menu, so Tab reaches its actions next; Escape hands it back to the chip.
+  useEffect(() => { if (open) pop.current?.focus(); }, [open, pop]);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const handle = (person.bot ? botTag(person.name) : null) ?? person.handle;
@@ -46,20 +50,20 @@ export function PlayerMenu({ person, team, actions, align, placement = "below", 
     try { await fn(); } catch (e) { setNote((e as Error).message); } finally { setBusy(false); }
   };
   // Host actions close the menu: each one asks to confirm, and the table changes underneath it.
-  const close = (fn: () => void) => () => { setOpen(false); fn(); };
+  const close = (fn: () => void) => () => { dismiss(); fn(); };
   const side = align === "left" ? "left-0" : align === "right" ? "right-0" : "left-1/2 -translate-x-1/2";
   const row = "flex min-h-11 w-full items-center rounded-lg px-2 text-left text-sm hover:bg-ink/5 focus-visible:bg-ink/5 disabled:opacity-60";
   const friend = actions.friend;
   return (
     <div ref={root} className="relative max-w-full">
-      <button type="button" data-seat-plate={plate} aria-expanded={open} aria-controls={open ? id : undefined} aria-haspopup="dialog"
-        onClick={() => { setNote(null); setOpen((o) => !o); }} style={style}
+      <button ref={trigger} type="button" data-seat-plate={plate} aria-expanded={open} aria-controls={open ? id : undefined} aria-haspopup="dialog"
+        onClick={() => { setNote(null); if (!open) actions.refresh?.(); setOpen(!open); }} style={style}
         className={`${className} hover:bg-chalk-ghost focus-visible:bg-chalk-ghost`}>
         {children}
       </button>
       {open && (
-        <div ref={pop} id={id} role="dialog" aria-label={person.name} style={nudged}
-          className={`panel absolute ${placement === "above" ? "bottom-full mb-1" : "top-full mt-1"} z-30 w-60 max-w-[calc(100vw-16px)] p-2 text-left ${side}`}>
+        <div ref={pop} id={id} role="dialog" aria-label={person.name} tabIndex={-1} style={{ ...fit, outline: "none" }}
+          className={`panel absolute ${above ? "bottom-full mb-1" : "top-full mt-1"} z-30 w-60 max-w-[calc(100vw-16px)] p-2 text-left ${side}`}>
           <div className="flex items-center gap-2.5 px-1 pt-1">
             <Avatar name={person.name} team={team} size={36} bot={person.bot} />
             <div className="min-w-0">
@@ -78,7 +82,7 @@ export function PlayerMenu({ person, team, actions, align, placement = "below", 
               {actions.makeHost && <button type="button" className={row} onClick={close(actions.makeHost)}>Make host</button>}
               {actions.standIn && <button type="button" className={row} onClick={close(actions.standIn.run)}>Hand to a computer</button>}
               {actions.profileHref && (
-                <a href={actions.profileHref} target="_blank" rel="noopener" className={row} onClick={() => setOpen(false)}>
+                <a href={actions.profileHref} target="_blank" rel="noopener" className={row} onClick={() => dismiss()}>
                   Change name or handle<span className="sr-only"> (opens in a new tab)</span>
                   <span aria-hidden className="ml-auto pl-2 text-ink-soft">↗</span>
                 </a>

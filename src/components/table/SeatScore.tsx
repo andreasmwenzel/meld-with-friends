@@ -135,7 +135,7 @@ export function DealerMark() {
 export function ScoreTag({ score, name, align, placement = "below" }: { score: SeatScore; name: string; align: "left" | "center" | "right"; placement?: "above" | "below" }) {
   const four = useCardPrefs().prefs.fourColour;
   // Wide meld rows can push the breakdown past a phone's edge: the popover nudges it back inside.
-  const { open, setOpen, root, pop, id: popId, style: nudged } = usePopover();
+  const { open, setOpen, root, trigger, pop, id: popId, above, style: nudged } = usePopover(placement);
   if (score.main === null && score.small === null) return null;
   const detail = score.top.length + score.meld.length + score.rows.length > 0;
   const body = score.main !== null ? (
@@ -156,12 +156,12 @@ export function ScoreTag({ score, name, align, placement = "below" }: { score: S
   if (!detail) return <span className={cls}><span aria-hidden className="contents">{body}</span><span className="sr-only">{label}</span></span>;
   return (
     <div ref={root} className="relative">
-      <button type="button" aria-label={label} aria-expanded={open} aria-controls={open ? popId : undefined} onClick={() => setOpen(o => !o)}
+      <button ref={trigger} type="button" aria-label={label} aria-expanded={open} aria-controls={open ? popId : undefined} onClick={() => setOpen(o => !o)}
         className={`${cls} hit hover:bg-chalk-ghost focus-visible:bg-chalk-ghost`}>
         {body}
       </button>
       {open && (
-        <div ref={pop} id={popId} role="group" style={nudged} aria-label={name === "You" ? "Your side this hand" : `${name}'s side this hand`} className={`panel absolute z-30 w-max min-w-[150px] max-w-[min(280px,calc(100vw-16px))] ${placement === "above" ? "bottom-full mb-1" : "top-full mt-1"} px-3 py-2 text-xs ${side}`}>
+        <div ref={pop} id={popId} role="group" style={nudged} aria-label={name === "You" ? "Your side this hand" : `${name}'s side this hand`} className={`panel absolute z-30 w-max min-w-[150px] max-w-[min(280px,calc(100vw-16px))] ${above ? "bottom-full mb-1" : "top-full mt-1"} px-3 py-2 text-xs ${side}`}>
           <Rows rows={score.top} />
           {score.meld.length > 0 && (
             <div className={score.top.length ? "mt-1 border-t border-ink/10 pt-1" : ""}>

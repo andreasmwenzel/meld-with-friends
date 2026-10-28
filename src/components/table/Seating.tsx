@@ -31,7 +31,7 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
   const push = usePushNotifications();
   const leisurely = resolveRules(snap.table.rules).pace === "leisurely";
   // A guest viewer gets no friend status, so the friend buttons stay hidden.
-  const { mates, addFriend: befriend, acceptFriend: accept } = useTablemates(code);
+  const { mates, addFriend: befriend, acceptFriend: accept } = useTablemates(code, guest, snap.seats.map((s) => s.user_id ?? "").join(","));
   const addFriend = (userId: string) => befriend(userId).catch((e) => setNote((e as Error).message));
   const acceptFriend = (userId: string) => accept(userId).catch((e) => setNote((e as Error).message));
   const isHost = snap.table.host === me.id;

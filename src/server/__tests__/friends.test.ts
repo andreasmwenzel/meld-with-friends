@@ -15,7 +15,7 @@ const request = (body: unknown) => new Request("http://localhost/api/friends", {
 let eq: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.user.mockResolvedValue({ user: { id: userId } });
+  mocks.user.mockResolvedValue({ user: { id: userId, is_anonymous: false } });
   mocks.account.mockResolvedValue({ data: { user: { is_anonymous: false } }, error: null });
   eq = vi.fn().mockReturnValue({ maybeSingle: async () => ({ data: { id: targetId }, error: null }) });
   mocks.from.mockImplementation(table => table === "profiles"
@@ -34,6 +34,11 @@ it("rejects guest targets and self requests", async () => {
   await expect(requestFriend({ userId: targetId }, userId)).rejects.toMatchObject({ status: 403 });
   await expect(requestFriend("player", targetId)).rejects.toMatchObject({ status: 400 });
   expect(mocks.from).not.toHaveBeenCalledWith("friendships");
+});
+it("refuses a friend request from a guest", async () => {
+  mocks.user.mockResolvedValue({ user: { id: userId, is_anonymous: true } });
+  expect((await POST(request({ userId: targetId }))).status).toBe(403);
+  expect(mocks.from).not.toHaveBeenCalled();
 });
 it("accepts exactly one validated handle or UUID and returns 201", async () => {
   for (const input of [{ handle: "PLAYER" }, { userId: targetId }]) expect((await POST(request(input))).status).toBe(201);
