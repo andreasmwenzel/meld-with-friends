@@ -983,7 +983,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
             </div>
           )}
           {tab === "rules" && (
-            <div role="tabpanel" id="menu-panel-rules" aria-labelledby="menu-tab-rules">
+            <div role="tabpanel" id="menu-panel-rules" aria-labelledby="menu-tab-rules" tabIndex={0}>
               <p className="text-sm font-semibold text-chalk">House rules</p>
               <ul className="mt-2 flex flex-col gap-2 text-sm text-chalk-faint">
                 {describeRules(view.rules).map((line) => <li key={line}>{line}</li>)}

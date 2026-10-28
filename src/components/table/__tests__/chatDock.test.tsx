@@ -137,12 +137,14 @@ describe("table talk at the board", () => {
   });
 
   it("shows the table's house rules in the menu's Rules tab", async () => {
-    await table("play-lead");
+    // This preset turns passing off and shooting on, so default rules would read differently.
+    await table("bid-shoot");
     fireEvent.click(screen.getByRole("button", { name: "Menu" }));
     fireEvent.click(screen.getByRole("tab", { name: "Rules" }));
     const panel = screen.getByRole("tabpanel", { name: "Rules" });
-    expect(panel.textContent).toMatch(/Play to [\d,]+\./);
-    expect(panel.textContent).toMatch(/Minimum bid \d+, in steps of \d+\./);
+    expect(panel.textContent).toContain("No passing.");
+    expect(panel.textContent).toContain("Shoot after passing");
+    expect(panel.tabIndex).toBe(0);
   });
 
   it("closes when the menu opens, so messages hidden behind the menu count as unread", async () => {
