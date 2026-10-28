@@ -33,7 +33,10 @@ export function useTableChat(code: string, me: Profile, enabled: boolean, public
   // Your messages whose broadcast came before their response: each hides one pending copy of its text
   // until the response says which send it was. `answered` holds the ids whose response is in.
   const [early, setEarly] = useState<ChatMessage[]>([]);
+  const earlyRef = useRef(early);
   const answered = useRef(new Set<string>());
+  // Failed sends of a text whose broadcast may still come: each lets one later own broadcast of it pass unmatched.
+  const owed = useRef(new Map<string, number>());
 
   useEffect(() => {
     if (!enabled || !publicKey) return;
@@ -47,7 +50,12 @@ export function useTableChat(code: string, me: Profile, enabled: boolean, public
       seen.add(m.id);
       setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev.slice(-99), m]));
       if (m.from === me.id && !answered.current.has(m.id) && pendingRef.current.some((p) => p.text === m.text)) {
-        setEarly((prev) => [...prev, m]);
+        const n = owed.current.get(m.text) ?? 0;
+        if (n > 0) owed.current.set(m.text, n - 1);
+        else {
+          earlyRef.current = [...earlyRef.current, m];
+          setEarly((prev) => [...prev, m]);
+        }
       }
       if (m.from !== me.id && !visibleRef.current) setUnread((n) => n + 1);
       return m;
@@ -76,21 +84,29 @@ export function useTableChat(code: string, me: Profile, enabled: boolean, public
       const m = await receive(signed);
       if (m) {
         answered.current.add(m.id);
+        earlyRef.current = earlyRef.current.filter((x) => x.id !== m.id);
         setEarly((prev) => prev.filter((x) => x.id !== m.id));
       }
     } catch (e) {
       // The failed send may have been broadcast before its response was lost: release one early copy
       // of its text, so another send of the same text keeps its sending mark (at worst it shows twice briefly).
-      setEarly((prev) => {
-        const i = prev.findIndex((x) => x.text === t);
-        return i < 0 ? prev : prev.filter((_, j) => j !== i);
-      });
+      // If none has come yet, the next one to come is let through instead.
+      const i = earlyRef.current.findIndex((x) => x.text === t);
+      if (i >= 0) {
+        const gone = earlyRef.current[i];
+        earlyRef.current = earlyRef.current.filter((x) => x !== gone);
+        setEarly((prev) => prev.filter((x) => x !== gone));
+      } else owed.current.set(t, (owed.current.get(t) ?? 0) + 1);
       throw e;
     } finally {
       pendingRef.current = pendingRef.current.filter((x) => x.id !== id);
       setPending((prev) => prev.filter((x) => x.id !== id));
       // A broadcast whose response was lost must not hide a later send of the same text.
-      if (!pendingRef.current.some((x) => x.text === t)) setEarly((prev) => prev.filter((x) => x.text !== t));
+      if (!pendingRef.current.some((x) => x.text === t)) {
+        owed.current.delete(t);
+        earlyRef.current = earlyRef.current.filter((x) => x.text !== t);
+        setEarly((prev) => prev.filter((x) => x.text !== t));
+      }
     }
   }, [code, enabled, me.id, me.display_name]);
 
