@@ -128,6 +128,19 @@ it("keeps each identical send pending until its own response, whatever order thi
   expect(chat.messages.map(m => m.id)).toEqual(["b", "a"]);
   expect(sending()).toBe(0);
 });
+it("keeps another identical send pending when one fails after its broadcast", async () => {
+  render(<Harness />);
+  const first = deferred(), second = deferred();
+  mocks.api.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+  let a!: Promise<void>, b!: Promise<void>;
+  act(() => { a = chat.send("👍") as Promise<void>; b = chat.send("👍") as Promise<void>; });
+  await emit(mine("a", "👍"));
+  expect(sending()).toBe(1);
+  await act(async () => { first.reject(new Error("Network")); await expect(a).rejects.toThrow("Network"); });
+  expect(chat.messages.map(m => m.id)).toEqual(["a", expect.stringMatching(/^pending-/)]);
+  await act(async () => { second.resolve(mine("b", "👍")); await b; });
+  expect(chat.messages.map(m => m.id)).toEqual(["a", "b"]);
+});
 it("leaves the talk as it was when a send fails, even at the message cap", async () => {
   render(<Harness />);
   for (let i = 0; i < 100; i++) await emit(signed("BCDFGH", keys.privateKey, { ...line, id: `m${i}` }));

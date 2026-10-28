@@ -78,6 +78,14 @@ export function useTableChat(code: string, me: Profile, enabled: boolean, public
         answered.current.add(m.id);
         setEarly((prev) => prev.filter((x) => x.id !== m.id));
       }
+    } catch (e) {
+      // The failed send may have been broadcast before its response was lost: release one early copy
+      // of its text, so another send of the same text keeps its sending mark (at worst it shows twice briefly).
+      setEarly((prev) => {
+        const i = prev.findIndex((x) => x.text === t);
+        return i < 0 ? prev : prev.filter((_, j) => j !== i);
+      });
+      throw e;
     } finally {
       pendingRef.current = pendingRef.current.filter((x) => x.id !== id);
       setPending((prev) => prev.filter((x) => x.id !== id));
