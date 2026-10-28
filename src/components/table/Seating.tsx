@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { api, ApiError, type Profile } from "@/lib/api";
+import { api, type Profile } from "@/lib/api";
 import type { SeatIndex } from "@/engine/types";
 import { Avatar } from "@/components/site/Avatar";
 import { SEAT_LABEL, teamOf, type Snapshot } from "./types";
@@ -10,6 +10,7 @@ import { RulesForm } from "@/components/rules/RulesForm";
 import { usePushNotifications } from "@/lib/push";
 import { describeRules, resolveRules, type RulesPatch } from "@/components/rules/rules";
 import { useTableTurn } from "./turn";
+import { useTablemates } from "./tablemates";
 
 // The chairs sit around the oval, your own chair at the bottom. Keyed by position relative to your seat:
 // 0 bottom, 1 left, 2 across, 3 right. From sm up the code sits on the cloth and the chairs hang half
@@ -21,8 +22,6 @@ const POS: Record<SeatIndex, string> = {
   3: "right-0 top-1/2 -translate-y-1/2 sm:translate-x-1/2",
 };
 
-type TablemateStatus = "friend" | "pending_out" | "pending_in" | "none" | "guest";
-
 export function Seating({ code, me, snap, onChange, guest = false }: { code: string; me: Profile; snap: Snapshot; onChange: () => void; guest?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -31,19 +30,10 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
   const [rulesDraft, setRulesDraft] = useState<RulesPatch>(snap.table.rules as RulesPatch);
   const push = usePushNotifications();
   const leisurely = resolveRules(snap.table.rules).pace === "leisurely";
-  // Tablemate friend status, fetched once. A 403 means the viewer is a guest, so the feature stays hidden.
-  const [mates, setMates] = useState<Record<string, TablemateStatus> | null>(null);
-  useEffect(() => {
-    let active = true;
-    api<{ userId: string; status: TablemateStatus }[]>(`/api/tables/${code}/tablemates`)
-      .then((list) => { if (active) setMates(Object.fromEntries(list.map((m) => [m.userId, m.status]))); })
-      .catch((e) => { if (!(e instanceof ApiError && e.status === 403)) console.warn("tablemates", e); });
-    return () => { active = false; };
-  }, [code]);
-  const addFriend = async (userId: string) => {
-    try { await api("/api/friends", { body: { userId } }); setMates((m) => (m ? { ...m, [userId]: "pending_out" } : m)); }
-    catch (e) { setNote((e as Error).message); }
-  };
+  // A guest viewer gets no friend status, so the friend buttons stay hidden.
+  const { mates, addFriend: befriend, acceptFriend: accept } = useTablemates(code);
+  const addFriend = (userId: string) => befriend(userId).catch((e) => setNote((e as Error).message));
+  const acceptFriend = (userId: string) => accept(userId).catch((e) => setNote((e as Error).message));
   const isHost = snap.table.host === me.id;
   const seated = snap.seats.filter((s) => s.user_id || s.bot).length;
   const humans = snap.seats.filter((s) => s.user_id).length;
@@ -127,7 +117,7 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
                       <button className="tap text-xs text-deck-blue underline" onClick={() => addFriend(p.id)}>Add friend</button>
                     )}
                     {!mine && mates?.[p.id] === "pending_out" && <span className="text-xs text-ink-soft">Request sent</span>}
-                    {!mine && mates?.[p.id] === "pending_in" && <Link href="/" className="tap text-xs text-deck-blue underline">Accept in lobby</Link>}
+                    {!mine && mates?.[p.id] === "pending_in" && <button className="tap text-xs text-deck-blue underline" onClick={() => acceptFriend(p.id)}>Accept friend request</button>}
                     {!mine && mates?.[p.id] === "guest" && <span className="text-xs text-ink-soft" title="Guests can be added once they save an account">guest</span>}
                     {isHost && !mine && (
                       <button className="tap text-xs text-deck-blue underline" onClick={() => makeHost(p.id, p.display_name)} disabled={busy}>Make host</button>

@@ -14,6 +14,8 @@ import { Avatar } from "@/components/site/Avatar";
 import { SEAT_LABEL, teamOf, type Snapshot } from "./types";
 import { Scorepad } from "./Scorepad";
 import { DealerMark, ScoreTag, seatScore, type ScoreFacts, type SeatScore } from "./SeatScore";
+import { PlayerMenu, type SeatActions, type SeatPerson } from "./PlayerMenu";
+import { useTablemates } from "./tablemates";
 import { BidPicker, MisdealButton } from "./BidPicker";
 import { ResultSheet, type Which } from "./Result";
 import { canCountdownAdvance } from "./nextHandCountdown";
@@ -233,6 +235,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     return s?.profile?.display_name ?? s?.bot ?? SEAT_LABEL[seat];
   }, [snap.seats, me.id]);
   const isBot = useCallback((seat: SeatIndex | null) => seat !== null && !!snap.seats.find((x) => x.seat === seat)?.bot, [snap.seats]);
+  // Friend status for each player's menu; boards without a server (lab, practice) have none.
+  const { mates, addFriend, acceptFriend } = useTablemates(code, local);
 
   // Computer players move one card at a time, paced by the table so everyone can follow the trick.
   const botTurn = !!view && (view.phase === "melding" ? snap.seats.some((x) => x.bot && !view.meldConfirmed[x.seat]) : isBot(view.turn)) && view.phase !== "hand_over" && view.phase !== "game_over";
@@ -742,7 +746,17 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const fold = folding === outKey && motion !== "off";
   const seatProps = (r: 1 | 2 | 3) => {
     const seat = seatAt(r);
-    return { seat, view, name: nameOf(seat), bot: isBot(seat), score: scoreOf(seat), faceUp: revealedFor(seat), laid: laidOf(seat).length, standIn: standInFor(seat), makeHost: makeHostFor(seat), compact: short, fold };
+    const s = snap.seats.find((x) => x.seat === seat);
+    const uid = s?.user_id ?? null;
+    const status = uid ? mates?.[uid] : undefined;
+    const person: SeatPerson = { name: nameOf(seat), handle: s?.profile?.handle ?? null, userId: uid, bot: isBot(seat),
+      place: `${teamOf(seat) === myTeam ? "Your partner" : "Opponent"}, ${SEAT_LABEL[seat]}` };
+    const standIn = standInFor(seat), makeHost = makeHostFor(seat);
+    const actions: SeatActions = {
+      friend: uid && status ? { status, add: () => addFriend(uid), accept: () => acceptFriend(uid) } : undefined,
+      makeHost, standIn,
+    };
+    return { seat, view, name: person.name, person, actions, score: scoreOf(seat), faceUp: revealedFor(seat), laid: laidOf(seat).length, standIn, compact: short, fold };
   };
   const them: Team = myTeam === "red" ? "blue" : "red";
   const peekingResult = over && !recapOpen && peekKey === `${view.handNumber}-${view.phase}`;
@@ -1031,11 +1045,13 @@ const SIDE = { left: "west", center: "north", right: "east" } as const;
 const MELD_W = 28;
 
 /** A player round the table: the name chip with its score tag, then their cards (backs while playing, face up at the end). */
-function OpponentRow({ seat, view, name, align, score, laid, bot = false, standIn, makeHost, faceUp, compact = false, fold = false, className = "" }: {
+function OpponentRow({ seat, view, name, person, actions, align, score, laid, standIn, faceUp, compact = false, fold = false, className = "" }: {
   faceUp?: CardId[]; seat: SeatIndex; view: PlayerView; name: string; align: "left" | "center" | "right"; score: SeatScore;
+  person: SeatPerson; actions: SeatActions;
   /** how many of their cards lie on the table as meld */
   laid: number;
-  bot?: boolean; standIn?: { away: boolean; run: () => void }; makeHost?: () => void; compact?: boolean; className?: string;
+  /** the host may hand this seat to a computer; `away` puts the offer out on the table, not only in the menu */
+  standIn?: { away: boolean; run: () => void }; compact?: boolean; className?: string;
   /** the shoot was just declared: this seat's cards fold away as you watch */
   fold?: boolean;
 }) {
@@ -1051,7 +1067,7 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
   const chip = (
     <>
       <span className="relative shrink-0">
-        <Avatar name={name} team={team} size={28} bot={bot} />
+        <Avatar name={name} team={team} size={28} bot={person.bot} />
         {score.dealer && <DealerMark />}
       </span>
       <span className={`truncate text-xs font-semibold ${compact ? "max-w-[88px]" : "max-w-[96px] sm:text-sm"}`}>{name}{score.dealer && <span className="sr-only">, dealer</span>}{active && <span className="sr-only">, their turn</span>}</span>
@@ -1060,17 +1076,18 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
     </>
   );
   if (compact) {
-    return <CompactSeat {...{ seat, className, team, active, name, chip, score, n, faceUp, standIn, align }} setAside={sittingOut && !faceUp} />;
+    return <CompactSeat {...{ seat, className, team, active, name, person, actions, chip, score, n, faceUp, standIn, align }} setAside={sittingOut && !faceUp} />;
   }
   return (
     // Side seats hang from the same line at the top of their row, so a longer fan (sixteen cards while passing, a bid under
     // the name) grows downwards on its own side and never pushes its plate out of line with the other side's.
     <div data-claim-seat={seat} className={`group flex flex-col ${items} gap-1 py-1 sm:gap-1.5 sm:py-2 min-w-0 ${vertical ? "self-start pt-6 sm:pt-8" : ""} ${className}`}>
       <div className={`relative flex max-w-full items-center ${vertical ? "flex-col" : "flex-row"}`}>
-        <div data-seat-plate={side} className={`flex ${vertical ? "flex-col" : "flex-row"} items-center gap-1 sm:gap-2 rounded-2xl px-2 py-1 max-w-full`}
+        <PlayerMenu person={person} team={team} actions={actions} align={align} plate={side}
+          className={`flex ${vertical ? "flex-col" : "flex-row"} items-center gap-1 sm:gap-2 rounded-2xl px-2 py-1 max-w-full`}
           style={active ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
           {chip}
-        </div>
+        </PlayerMenu>
         {/* Out of the layout flow, so nothing moves when a number appears. */}
         <div className={vertical ? "flex h-7 items-center" : "absolute left-full top-1/2 ml-1 -translate-y-1/2 whitespace-nowrap"}>
           <ScoreTag score={score} name={name} align={align} />
@@ -1091,16 +1108,11 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
             style={vertical ? { marginTop: i ? -40 : 0, transform: align === "left" ? "rotate(90deg)" : "rotate(-90deg)" } : { marginLeft: i ? -24 : 0 }} />
         ))}
       </div>}
-      {standIn && (
+      {/* Handing a seat over and making a host live in the player's menu; a seat that seems away also says so here. */}
+      {standIn?.away && (
         <button type="button" onClick={standIn.run}
-          className={`max-w-[200px] text-xs text-chalk-faint underline hover:text-chalk ${align === "center" ? "text-center" : align === "left" ? "text-left" : "text-right"} ${standIn.away ? "" : "hidden sm:block sm:opacity-0 group-hover:opacity-100 focus-visible:opacity-100"}`}>
-          {standIn.away ? `${name} seems to be away. Hand to a computer` : "Hand to a computer"}
-        </button>
-      )}
-      {makeHost && (
-        <button type="button" onClick={makeHost}
-          className="hidden sm:block max-w-[200px] text-xs text-chalk-faint underline hover:text-chalk opacity-0 group-hover:opacity-100 focus-visible:opacity-100">
-          Make host
+          className={`max-w-[200px] text-xs text-chalk-faint underline hover:text-chalk ${align === "center" ? "text-center" : align === "left" ? "text-left" : "text-right"}`}>
+          {name} seems to be away. Hand to a computer
         </button>
       )}
     </div>
@@ -1112,8 +1124,8 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
  * Hands shown at the end stay face up in a tight overlapping fan; across the table it goes under the name, since
  * beside it the fan would be squeezed into a tall column down the middle of the screen.
  */
-function CompactSeat({ seat, className, team, active, name, chip, score, n, faceUp, standIn, align, setAside }: {
-  seat: SeatIndex; setAside: boolean;
+function CompactSeat({ seat, className, team, active, name, person, actions, chip, score, n, faceUp, standIn, align, setAside }: {
+  seat: SeatIndex; setAside: boolean; person: SeatPerson; actions: SeatActions;
   className: string; team: Team; active: boolean; name: string; chip: React.ReactNode; score: SeatScore; n: number;
   faceUp?: CardId[]; standIn?: { away: boolean; run: () => void }; align: "left" | "center" | "right";
 }) {
@@ -1121,7 +1133,8 @@ function CompactSeat({ seat, className, team, active, name, chip, score, n, face
   return (
     <div data-claim-seat={seat} className={`flex min-w-0 items-center ${!across ? "flex-col gap-2" : faceUp ? "flex-col gap-1" : "flex-row justify-center gap-2"} ${className}`}>
       <div className={`relative flex max-w-full items-center ${across ? "flex-row" : "flex-col"}`}>
-        <div data-seat-plate={SIDE[align]} className={`flex max-w-full items-center gap-x-2 gap-y-0.5 rounded-2xl px-2 py-1 ${across ? "flex-row" : "flex-col"}`}
+        <PlayerMenu person={person} team={team} actions={actions} align={align} plate={SIDE[align]}
+          className={`flex max-w-full items-center gap-x-2 gap-y-0.5 rounded-2xl px-2 py-1 ${across ? "flex-row" : "flex-col"}`}
           style={active ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
           {chip}
           {!faceUp && (
@@ -1134,7 +1147,7 @@ function CompactSeat({ seat, className, team, active, name, chip, score, n, face
                 <CardBack width={12} team={team} />{n}
               </span>
           )}
-        </div>
+        </PlayerMenu>
         <div className={across ? "absolute left-full top-1/2 ml-1 -translate-y-1/2 whitespace-nowrap" : "flex h-7 items-center"}>
           <ScoreTag score={score} name={name} align={align} />
         </div>

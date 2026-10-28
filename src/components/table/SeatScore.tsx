@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { Bid, CardId, HandRecord, MeldItem, Phase, Rank, SeatIndex, Suit, Team } from "@/engine/types";
 import { RANK_LABEL, SUIT_GLYPH, cardName, splitCard, suitInk, suitInkOnCloth } from "@/components/cards/PlayingCard";
 import { useCardPrefs } from "@/lib/cardPrefs";
 import { teamOf } from "./types";
+import { usePopover } from "./popover";
 
 /** What a chip shows beside a player's name: the taker's contract and total, or a defender's own meld. */
 export interface SeatScore {
@@ -133,29 +133,9 @@ export function DealerMark() {
 /** The numbers beside a name. Tapping them opens the breakdown; Escape or a tap elsewhere closes it. */
 /** `placement` is where the breakdown opens: above for your own seat, which sits at the bottom of the board. */
 export function ScoreTag({ score, name, align, placement = "below" }: { score: SeatScore; name: string; align: "left" | "center" | "right"; placement?: "above" | "below" }) {
-  const [open, setOpen] = useState(false);
   const four = useCardPrefs().prefs.fourColour;
-  const root = useRef<HTMLDivElement>(null);
-  const popId = useId();
-  const pop = useRef<HTMLDivElement>(null);
-  // Wide meld rows can push the breakdown past a phone's edge: nudge it back inside, 8px clear.
-  const [nudge, setNudge] = useState(0);
-  useLayoutEffect(() => {
-    if (!open || !pop.current) return;
-    const r = pop.current.getBoundingClientRect();
-    const left = r.left - nudge, right = r.right - nudge;
-    const shift = right > window.innerWidth - 8 ? window.innerWidth - 8 - right : left < 8 ? 8 - left : 0;
-    if (shift !== nudge) setNudge(shift);
-  }, [open, nudge]);
-  useEffect(() => {
-    if (!open) return;
-    const away = (e: PointerEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(false); };
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    // Its placement was measured for this screen; a resize or rotation closes it rather than leave it adrift.
-    const drift = () => setOpen(false);
-    document.addEventListener("pointerdown", away); document.addEventListener("keydown", key); window.addEventListener("resize", drift);
-    return () => { document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", key); window.removeEventListener("resize", drift); };
-  }, [open]);
+  // Wide meld rows can push the breakdown past a phone's edge: the popover nudges it back inside.
+  const { open, setOpen, root, pop, id: popId, style: nudged } = usePopover();
   if (score.main === null && score.small === null) return null;
   const detail = score.top.length + score.meld.length + score.rows.length > 0;
   const body = score.main !== null ? (
@@ -181,7 +161,7 @@ export function ScoreTag({ score, name, align, placement = "below" }: { score: S
         {body}
       </button>
       {open && (
-        <div ref={pop} id={popId} role="group" style={nudge ? { transform: `translateX(${nudge}px)` } : undefined} aria-label={name === "You" ? "Your side this hand" : `${name}'s side this hand`} className={`panel absolute z-30 w-max min-w-[150px] max-w-[min(280px,calc(100vw-16px))] ${placement === "above" ? "bottom-full mb-1" : "top-full mt-1"} px-3 py-2 text-xs ${side}`}>
+        <div ref={pop} id={popId} role="group" style={nudged} aria-label={name === "You" ? "Your side this hand" : `${name}'s side this hand`} className={`panel absolute z-30 w-max min-w-[150px] max-w-[min(280px,calc(100vw-16px))] ${placement === "above" ? "bottom-full mb-1" : "top-full mt-1"} px-3 py-2 text-xs ${side}`}>
           <Rows rows={score.top} />
           {score.meld.length > 0 && (
             <div className={score.top.length ? "mt-1 border-t border-ink/10 pt-1" : ""}>
