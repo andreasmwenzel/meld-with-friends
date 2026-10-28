@@ -152,8 +152,10 @@ export function ScoreTag({ score, name, align, placement = "below" }: { score: S
     if (!open) return;
     const away = (e: PointerEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(false); };
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("pointerdown", away); document.addEventListener("keydown", key);
-    return () => { document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", key); };
+    // Its placement was measured for this screen; a resize or rotation closes it rather than leave it adrift.
+    const drift = () => setOpen(false);
+    document.addEventListener("pointerdown", away); document.addEventListener("keydown", key); window.addEventListener("resize", drift);
+    return () => { document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", key); window.removeEventListener("resize", drift); };
   }, [open]);
   if (score.main === null && score.small === null) return null;
   const detail = score.top.length + score.meld.length + score.rows.length > 0;
