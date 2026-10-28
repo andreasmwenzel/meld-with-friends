@@ -13,12 +13,14 @@ import { createLabBroadcast, LAB_GAME } from "./labBroadcast";
 
 const CODE = "LAB000";
 const NAMES = ["South", "West", "North", "East"] as const;
+// Real bot names, so each bot has its table-talk voice and its player-menu tag as in a live game.
+const BOT_NAMES = ["Pearl", "Hazel", "Mabel", "Gus"] as const;
 
 function snapshotFor(s: LabSnapshot, rules: GameState["rules"], live = false): Snapshot {
   return {
     table: { id: "lab", code: CODE, host: `lab${s.view}`, status: "playing", rules: { ...rules }, ...(live ? { current_game_id: LAB_GAME } : {}) },
     seats: SEATS.map(seat => s.bots.includes(seat)
-      ? { seat, user_id: null, profile: null, bot: `${NAMES[seat]} bot` }
+      ? { seat, user_id: null, profile: null, bot: BOT_NAMES[seat] }
       : { seat, user_id: `lab${seat}`, bot: null, profile: { id: `lab${seat}`, handle: NAMES[seat].toLowerCase(), display_name: NAMES[seat], avatar_seed: NAMES[seat] } }),
     offers: [], mySeat: s.view, ready: s.flags.ready,
     paused: s.flags.paused ? { by: `lab${s.view}`, name: NAMES[s.view], reason: "Paused from the lab", at: new Date(0).toISOString() } : null,
@@ -122,11 +124,14 @@ export function Lab() {
     const real = window.fetch;
     window.fetch = async (input, init) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      // A friend request from a player's menu goes nowhere in the lab, but succeeds so the menu can show it.
+      if (url.endsWith("/api/friends") && init?.method !== "GET" && init?.body) return Response.json({ ok: true }, { status: 201 });
       if (!url.includes(`/api/tables/${CODE}`)) return real.call(window, input, init);
       const s = labStore.get();
       const path = url.slice(url.indexOf(CODE) + CODE.length);
       if (path === "" || path === "?") return Response.json(snapshotFor(s, labStore.state.rules));
       if (path === "/view") return Response.json(broadcast ? broadcast.view(s.view, { ready: s.flags.ready }) : { ...viewFor(labStore.state, s.view), ready: s.flags.ready });
+      if (path === "/tablemates") return Response.json(SEATS.filter(seat => seat !== s.view && !s.bots.includes(seat)).map(seat => ({ userId: `lab${seat}`, handle: NAMES[seat].toLowerCase(), displayName: NAMES[seat], status: "none" })));
       if (path === "/tick") return Response.json({ acted: false, rev: labStore.state.rev, delayMs: s.speed });
       if (path === "/ready") { labStore.setFlags({ ready: [...new Set([...s.flags.ready, s.view])] }); return Response.json({ ok: true }); }
       if (path === "/pause") { labStore.setFlags({ paused: true }); return Response.json({ ok: true }); }
