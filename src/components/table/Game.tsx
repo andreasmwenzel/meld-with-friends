@@ -18,7 +18,7 @@ import { BidPicker, MisdealButton } from "./BidPicker";
 import { ResultSheet, type Which } from "./Result";
 import { canCountdownAdvance } from "./nextHandCountdown";
 import { Recap, useSeenReporting } from "./Recap";
-import { MeldReview, itemLabel } from "./MeldReview";
+import { itemLabel } from "./meldLabel";
 import { CardOptionsPanel } from "@/components/cards/CardOptions";
 import { NameChange } from "@/components/site/NameChange";
 import { useOpponentPointsPref } from "@/lib/prefs";
@@ -487,13 +487,6 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- act is recreated each render; the revision key runs each step once
   }, [view, busy, error, snap.paused, cardPrefs.autoMeld]);
-  // Everyone's meld opens by itself when trick play starts and stays up through the first trick, unless
-  // dismissed. After that the seat chips carry each side's meld, and the menu's "This hand" lists it.
-  const [meldHidden, setMeldHidden] = useState<number | null>(null);
-  // A rematch starts again at hand 1 without remounting, so forget the choice when a game ends.
-  const gameOver = view?.phase === "game_over";
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- resets per-game display choices
-  useEffect(() => { if (gameOver) setMeldHidden(null); }, [gameOver]);
   // A choice made in one phase never carries into the next (an outside move, such as the practice coach, can change it).
   // A shoot sets the partner's hand aside. Seen happening (no one sitting out, then someone, in the same hand), the cards
   // fold away; a view that arrives with the shoot already declared (a reload, joining mid-hand) shows the stack as it is.
@@ -736,7 +729,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const sum = (seat: SeatIndex) => (view.melds[seat] ?? []).reduce((n, m) => n + m.points, 0);
   const facts: ScoreFacts = {
     sittingOut: view.sittingOut, phase: view.phase, handNumber: view.handNumber, dealer: view.dealer, bidder: view.bidder, highBid: view.highBid, trump: view.trump, bids: view.bids,
-    meldPoints: { 0: sum(0), 1: sum(1), 2: sum(2), 3: sum(3) }, counters: view.recap.counters, history: view.history,
+    meldPoints: { 0: sum(0), 1: sum(1), 2: sum(2), 3: sum(3) }, melds: view.melds, counters: view.recap.counters, history: view.history,
   };
   const over = view.phase === "hand_over" || view.phase === "game_over";
   const hidePoints = hideOpponentPoints && !over;
@@ -744,7 +737,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     const score = seatScore(facts, seat, nameOf, view.phase === "melding");
     // Nothing to count until a seat has laid down or said it has no meld.
     if (view.phase === "melding" && !view.meldConfirmed[seat] && !view.melds[seat]?.length) score.small = null;
-    return hidePoints && teamOf(seat) !== myTeam && view.phase !== "bidding" ? { ...score, total: null, small: null, rows: [] } : score;
+    return hidePoints && teamOf(seat) !== myTeam && view.phase !== "bidding" ? { ...score, total: null, small: null, top: [], meld: [], rows: [] } : score;
   };
   const fold = folding === outKey && motion !== "off";
   const seatProps = (r: 1 | 2 | 3) => {
@@ -863,13 +856,6 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
         {/* action bar: as tall as what it holds, so a waiting player's board has the whole room to centre in. */}
         <div ref={actionRef} {...keepFocus} data-overlay-zone="action" className="board-action mt-1 shrink-0 sm:mt-2">
           <ActionBar key={view.rev} view={view} selected={selected} busy={busy || updating} act={act} nameOf={nameOf} autoMeld={cardPrefs.autoMeld} />
-          {view.phase === "playing" && view.sittingOut == null && view.playedCards.length < 4 && meldHidden !== view.handNumber && (
-            <div className="mt-1 flex min-h-11 items-center justify-center">
-              {/* Hiding removes the button that had focus; the hand takes it. */}
-              <MeldReview key={view.handNumber} melds={view.melds} seat={view.seat} nameOf={nameOf} compact={short}
-                onHide={() => { setMeldHidden(view.handNumber); focusHand(); }} />
-            </div>
-          )}
           {/* Whose turn it is lives here, by your hand, so the cloth holds only the cards. */}
           {view.phase === "playing" && (
             <PlayStatus view={view} trick={trickCards} nameOf={nameOf} peek={peek} stalled={stalled && !paused} nudge={nudge} compact={short}

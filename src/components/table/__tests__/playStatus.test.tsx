@@ -119,14 +119,4 @@ describe("trick play status above the hand", () => {
     await wait(0);
     expect(requests.slice(before)).toContain(`/api/tables/${CODE}/view`);
   });
-
-  it("gives your playable card focus when the meld row is hidden", async () => {
-    await table("play-lead");
-    const hide = screen.getByRole("button", { name: "Hide the meld row" });
-    hide.focus();
-    await act(() => { fireEvent.click(hide); });
-    expect(screen.queryByRole("button", { name: "Hide the meld row" })).toBeNull();
-    expect(document.activeElement?.closest("[aria-label='Your hand']")).toBeTruthy();
-    expect(document.activeElement?.getAttribute("aria-disabled")).toBeNull();
-  });
 });

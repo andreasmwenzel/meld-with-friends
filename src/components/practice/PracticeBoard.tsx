@@ -116,7 +116,7 @@ export function PracticeBoard() {
   const leader = view.turn;
   const step: CoachStep | null = awaitingStart(state, seenHand) && leader !== null
     ? { headline: "Everyone has melded", act: "Start play", marks: false, run: () => setSeenHand(state.handNumber),
-        reason: `Each player's meld is above your hand: tap a name to see the pieces. ${nameOf(leader)} won the bid and leads the first trick once you start play.` }
+        reason: `Each player's meld is still on the table: tap the number beside a name later to see a side's pieces. ${nameOf(leader)} won the bid and leads the first trick once you start play.` }
     : advice ? { headline: advice.headline, reason: advice.reason, act: "Do this", marks: advice.cards.length > 0,
         run: () => perform(advice.action, state.rev) }
     : null;

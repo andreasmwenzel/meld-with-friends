@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
-import type { Bid, HandRecord, Phase, SeatIndex, Suit, Team } from "@/engine/types";
-import { SUIT_GLYPH } from "@/components/cards/PlayingCard";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import type { Bid, CardId, HandRecord, MeldItem, Phase, Rank, SeatIndex, Suit, Team } from "@/engine/types";
+import { RANK_LABEL, SUIT_GLYPH, cardName, splitCard, suitInk } from "@/components/cards/PlayingCard";
+import { useCardPrefs } from "@/lib/cardPrefs";
 import { teamOf } from "./types";
 
 /** What a chip shows beside a player's name: the taker's contract and total, or a defender's own meld. */
@@ -14,22 +15,28 @@ export interface SeatScore {
   total: number | null;
   /** a defender's own meld */
   small: number | null;
-  /** the breakdown behind the numbers */
+  /** the breakdown behind the numbers: `top` (the bid), each melder's cards, then `rows` */
+  top: [string, string][];
+  meld: SeatMeld[];
   rows: [string, string][];
 }
+
+/** One player's meld in the breakdown: the cards of each piece, and what they came to. */
+export interface SeatMeld { name: string; items: MeldItem[]; points: number }
 
 /** The public facts a chip is built from; both the live view and a replay position provide them. */
 export interface ScoreFacts {
   phase: Phase; handNumber: number; dealer: SeatIndex; bidder: SeatIndex | null; highBid: Bid | null; trump: Suit | null; bids: Bid[];
   sittingOut?: SeatIndex | null;
   meldPoints: Record<SeatIndex, number>;
+  melds: Record<SeatIndex, MeldItem[]>;
   /** counter points taken by each side so far, without the last-trick bonus */
   counters: Record<Team, number>;
   history: HandRecord[];
 }
 
 const SEATS: SeatIndex[] = [0, 1, 2, 3];
-const EMPTY = (dealer: boolean): SeatScore => ({ dealer, main: null, suit: null, total: null, small: null, rows: [] });
+const EMPTY = (dealer: boolean): SeatScore => ({ dealer, main: null, suit: null, total: null, small: null, top: [], meld: [], rows: [] });
 
 /**
  * Numbers only, no sentences: during bidding each chip shows its bid; afterwards the taker carries
@@ -50,7 +57,8 @@ export function seatScore(f: ScoreFacts, seat: SeatIndex, nameOf: (s: SeatIndex)
   const playing = f.phase === "playing" || f.phase === "hand_over" || f.phase === "game_over";
   const meld = SEATS.filter(s => teamOf(s) === team).reduce((n: number, s) => n + f.meldPoints[s], 0);
   const soFar = meld + f.counters[team];
-  const rows: [string, string][] = SEATS.filter(s => teamOf(s) === team && (f.meldPoints[s] > 0 || meldOut)).map(s => [`${nameOf(s)} meld`, String(f.meldPoints[s])]);
+  const melded: SeatMeld[] = SEATS.filter(s => teamOf(s) === team && (f.meldPoints[s] > 0 || meldOut)).map(s => ({ name: nameOf(s), items: f.melds[s] ?? [], points: f.meldPoints[s] }));
+  const rows: [string, string][] = [];
   if (playing && f.sittingOut == null) rows.push(["Counters", String(f.counters[team])]);
   if (record) {
     const b = record.breakdown[team];
@@ -62,10 +70,59 @@ export function seatScore(f: ScoreFacts, seat: SeatIndex, nameOf: (s: SeatIndex)
   } else rows.push(["So far", String(soFar)]);
   if (f.bidder === seat && f.highBid) {
     const total = record ? record.delta[team] : f.phase === "melding" || playing ? soFar : null;
-    return { dealer, main: f.highBid.shoot ? "moon" : String(f.highBid.amount), suit: f.trump, total, small: null, rows: [["Bid", f.highBid.shoot ? "the moon" : String(f.highBid.amount)], ...rows] };
+    return { dealer, main: f.highBid.shoot ? "moon" : String(f.highBid.amount), suit: f.trump, total, small: null, top: [["Bid", f.highBid.shoot ? "the moon" : String(f.highBid.amount)]], meld: melded, rows };
   }
   if (f.bidder !== null && teamOf(f.bidder) === team) return EMPTY(dealer);
-  return { ...EMPTY(dealer), small: f.sittingOut != null ? null : f.phase === "melding" || f.phase === "playing" || record ? f.meldPoints[seat] : null, rows };
+  return { ...EMPTY(dealer), small: f.sittingOut != null ? null : f.phase === "melding" || f.phase === "playing" || record ? f.meldPoints[seat] : null, meld: melded, rows };
+}
+
+function Rows({ rows, total = false }: { rows: [string, string][]; total?: boolean }) {
+  if (!rows.length) return null;
+  return (
+    <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 tabular-nums">
+      {rows.map(([k, v], i) => (
+        <div key={i} className={`contents ${total && i === rows.length - 1 ? "font-semibold" : ""}`}><dt className="text-left text-ink-soft">{k}</dt><dd className="text-right">{v}</dd></div>
+      ))}
+    </dl>
+  );
+}
+
+const RANK_ORDER: Rank[] = ["A", "T", "K", "Q", "J", "9"];
+// Black and red alternate, so aces around never puts two reds side by side.
+const SUIT_ORDER: Suit[] = ["S", "H", "C", "D"];
+/** A piece's cards in reading order: by suit, then high to low (A 10 K Q J, Q♠ J♦). */
+const inOrder = (cards: CardId[]) => [...cards].sort((a, b) => {
+  const x = splitCard(a), y = splitCard(b);
+  return SUIT_ORDER.indexOf(x.suit) - SUIT_ORDER.indexOf(y.suit) || RANK_ORDER.indexOf(x.rank) - RANK_ORDER.indexOf(y.rank);
+});
+
+/** A player's meld on one row of tiny overlapping cards, a small gap between pieces, and the points at the end. */
+function MeldCards({ meld }: { meld: SeatMeld }) {
+  const { prefs } = useCardPrefs();
+  const said = meld.items.map(it => `${it.points} for ${inOrder(it.cards).map(cardName).join(", ")}`).join("; ");
+  return (
+    <div className="mt-0.5 first:mt-0">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-soft">{meld.name}</div>
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex min-h-7 flex-wrap items-center gap-y-1 py-0.5" aria-label={said || "no meld"} role="img">
+          {meld.items.map((it, i) => (
+            <span key={i} className={`flex ${i > 0 ? "ml-1" : ""}`}>
+              {inOrder(it.cards).map((c, j) => {
+                const { rank, suit } = splitCard(c);
+                return (
+                  <span key={j} style={{ color: suitInk(suit, prefs.fourColour) }}
+                    className={`flex h-6 w-[18px] shrink-0 flex-col items-start rounded-[3px] bg-white pl-0.5 pt-0.5 text-[9px] font-bold leading-[10px] tracking-[-0.04em] shadow-[0_0_0_1px_rgba(36,29,29,0.28),-1px_0_2px_rgba(0,0,0,0.12)] ${j > 0 ? "-ml-1.5" : ""}`}>
+                    <span>{RANK_LABEL[rank]}</span><span className="tracking-normal">{SUIT_GLYPH[suit]}</span>
+                  </span>
+                );
+              })}
+            </span>
+          ))}
+        </span>
+        <span className="tabular-nums">{meld.points}</span>
+      </div>
+    </div>
+  );
 }
 
 const SUIT_INK: Record<Suit, string> = { S: "var(--chalk)", C: "var(--chalk)", H: "var(--deck-red-soft)", D: "var(--deck-red-soft)" };
@@ -81,15 +138,27 @@ export function ScoreTag({ score, name, align, placement = "below" }: { score: S
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const popId = useId();
+  const pop = useRef<HTMLDivElement>(null);
+  // Wide meld rows can push the breakdown past a phone's edge: nudge it back inside, 8px clear.
+  const [nudge, setNudge] = useState(0);
+  useLayoutEffect(() => {
+    if (!open || !pop.current) return;
+    const r = pop.current.getBoundingClientRect();
+    const left = r.left - nudge, right = r.right - nudge;
+    const shift = right > window.innerWidth - 8 ? window.innerWidth - 8 - right : left < 8 ? 8 - left : 0;
+    if (shift !== nudge) setNudge(shift);
+  }, [open, nudge]);
   useEffect(() => {
     if (!open) return;
     const away = (e: PointerEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(false); };
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("pointerdown", away); document.addEventListener("keydown", key);
-    return () => { document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", key); };
+    // Its placement was measured for this screen; a resize or rotation closes it rather than leave it adrift.
+    const drift = () => setOpen(false);
+    document.addEventListener("pointerdown", away); document.addEventListener("keydown", key); window.addEventListener("resize", drift);
+    return () => { document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", key); window.removeEventListener("resize", drift); };
   }, [open]);
   if (score.main === null && score.small === null) return null;
-  const detail = score.rows.length > 0;
+  const detail = score.top.length + score.meld.length + score.rows.length > 0;
   const body = score.main !== null ? (
     <>
       <span className="font-semibold">{score.main}</span>
@@ -113,12 +182,16 @@ export function ScoreTag({ score, name, align, placement = "below" }: { score: S
         {body}
       </button>
       {open && (
-        <div id={popId} role="group" aria-label={name === "You" ? "Your side this hand" : `${name}'s side this hand`} className={`panel absolute z-30 min-w-[150px] ${placement === "above" ? "bottom-full mb-1" : "top-full mt-1"} px-3 py-2 text-xs ${side}`}>
-          <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 tabular-nums">
-            {score.rows.map(([k, v], i) => (
-              <div key={i} className={`contents ${i === score.rows.length - 1 ? "font-semibold" : ""}`}><dt className="text-left text-ink-soft">{k}</dt><dd className="text-right">{v}</dd></div>
-            ))}
-          </dl>
+        <div ref={pop} id={popId} role="group" style={nudge ? { transform: `translateX(${nudge}px)` } : undefined} aria-label={name === "You" ? "Your side this hand" : `${name}'s side this hand`} className={`panel absolute z-30 w-max min-w-[150px] max-w-[min(280px,calc(100vw-16px))] ${placement === "above" ? "bottom-full mb-1" : "top-full mt-1"} px-3 py-2 text-xs ${side}`}>
+          <Rows rows={score.top} />
+          {score.meld.length > 0 && (
+            <div className={score.top.length ? "mt-1 border-t border-ink/10 pt-1" : ""}>
+              {score.meld.map((m, i) => <MeldCards key={i} meld={m} />)}
+            </div>
+          )}
+          {score.rows.length > 0 && (
+            <div className={score.top.length || score.meld.length ? "mt-1 border-t border-ink/10 pt-1" : ""}><Rows rows={score.rows} total /></div>
+          )}
         </div>
       )}
     </div>
