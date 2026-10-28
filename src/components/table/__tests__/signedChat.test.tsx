@@ -153,6 +153,19 @@ it("keeps another identical send pending when a failed send's broadcast comes la
   await act(async () => { second.resolve(mine("b", "👍")); await b; });
   expect(chat.messages.map(m => m.id)).toEqual(["a", "b"]);
 });
+it("does not let a failed send's late broadcast hide a later identical send", async () => {
+  render(<Harness />);
+  const first = deferred(), second = deferred();
+  mocks.api.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+  let a!: Promise<void>, b!: Promise<void>;
+  act(() => { a = chat.send("👍") as Promise<void>; });
+  await act(async () => { first.reject(new Error("Network")); await expect(a).rejects.toThrow("Network"); });
+  act(() => { b = chat.send("👍") as Promise<void>; });
+  await emit(mine("a", "👍"));
+  expect(chat.messages.map(m => m.id)).toEqual(["a", expect.stringMatching(/^pending-/)]);
+  await act(async () => { second.resolve(mine("b", "👍")); await b; });
+  expect(chat.messages.map(m => m.id)).toEqual(["a", "b"]);
+});
 it("leaves the talk as it was when a send fails, even at the message cap", async () => {
   render(<Harness />);
   for (let i = 0; i < 100; i++) await emit(signed("BCDFGH", keys.privateKey, { ...line, id: `m${i}` }));

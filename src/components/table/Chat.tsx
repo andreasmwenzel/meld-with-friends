@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { api, type Profile } from "@/lib/api";
-import { canVerifyChat, openChat, type ChatMessage, type SignedChat } from "@/lib/chatAuth";
+import { CHAT_FRESH_MS, canVerifyChat, openChat, type ChatMessage, type SignedChat } from "@/lib/chatAuth";
 import { ChatBody, type ShownMessage, type TableChat } from "./ChatDock";
 
 export type { TableChat } from "./ChatDock";
@@ -35,8 +35,9 @@ export function useTableChat(code: string, me: Profile, enabled: boolean, public
   const [early, setEarly] = useState<ChatMessage[]>([]);
   const earlyRef = useRef(early);
   const answered = useRef(new Set<string>());
-  // Failed sends of a text whose broadcast may still come: each lets one later own broadcast of it pass unmatched.
-  const owed = useRef(new Map<string, number>());
+  // Failed sends whose broadcast may still come: each lets one later own broadcast of its text pass unmatched.
+  // A broadcast older than CHAT_FRESH_MS is refused anyway, so each lasts that long.
+  const owed = useRef<{ text: string; until: number }[]>([]);
 
   useEffect(() => {
     if (!enabled || !publicKey) return;
@@ -50,8 +51,9 @@ export function useTableChat(code: string, me: Profile, enabled: boolean, public
       seen.add(m.id);
       setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev.slice(-99), m]));
       if (m.from === me.id && !answered.current.has(m.id) && pendingRef.current.some((p) => p.text === m.text)) {
-        const n = owed.current.get(m.text) ?? 0;
-        if (n > 0) owed.current.set(m.text, n - 1);
+        owed.current = owed.current.filter((o) => o.until > Date.now());
+        const o = owed.current.findIndex((x) => x.text === m.text);
+        if (o >= 0) owed.current = owed.current.filter((_, j) => j !== o);
         else {
           earlyRef.current = [...earlyRef.current, m];
           setEarly((prev) => [...prev, m]);
@@ -96,14 +98,13 @@ export function useTableChat(code: string, me: Profile, enabled: boolean, public
         const gone = earlyRef.current[i];
         earlyRef.current = earlyRef.current.filter((x) => x !== gone);
         setEarly((prev) => prev.filter((x) => x !== gone));
-      } else owed.current.set(t, (owed.current.get(t) ?? 0) + 1);
+      } else owed.current = [...owed.current, { text: t, until: Date.now() + CHAT_FRESH_MS }];
       throw e;
     } finally {
       pendingRef.current = pendingRef.current.filter((x) => x.id !== id);
       setPending((prev) => prev.filter((x) => x.id !== id));
       // A broadcast whose response was lost must not hide a later send of the same text.
       if (!pendingRef.current.some((x) => x.text === t)) {
-        owed.current.delete(t);
         earlyRef.current = earlyRef.current.filter((x) => x.text !== t);
         setEarly((prev) => prev.filter((x) => x.text !== t));
       }
