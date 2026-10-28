@@ -98,8 +98,9 @@ describe("staleBuild", () => {
 /** Renders seat 0 with the server stamping each view with `build()`; returns a way to make the table fetch again. */
 async function table(build: () => string | undefined, intercept?: (
   url: string, init: RequestInit | undefined, view: PlayerView,
-) => Promise<Response> | undefined, options: { feed?: GameFeed; moveKey?: string; inspect?: (view: PlayerView) => void } = {}) {
-  const { state } = buildScenario(PRESETS.find((p) => p.id === "play-lead")!.spec);
+) => Promise<Response> | undefined, options: { feed?: GameFeed; moveKey?: string; inspect?: (view: PlayerView) => void; preset?: string } = {}) {
+  const { preset = "play-lead", ...gameOptions } = options;
+  const { state } = buildScenario(PRESETS.find((p) => p.id === preset)!.spec);
   const snap = {
     table: { id: "t", code: CODE, host: "u0", current_game_id: "game-id", status: "playing", rules: { ...state.rules } },
     seats: [0, 1, 2, 3].map((seat) => seat === 0 ? { seat, user_id: "u0", bot: null, profile: me } : { seat, user_id: null, profile: null, bot: "Robo" }),
@@ -114,7 +115,7 @@ async function table(build: () => string | undefined, intercept?: (
     return Response.json({ ...viewFor(state, 0), ready: [], build: build(), moveKey: options.moveKey });
   }) as typeof fetch;
   let ui!: ReturnType<typeof render>;
-  await act(async () => { ui = render(<Game code={CODE} me={me} snap={snap} rev={0} onTableChange={() => {}} {...options} />); });
+  await act(async () => { ui = render(<Game code={CODE} me={me} snap={snap} rev={0} onTableChange={() => {}} {...gameOptions} />); });
   await vi.waitFor(() => { if (!document.querySelector("[data-hand-card]")) throw new Error("hand not rendered"); });
   let rev = 0;
   return async (settle = true) => {
@@ -217,6 +218,13 @@ describe("a table left open across a deploy", () => {
     await act(async () => { finish(); });
     await act(() => new Promise((r) => setTimeout(r, 400)));
     expect(reloadPage).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["bid-open", "pass-back", "meld-waiting", "hand-made", "play-lead"])("offers Leave the game from the menu in %s", async (preset) => {
+    await table(() => BUILD_ID, undefined, { preset });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Menu" })); });
+    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Options" })); });
+    expect(screen.getByRole("button", { name: "Leave the game" })).toBeTruthy();
   });
 
   it("ignores new card actions while waiting to reload with no mutation running", async () => {
