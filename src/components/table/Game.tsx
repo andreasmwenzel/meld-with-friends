@@ -994,8 +994,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
                 )}
                 {push.error && push.supported && view.rules.pace === "leisurely" && <p role="status" className="text-xs text-chalk-faint">{push.error}</p>}
                 {replayHref && <Link href={replayHref} className={linkCls}>Review the game</Link>}
-                {view.phase !== "game_over" && snap.mySeat !== null && !paused && <button type="button" onClick={() => { setMenu(false); void pauseTable(); }} className={linkCls}>Pause the table</button>}
-                {view.phase === "playing" && snap.mySeat !== null && <button type="button" onClick={leave} className={linkCls}>Leave the game</button>}
+                {!local && view.phase !== "game_over" && snap.mySeat !== null && !paused && <button type="button" onClick={() => { setMenu(false); void pauseTable(); }} className={linkCls}>Pause the table</button>}
+                {!local && view.phase !== "game_over" && snap.mySeat !== null && <button type="button" onClick={leave} className={linkCls}>Leave the game</button>}
                 {!local && <Link href="/" className={linkCls}>Your tables</Link>}
               </div>
               <div className="panel flex flex-col gap-2.5 p-3 text-left">
