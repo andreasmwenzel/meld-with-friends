@@ -225,6 +225,7 @@ function Centre({ frame, trick, rel, nameOf, compact, flying, sweep }: {
     0: "bottom-0 left-1/2 -translate-x-1/2", 1: "left-0 top-1/2 -translate-y-1/2", 2: "top-0 left-1/2 -translate-x-1/2", 3: "right-0 top-1/2 -translate-y-1/2",
   };
   const done = !!trick && trick.winner !== null;
+  const four = useCardPrefs().prefs.fourColour;
 
   return (
     <div className="mx-auto w-full max-w-[300px]">
@@ -244,7 +245,7 @@ function Centre({ frame, trick, rel, nameOf, compact, flying, sweep }: {
           return (
             <div key={p.card} className={`absolute ${spots[rel(p.seat)]}`}>
               <div className={cls} data-sweep={entering && sweeping ? "" : undefined} style={style}>
-                <PlayingCard card={p.card} width={w} selected={done && trick.winner === p.seat} />
+                <PlayingCard card={p.card} width={w} fourColour={four} selected={done && trick.winner === p.seat} />
               </div>
             </div>
           );

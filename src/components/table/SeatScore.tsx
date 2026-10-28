@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { Bid, CardId, HandRecord, MeldItem, Phase, Rank, SeatIndex, Suit, Team } from "@/engine/types";
-import { RANK_LABEL, SUIT_GLYPH, cardName, splitCard, suitInk } from "@/components/cards/PlayingCard";
+import { RANK_LABEL, SUIT_GLYPH, cardName, splitCard, suitInk, suitInkOnCloth } from "@/components/cards/PlayingCard";
 import { useCardPrefs } from "@/lib/cardPrefs";
 import { teamOf } from "./types";
 
@@ -125,8 +125,6 @@ function MeldCards({ meld }: { meld: SeatMeld }) {
   );
 }
 
-const SUIT_INK: Record<Suit, string> = { S: "var(--chalk)", C: "var(--chalk)", H: "var(--deck-red-soft)", D: "var(--deck-red-soft)" };
-
 /** A small D on a player's avatar. Say "dealer" in the chip's accessible label; this is decorative. */
 export function DealerMark() {
   return <span aria-hidden title="Dealer" className="absolute -bottom-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-chalk text-[9px] font-bold leading-none text-ink">D</span>;
@@ -136,6 +134,7 @@ export function DealerMark() {
 /** `placement` is where the breakdown opens: above for your own seat, which sits at the bottom of the board. */
 export function ScoreTag({ score, name, align, placement = "below" }: { score: SeatScore; name: string; align: "left" | "center" | "right"; placement?: "above" | "below" }) {
   const [open, setOpen] = useState(false);
+  const four = useCardPrefs().prefs.fourColour;
   const root = useRef<HTMLDivElement>(null);
   const popId = useId();
   const pop = useRef<HTMLDivElement>(null);
@@ -162,7 +161,7 @@ export function ScoreTag({ score, name, align, placement = "below" }: { score: S
   const body = score.main !== null ? (
     <>
       <span className="font-semibold">{score.main}</span>
-      {score.suit && <span style={{ color: SUIT_INK[score.suit] }}>{SUIT_GLYPH[score.suit]}</span>}
+      {score.suit && <span style={{ color: suitInkOnCloth(score.suit, four) }}>{SUIT_GLYPH[score.suit]}</span>}
       {score.total !== null && <span className="ml-1 rounded-full bg-chalk/15 px-1.5 font-semibold tabular-nums">{score.total}</span>}
     </>
   ) : <span className="tabular-nums text-chalk-faint">{score.small}</span>;

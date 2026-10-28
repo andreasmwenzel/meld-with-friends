@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { CardId, PlayerView, SeatIndex, Team } from "@/engine/types";
 import { sortHand } from "@/engine/hand";
-import { PlayingCard, SUIT_GLYPH, SUIT_NAME } from "@/components/cards/PlayingCard";
+import { PlayingCard, SUIT_GLYPH, SUIT_NAME, suitInk } from "@/components/cards/PlayingCard";
 import { useCardPrefs } from "@/lib/cardPrefs";
 import { api } from "@/lib/api";
 import { teamOf } from "./types";
@@ -45,7 +45,8 @@ const teamInk = (t: Team) => (t === "red" ? "var(--deck-red)" : "var(--deck-blue
 const lc = (name: string) => (name === "You" ? "you" : name);
 
 function Trump({ suit }: { suit: NonNullable<PlayerView["trump"]> }) {
-  return <span style={{ color: suit === "H" || suit === "D" ? "var(--pip-red)" : "var(--pip-black)" }}>{SUIT_GLYPH[suit]} {SUIT_NAME[suit]}</span>;
+  const { prefs } = useCardPrefs();
+  return <span style={{ color: suitInk(suit, prefs.fourColour) }}>{SUIT_GLYPH[suit]} {SUIT_NAME[suit]}</span>;
 }
 
 function Cards({ cards, width = 26 }: { cards: CardId[]; width?: number }) {
