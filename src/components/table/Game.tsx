@@ -28,6 +28,7 @@ import { useCardPrefs } from "@/lib/cardPrefs";
 import { usePushNotifications } from "@/lib/push";
 import { autoMeldSelection, meldBySuit, sortHand } from "@/engine/hand";
 import { describeConstraint } from "@/engine/rules";
+import { describeRules } from "@/components/rules/rules";
 import { cardLabel } from "@/engine/deck";
 import { motionTimings, flyFrom, sweepTo } from "./motion";
 import { ClaimButton, useClaimReveal } from "./Claim";
@@ -42,7 +43,7 @@ const CHIME_KEY = "meld.chime";
 const WIDE = "(min-width: 64rem)";
 const subscribeWide = (cb: () => void) => { const mq = window.matchMedia(WIDE); mq.addEventListener("change", cb); return () => mq.removeEventListener("change", cb); };
 const readWide = () => window.matchMedia(WIDE).matches;
-type MenuTab = "score" | "hand" | "options";
+type MenuTab = "score" | "hand" | "rules" | "options";
 const TURN_PREFIX = "Your turn · ";
 /** How far a lifted card rises out of the hand. */
 const LIFT_PX = 14;
@@ -780,7 +781,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     e.preventDefault();
     cards[to].focus();
   };
-  const tabs: [MenuTab, string][] = [["score", "Score"], ["hand", "This hand"], ["options", "Options"]];
+  const tabs: [MenuTab, string][] = [["score", "Score"], ["hand", "This hand"], ["rules", "Rules"], ["options", "Options"]];
   // What scripts/overlap.mjs should find on screen, so a hand that fails to render (or to be found) fails the check
   // instead of passing it with nothing measured: the hands drawn as cards (a sideways phone shows the others as a count
   // until they are face up), the phase, whether a card of yours can be played now, and whether the end is a claim.
@@ -979,6 +980,14 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           {recapOpen && (
             <div role="tabpanel" id="menu-panel-hand" aria-labelledby="menu-tab-hand">
               <Recap view={view} nameOf={nameOf} lastSeenRev={lastSeenRev} />
+            </div>
+          )}
+          {tab === "rules" && (
+            <div role="tabpanel" id="menu-panel-rules" aria-labelledby="menu-tab-rules">
+              <p className="text-sm font-semibold text-chalk">House rules</p>
+              <ul className="mt-2 flex flex-col gap-2 text-sm text-chalk-faint">
+                {describeRules(view.rules).map((line) => <li key={line}>{line}</li>)}
+              </ul>
             </div>
           )}
           {tab === "options" && (

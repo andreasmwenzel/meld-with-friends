@@ -133,7 +133,16 @@ describe("table talk at the board", () => {
     expect(screen.getByRole("button", { name: "Menu" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Menu" }));
     const tabs = within(screen.getByRole("tablist", { name: "Menu" })).getAllByRole("tab").map((t) => t.textContent);
-    expect(tabs).toEqual(["Score", "This hand", "Options"]);
+    expect(tabs).toEqual(["Score", "This hand", "Rules", "Options"]);
+  });
+
+  it("shows the table's house rules in the menu's Rules tab", async () => {
+    await table("play-lead");
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Rules" }));
+    const panel = screen.getByRole("tabpanel", { name: "Rules" });
+    expect(panel.textContent).toMatch(/Play to [\d,]+\./);
+    expect(panel.textContent).toMatch(/Minimum bid \d+, in steps of \d+\./);
   });
 
   it("closes when the menu opens, so messages hidden behind the menu count as unread", async () => {
