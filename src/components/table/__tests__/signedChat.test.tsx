@@ -13,8 +13,8 @@ vi.mock("@/lib/api", () => ({ api: mocks.api }));
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ format: "der", type: "spki" }).subarray(-32).toString("base64url");
 const line = { id: "one", from: "other", name: "Server name", text: "Hello table", at: Date.now() };
-const signed = (code = "BCDFGH", privateKey = keys.privateKey): SignedChat => {
-  const message = chatMessage(code, line);
+const signed = (code = "BCDFGH", privateKey = keys.privateKey, m = line): SignedChat => {
+  const message = chatMessage(code, m);
   return { message, sig: sign(null, Buffer.from(message), privateKey).toString("base64url") };
 };
 let receive: (event: { payload: unknown }) => void;
@@ -88,6 +88,54 @@ it("does not subscribe or post for an unseated visitor", async () => {
   await chat.send("Hello");
   expect(mocks.channel).not.toHaveBeenCalled();
   expect(mocks.api).not.toHaveBeenCalled();
+});
+
+const mine = (id: string, text: string) => signed("BCDFGH", keys.privateKey, { id, from: "me", name: "Local name", text, at: Date.now() });
+const deferred = () => {
+  let resolve!: (v: SignedChat) => void, reject!: (e: Error) => void;
+  const promise = new Promise<SignedChat>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+};
+const sending = () => chat.messages.filter(m => (m as { pending?: boolean }).pending).length;
+
+it("shows a sent message at once as sending, then the signed copy", async () => {
+  render(<Harness />);
+  const reply = deferred();
+  mocks.api.mockReturnValue(reply.promise);
+  let done!: Promise<void>;
+  act(() => { done = chat.send("On my way") as Promise<void>; });
+  expect(screen.getByText("On my way")).toBeTruthy();
+  expect(screen.getByText(/sending/)).toBeTruthy();
+  await act(async () => { reply.resolve(mine("a", "On my way")); await done; });
+  expect(screen.queryByText(/sending/)).toBeNull();
+  expect(chat.messages.map(m => m.id)).toEqual(["a"]);
+});
+it("keeps each identical send pending until its own response, whatever order things arrive in", async () => {
+  render(<Harness />);
+  const first = deferred(), second = deferred();
+  mocks.api.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+  let a!: Promise<void>, b!: Promise<void>;
+  act(() => { a = chat.send("👍") as Promise<void>; b = chat.send("👍") as Promise<void>; });
+  expect(sending()).toBe(2);
+  // The second send's broadcast arrives first, then its response.
+  await emit(mine("b", "👍"));
+  expect(chat.messages).toHaveLength(2);
+  expect(sending()).toBe(1);
+  await act(async () => { second.resolve(mine("b", "👍")); await b; });
+  expect(chat.messages).toHaveLength(2);
+  expect(sending()).toBe(1);
+  await act(async () => { first.resolve(mine("a", "👍")); await a; });
+  expect(chat.messages.map(m => m.id)).toEqual(["b", "a"]);
+  expect(sending()).toBe(0);
+});
+it("leaves the talk as it was when a send fails, even at the message cap", async () => {
+  render(<Harness />);
+  for (let i = 0; i < 100; i++) await emit(signed("BCDFGH", keys.privateKey, { ...line, id: `m${i}` }));
+  expect(chat.messages).toHaveLength(100);
+  mocks.api.mockRejectedValue(new Error("Slow down"));
+  await act(async () => { await expect(chat.send("Hello")).rejects.toThrow("Slow down"); });
+  expect(chat.messages).toHaveLength(100);
+  expect(chat.messages[0].id).toBe("m0");
 });
 
 function DraftHarness({ send, shown }: { send: TableChat["send"]; shown: boolean }) {
