@@ -46,7 +46,7 @@ export function Lobby({ userId, profile, guest, tables, invites, autoDeal, defau
         <h1 className="display" style={{ fontSize: "clamp(40px, 6vw, 72px)" }}>
           Evening, {profile?.display_name?.split(" ")[0] ?? "friend"}.
         </h1>
-        {profile && <div className="mt-3"><ProfileEditor me={profile} /></div>}
+        {profile && <div id="profile" className="mt-3 scroll-mt-4"><ProfileEditor me={profile} /></div>}
         <Invitations invites={invites} userId={guest ? null : userId} />
         <div className="mt-8 flex items-baseline justify-between gap-4">
           <h2 className="display" style={{ fontSize: 34 }}>Your tables</h2>
