@@ -9,7 +9,7 @@ import { applyPublicMove, type PublicMove } from "@/engine/publicMove";
 import { openMove } from "@/lib/moveAuth";
 import { BUILD_ID, recordBuildReload, reloadPage, staleBuild } from "@/lib/staleClient";
 import type { Action, CardId, PlayerView, SeatIndex, Suit, Team } from "@/engine/types";
-import { PlayingCard, CardBack, SUIT_GLYPH, SUIT_NAME, RANK_LABEL, splitCard, cardName } from "@/components/cards/PlayingCard";
+import { PlayingCard, CardBack, SUIT_GLYPH, SUIT_NAME, RANK_LABEL, splitCard, cardName, suitInk, suitInkOnCloth } from "@/components/cards/PlayingCard";
 import { Avatar } from "@/components/site/Avatar";
 import { SEAT_LABEL, teamOf, type Snapshot } from "./types";
 import { Scorepad } from "./Scorepad";
@@ -792,7 +792,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           <p className="min-w-0 truncate">
             <span className="font-semibold">Hand {view.handNumber}</span>
             {view.dealer === view.seat && view.phase === "bidding" && <span className="text-chalk-faint"> · you deal</span>}
-            {view.highBid && <span className="text-chalk-faint"> · <span className="text-chalk">{view.highBid.shoot ? "moon" : view.highBid.amount}</span>{view.trump && <span style={{ color: view.trump === "H" || view.trump === "D" ? "var(--deck-red-soft)" : "var(--chalk)" }}>{SUIT_GLYPH[view.trump]}</span>} {nameOf(view.highBid.seat)}</span>}
+            {view.highBid && <span className="text-chalk-faint"> · <span className="text-chalk">{view.highBid.shoot ? "moon" : view.highBid.amount}</span>{view.trump && <span style={{ color: suitInkOnCloth(view.trump, cardPrefs.fourColour) }}>{SUIT_GLYPH[view.trump]}</span>} {nameOf(view.highBid.seat)}</span>}
           </p>
           <p className="whitespace-nowrap short:order-last short:basis-full">
             <span className={myTeam === "red" ? "text-deck-red-soft" : "text-deck-blue-soft"}>Us</span> {view.score[myTeam].toLocaleString()}
@@ -1039,6 +1039,7 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
   /** the shoot was just declared: this seat's cards fold away as you watch */
   fold?: boolean;
 }) {
+  const four = useCardPrefs().prefs.fourColour;
   // The engine keeps meld in the hand; while it lies on the table it is not among the backs.
   const n = faceUp?.length ?? view.handCounts[seat] - laid;
   const team = teamOf(seat);
@@ -1082,9 +1083,9 @@ function OpponentRow({ seat, view, name, align, score, laid, bot = false, standI
       ) : <div data-hand={side} data-hand-cards={n} className={`flex ${vertical ? "flex-col" : "flex-row"}`} style={vertical ? { padding: "0 7px" } : undefined} role={faceUp ? "group" : "img"} aria-label={`${n} cards`}>
         {faceUp ? faceUp.map((c, i) => vertical ? (
           <div key={c} data-claim-card={view.claim ? c : undefined} className="relative shrink-0" style={{ width: (REV_W * 7) / 5, height: i === faceUp.length - 1 ? REV_W : 17, zIndex: align === "right" ? faceUp.length - i : i }}>
-            <PlayingCard card={c} width={REV_W} style={{ position: "absolute", left: "50%", top: REV_W / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg)` }} />
+            <PlayingCard card={c} width={REV_W} fourColour={four} style={{ position: "absolute", left: "50%", top: REV_W / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg)` }} />
           </div>
-        ) : <span key={c} data-claim-card={view.claim ? c : undefined} style={{ marginLeft: i ? -REV_W * 0.45 : 0 }}><PlayingCard card={c} width={REV_W} /></span>)
+        ) : <span key={c} data-claim-card={view.claim ? c : undefined} style={{ marginLeft: i ? -REV_W * 0.45 : 0 }}><PlayingCard card={c} width={REV_W} fourColour={four} /></span>)
         : Array.from({ length: n }).map((_, i) => (
           <CardBack key={i} width={34} team={team}
             style={vertical ? { marginTop: i ? -40 : 0, transform: align === "left" ? "rotate(90deg)" : "rotate(-90deg)" } : { marginLeft: i ? -24 : 0 }} />
@@ -1151,12 +1152,13 @@ function CompactSeat({ seat, className, team, active, name, chip, score, n, face
 
 /** Small face-up cards overlapping so each shows only its corner index, wrapping after `perRow`. */
 function SmallFan({ cards, perRow, label, width = MELD_W, lit, hand }: { cards: CardId[]; perRow: number; label: string; width?: number; lit?: CardId[] | null; hand?: string }) {
+  const four = useCardPrefs().prefs.fourColour;
   const w = width, h = (w * 7) / 5, peekX = Math.round(w / 2), peekY = Math.round(w * 0.72);
   const cols = Math.min(perRow, cards.length);
   return (
     <div data-hand={hand} data-hand-cards={hand ? cards.length : undefined} className="flex flex-wrap" role="group" aria-label={label} title={label}
       style={{ width: w + (cols - 1) * peekX + 0.5, paddingLeft: w - peekX, paddingTop: h - peekY }}>
-      {cards.map((c) => <span key={c} data-claim-card={c} style={{ marginLeft: peekX - w, marginTop: peekY - h, flexShrink: 0 }}><PlayingCard card={c} width={w} selected={lit?.includes(c) ?? false} /></span>)}
+      {cards.map((c) => <span key={c} data-claim-card={c} style={{ marginLeft: peekX - w, marginTop: peekY - h, flexShrink: 0 }}><PlayingCard card={c} width={w} fourColour={four} selected={lit?.includes(c) ?? false} /></span>)}
     </div>
   );
 }
@@ -1171,7 +1173,7 @@ function MeldLine({ rules, hand, trump, lit, setLit }: { rules: PlayerView["rule
   };
   useEffect(() => () => setLit(null), [setLit]);
   const worth = all.filter((x) => x.total > 0);
-  const suitColour = (s: Suit) => (s === "H" || s === "D" ? "var(--pip-red)" : "var(--pip-black)");
+  const four = useCardPrefs().prefs.fourColour;
   if (trump) {
     const mine = all.find((x) => x.suit === trump);
     if (!mine || mine.items.length === 0) return <p className="mt-2 text-center text-xs text-chalk-faint">No meld in {SUIT_NAME[trump]}.</p>;
@@ -1201,7 +1203,7 @@ function MeldLine({ rules, hand, trump, lit, setLit }: { rules: PlayerView["rule
           return (
             <button key={x.suit} type="button" aria-pressed={on} onClick={() => pick(x.suit, x.cards)}
               className={`hit inline-flex h-8 min-w-11 items-center justify-center gap-1 rounded-full px-2.5 ${on ? "bg-chalk" : "bg-white/10 hover:bg-white/20"}`}>
-              <span style={{ color: on ? suitColour(x.suit) : undefined }} className={on ? "" : x.suit === "H" || x.suit === "D" ? "text-deck-red-soft" : "text-chalk"}>{SUIT_GLYPH[x.suit]}</span>
+              <span style={{ color: on ? suitInk(x.suit, four) : suitInkOnCloth(x.suit, four) }}>{SUIT_GLYPH[x.suit]}</span>
               {" "}<span className={on ? "text-[color:var(--pip-black)]" : "text-chalk"}>{x.total}</span>
             </button>
           );
@@ -1306,6 +1308,7 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
   lit: CardId[] | null;
 }) {
   // Sideways on a phone the trick shrinks to fit between your hand and the seat across.
+  const four = useCardPrefs().prefs.fourColour;
   const trickW = compact ? 42 : 56;
   const done = !!trick && trick.winner !== null;
   const dim = trick !== view.currentTrick && (view.phase === "hand_over" || view.phase === "game_over");
@@ -1360,7 +1363,7 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
           <div key={(peeking ? "p" : "") + p.card} className={`absolute ${spots[r]}`} style={{ opacity: dim ? 0.55 : 1 }}>
             <div className={peeking ? undefined : "trick-card"} data-trick-card={peeking ? undefined : p.card} data-sweep={sweeping ? "" : undefined}
               style={peeking ? undefined : { ...flyFrom(r, p.card), ...(sweeping ? sweepTo(rel(shown.winner!)) : null) } as React.CSSProperties}>
-              <PlayingCard card={p.card} width={trickW} selected={shown.winner === p.seat} />
+              <PlayingCard card={p.card} width={trickW} fourColour={four} selected={shown.winner === p.seat} />
             </div>
           </div>
         );
@@ -1455,6 +1458,7 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld }: {
   act: (a: ClientAction) => Promise<unknown>; nameOf: (s: SeatIndex) => string; autoMeld: boolean;
 }) {
   const L = view.legal;
+  const four = useCardPrefs().prefs.fourColour;
   const trumpLabel = useId();
   const misdeal = L.canMisdeal ? () => void act({ type: "misdeal" }) : null;
   // Right after a throw-in, the other seats see the hand that scrapped the deal while the new one is bid.
@@ -1501,7 +1505,7 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld }: {
         <span role="group" aria-labelledby={trumpLabel} className="flex gap-2">
           {(["S", "H", "C", "D"] as Suit[]).map((s) => (
             <button key={s} className="btn btn-chalk" style={{ width: 48, padding: 0 }} onClick={() => act({ type: "declare_trump", suit: s })} disabled={busy} aria-label={SUIT_NAME[s]}>
-              <span style={{ fontSize: 22, color: s === "H" || s === "D" ? "var(--pip-red)" : "var(--pip-black)" }}>{SUIT_GLYPH[s]}</span>
+              <span style={{ fontSize: 22, color: suitInk(s, four) }}>{SUIT_GLYPH[s]}</span>
             </button>
           ))}
         </span>

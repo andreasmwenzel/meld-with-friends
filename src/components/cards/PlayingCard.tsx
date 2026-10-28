@@ -14,6 +14,14 @@ export function suitInk(suit: Suit, fourColour: boolean): string {
   return "var(--pip-black)";
 }
 
+/** A suit glyph set on the cloth rather than on card stock: the same deck, in the soft inks that read on oxblood. */
+export function suitInkOnCloth(suit: Suit, fourColour: boolean): string {
+  if (suit === "H") return "var(--deck-red-soft)";
+  if (suit === "D") return fourColour ? "var(--deck-blue-soft)" : "var(--deck-red-soft)";
+  if (suit === "C") return fourColour ? "var(--pip-green-soft)" : "var(--chalk)";
+  return "var(--chalk)";
+}
+
 export function splitCard(id: CardId): { rank: Rank; suit: Suit } {
   return { rank: id[0] as Rank, suit: id[1] as Suit };
 }
@@ -34,17 +42,19 @@ type Props = {
   title?: string;
   /** display options; omit for the standard deck with regular indices */
   prefs?: CardPrefs;
-  /** a trump card in your hand: the face takes a faint wash when the trump tint option is on */
+  /** a trump card in your hand: the face takes a wash when the trump tint option is on */
   trump?: boolean;
+  /** the deck's colours alone, for cards on the table that keep the standard indices; overrides prefs */
+  fourColour?: boolean;
 };
 
 /**
  * A pinochle card. Chalk face, Bodoni rank, one large pip. Pure SVG so it scales from a 36px
  * trick thumbnail to a 220px hero card without losing its edge.
  */
-export function PlayingCard({ card, width = 96, selected, dimmed, className, style, title, prefs, trump }: Props) {
+export function PlayingCard({ card, width = 96, selected, dimmed, className, style, title, prefs, trump, fourColour }: Props) {
   const { rank, suit } = splitCard(card);
-  const four = prefs?.fourColour === true;
+  const four = fourColour ?? prefs?.fourColour === true;
   const big = prefs?.bigIndex === true;
   const ink = suitInk(suit, four);
   const label = RANK_LABEL[rank];

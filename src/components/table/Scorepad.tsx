@@ -1,6 +1,7 @@
 import { Fragment, useState } from "react";
 import type { HandRecord, HandScoreBreakdown, PlayerView, SeatIndex, Team } from "@/engine/types";
-import { SUIT_GLYPH } from "@/components/cards/PlayingCard";
+import { SUIT_GLYPH, suitInk } from "@/components/cards/PlayingCard";
+import { useCardPrefs } from "@/lib/cardPrefs";
 import { teamOf } from "./types";
 
 /** Bodoni's hyphen is a hairline at display size, so a negative score read as positive. Draw a real minus in the sans face.
@@ -14,6 +15,7 @@ function BigScore({ n }: { n: number }) {
 export function Scorepad({ view, myTeam, nameOf, hideOpponentPoints = false }: { view: PlayerView; myTeam: Team; nameOf: (s: SeatIndex) => string; hideOpponentPoints?: boolean }) {
   const them: Team = myTeam === "red" ? "blue" : "red";
   const cols: Team[] = [myTeam, them];
+  const four = useCardPrefs().prefs.fourColour;
   const meldFor = (t: Team) => ([0, 1, 2, 3] as SeatIndex[]).filter((s) => teamOf(s) === t).reduce((n: number, s) => n + (view.melds[s] ?? []).reduce((a, m) => a + m.points, 0), 0);
   const color = (t: Team) => (t === "red" ? "var(--deck-red)" : "var(--deck-blue)");
   const label = (t: Team) => (t === myTeam ? "Us" : "Them");
@@ -34,7 +36,7 @@ export function Scorepad({ view, myTeam, nameOf, hideOpponentPoints = false }: {
         <div className="mt-5 border-t border-chalk-dim pt-4 text-sm">
           <Row k="Hand" v={String(view.handNumber)} />
           {view.highBid && <Row k="Bid" v={`${view.highBid.shoot ? "Shoot" : view.highBid.amount} · ${nameOf(view.highBid.seat)}`} />}
-          {view.trump && <Row k="Trump" v={SUIT_GLYPH[view.trump]} red={view.trump === "H" || view.trump === "D"} />}
+          {view.trump && <Row k="Trump" v={SUIT_GLYPH[view.trump]} ink={suitInk(view.trump, four)} />}
           <div className="mt-2 grid grid-cols-[1fr_auto_auto] gap-x-4 text-right">
             <span />
             {cols.map((t) => <span key={t} className="text-xs font-semibold" style={{ color: color(t) }}>{label(t)}</span>)}
@@ -67,11 +69,11 @@ export function Scorepad({ view, myTeam, nameOf, hideOpponentPoints = false }: {
 }
 
 
-function Row({ k, v, red }: { k: string; v: string; red?: boolean }) {
+function Row({ k, v, ink }: { k: string; v: string; ink?: string }) {
   return (
     <div className="flex justify-between">
       <span className="text-ink-soft">{k}</span>
-      <span style={red ? { color: "var(--pip-red)" } : undefined}>{v}</span>
+      <span style={ink ? { color: ink } : undefined}>{v}</span>
     </div>
   );
 }
