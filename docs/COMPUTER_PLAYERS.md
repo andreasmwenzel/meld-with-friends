@@ -103,10 +103,10 @@ neutral voice. The voices:
 - **Hazel**: sharp and competitive. Trash-talks with a wink, then gives credit anyway.
 - **Walt**: an unhurried old-timer. Fishing and porch talk, and tall tales from back in '62.
 
-Tapping a bot's name at the table opens its player menu, as for a person: the name, a two-word tag
-in the adjective_noun form of player handles, and one line in keeping with its voice
-(`src/lib/bots/profiles.ts`). The tags are honey_scone, level_ledger, velvet_starlet,
-roaring_bleacher, sly_shark and lazy_angler. They are shown only; no account carries them.
+Tapping a bot's name at the table opens its player menu, as for a person: the name and a two-word
+tag in the adjective_noun form of player handles that fits its voice (`src/lib/bots/profiles.ts`).
+The tags are honey_scone, level_ledger, velvet_starlet, roaring_bleacher, sly_shark and lazy_angler.
+They are shown only; no account carries them.
 
 House rules for the words: friendly table banter only, nothing that could sting a beginner, no
 gambling talk. A bot that bid and went set, or shot and missed, owns it and apologizes to its

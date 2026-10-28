@@ -1,21 +1,18 @@
 import type { BotName } from "./tableTalkLines";
 
 /**
- * What a bot's player menu shows: a two-word tag in the same adjective_noun form as players'
- * handles, and one line on who they are. Each follows the bot's table-talk voice.
- * Bots have no account, so the tag is only shown, never looked up.
+ * A bot's tag in its player menu: two words in the same adjective_noun form as players' handles, each
+ * following the bot's table-talk voice. Bots have no account, so the tag is only shown, never looked up.
  */
-export interface BotProfile { tag: string; about: string }
-
-export const botProfiles: Readonly<Record<BotName, BotProfile>> = {
-  Mabel: { tag: "honey_scone", about: "Bakes for the whole table and calls everyone dear." },
-  Otto: { tag: "level_ledger", about: "Counts every point twice and says little." },
-  Pearl: { tag: "velvet_starlet", about: "Plays every hand like a premiere, darling." },
-  Gus: { tag: "roaring_bleacher", about: "Calls each trick like the last minute of a final." },
-  Hazel: { tag: "sly_shark", about: "Talks a big game and shakes your hand after." },
-  Walt: { tag: "lazy_angler", about: "Takes his time and has a story from back in '62." },
+export const botTags: Readonly<Record<BotName, string>> = {
+  Mabel: "honey_scone",
+  Otto: "level_ledger",
+  Pearl: "velvet_starlet",
+  Gus: "roaring_bleacher",
+  Hazel: "sly_shark",
+  Walt: "lazy_angler",
 };
 
-export function botProfile(name: string): BotProfile | null {
-  return Object.hasOwn(botProfiles, name) ? botProfiles[name as BotName] : null;
+export function botTag(name: string): string | null {
+  return Object.hasOwn(botTags, name) ? botTags[name as BotName] : null;
 }

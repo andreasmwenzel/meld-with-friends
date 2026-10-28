@@ -860,7 +860,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
                 <OpponentRow className="board-west" align="left" {...seatProps(1)} />
                 <Centre compact={short} view={view} trick={trickCards} rel={rel} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge} peek={peek}
                   laid={{ 0: laidOf(seatAt(0)), 1: laidOf(seatAt(1)), 2: laidOf(seatAt(2)), 3: laidOf(seatAt(3)) }} lit={lit}
-                  mySeat={<MySeat view={view} name={me.display_name} score={scoreOf(view.seat)} />} />
+                  mySeat={<MySeat view={view} me={me} score={scoreOf(view.seat)} profileHref={local ? undefined : "/#profile"} />} />
                 <OpponentRow className="board-east" align="right" {...seatProps(3)} />
               </div>
             </div>
@@ -1235,17 +1235,20 @@ function MeldLine({ rules, hand, trump, lit, setLit }: { rules: PlayerView["rule
 type Peek = { last: NonNullable<PlayerView["lastTrick"]> | null; can: boolean; toggle: () => void };
 
 /** Your own chair below the cloth: the same name and score chip as the other three. */
-function MySeat({ view, name, score }: { view: PlayerView; name: string; score: SeatScore }) {
+function MySeat({ view, me, score, profileHref }: { view: PlayerView; me: Profile; score: SeatScore; profileHref?: string }) {
+  const name = me.display_name;
+  const person: SeatPerson = { name, handle: me.handle, userId: me.id, bot: false, place: `You, ${SEAT_LABEL[view.seat]}` };
   return (
     <div data-claim-seat={view.seat} className="flex justify-center py-1">
       <div className="relative flex items-center">
-        <div data-seat-plate="mine" className="flex items-center gap-1 rounded-2xl px-2 py-1 sm:gap-2" style={view.turn === view.seat ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
+        <PlayerMenu person={person} team={teamOf(view.seat)} actions={{ profileHref }} align="center" placement="above" plate="mine"
+          className="flex items-center gap-1 rounded-2xl px-2 py-1 sm:gap-2" style={view.turn === view.seat ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
           <span className="relative shrink-0">
             <Avatar name={name} team={teamOf(view.seat)} size={28} />
             {score.dealer && <DealerMark />}
           </span>
           <span className="text-xs font-semibold sm:text-sm">You{view.sittingOut === view.seat && <span className="ml-1 text-chalk-faint">sitting out</span>}{score.dealer && <span className="sr-only">, dealer</span>}{view.turn === view.seat && <span className="sr-only">, your turn</span>}</span>
-        </div>
+        </PlayerMenu>
         {/* Above the side seats' cards, and opening up and over the cloth: below this seat the board ends. */}
         <div className="absolute left-full top-1/2 z-30 ml-1 -translate-y-1/2 whitespace-nowrap">
           <ScoreTag score={score} name="You" align="right" placement="above" />
