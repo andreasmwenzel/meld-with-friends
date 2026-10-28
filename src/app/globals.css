@@ -25,10 +25,11 @@
   --chalk-trump: #d3e2c3;  /* trump in your hand: card stock with a celadon wash */
   --chalk-faint: rgba(245, 239, 227, 0.62);
   --chalk-ghost: rgba(245, 239, 227, 0.14);
-  --pip-red: #c1272d;
+  --pip-red: #b52329;      /* deep enough for small indices on the trump wash (4.5:1) */
   --pip-black: #1c1a19;
   --pip-green: #1f6b45;    /* clubs in the four-colour deck */
   --pip-green-soft: #8fc7a2; /* the same clubs on the cloth */
+  --pip-blue: #3658a6;     /* diamonds in the four-colour deck: a shade under the team blue, for the trump wash */
   --deck-blue: #3a5fb0;
   --deck-blue-soft: #8ea3cf;
   --deck-red: #b8343c;
@@ -55,6 +56,7 @@
   --color-pip-black: var(--pip-black);
   --color-pip-green: var(--pip-green);
   --color-pip-green-soft: var(--pip-green-soft);
+  --color-pip-blue: var(--pip-blue);
   --color-deck-blue: var(--deck-blue);
   --color-deck-blue-soft: var(--deck-blue-soft);
   --color-deck-red: var(--deck-red);

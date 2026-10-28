@@ -9,7 +9,7 @@ const RANK_NAME: Record<Rank, string> = { A: "ace", T: "ten", K: "king", Q: "que
 
 export function suitInk(suit: Suit, fourColour: boolean): string {
   if (suit === "H") return "var(--pip-red)";
-  if (suit === "D") return fourColour ? "var(--deck-blue)" : "var(--pip-red)";
+  if (suit === "D") return fourColour ? "var(--pip-blue)" : "var(--pip-red)";
   if (suit === "C") return fourColour ? "var(--pip-green)" : "var(--pip-black)";
   return "var(--pip-black)";
 }
