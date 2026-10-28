@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { api, type Profile } from "@/lib/api";
 import { canVerifyChat, openChat, type SignedChat } from "@/lib/chatAuth";
-import { ChatBody, type ChatMessage, type TableChat } from "./ChatDock";
+import { ChatBody, type ShownMessage, type TableChat } from "./ChatDock";
 
 export type { TableChat } from "./ChatDock";
 
@@ -17,7 +17,7 @@ export function useTableChat(code: string, me: Profile, enabled: boolean, public
   // How far this device's clock is from the server's, from the snapshot: freshness is judged on the server's clock.
   const offset = useRef(0);
   useEffect(() => { if (serverNow) offset.current = serverNow - Date.now(); }, [serverNow]);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ShownMessage[]>([]);
   const [unread, setUnread] = useState(0);
   const visibleRef = useRef(false);
   const setVisible = useCallback((visible: boolean) => {
@@ -36,7 +36,13 @@ export function useTableChat(code: string, me: Profile, enabled: boolean, public
       const m = await openChat(publicKey, code, payload.message, payload.sig, Date.now() + offset.current);
       if (!active || !m || seen.has(m.id)) return;
       seen.add(m.id);
-      setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev.slice(-99), m]));
+      setMessages((prev) => {
+        if (prev.some((x) => x.id === m.id)) return prev;
+        // Your own message coming back replaces its pending copy, whichever of broadcast and response is first.
+        const stand = m.from === me.id ? prev.findIndex((x) => x.pending && x.text === m.text) : -1;
+        const rest = stand < 0 ? prev : prev.filter((_, i) => i !== stand);
+        return [...rest.slice(-99), m];
+      });
       if (m.from !== me.id && !visibleRef.current) setUnread((n) => n + 1);
     };
     receiver.current = receive;
@@ -49,13 +55,21 @@ export function useTableChat(code: string, me: Profile, enabled: boolean, public
     return () => { active = false; receiver.current = null; void db.removeChannel(channel); };
   }, [code, me.id, enabled, publicKey]);
 
+  // Shows the message at once, marked as sending, so Enter and a reaction answer straight away.
   const send = useCallback(async (text: string) => {
     const t = text.trim();
     const receive = receiver.current;
     if (!t || !enabled || !receive) return;
-    const signed = await api<SignedChat>(`/api/tables/${code}/chat`, { body: { text: t } });
-    await receive(signed);
-  }, [code, enabled]);
+    const id = `pending-${crypto.randomUUID()}`;
+    const drop = () => setMessages((prev) => prev.filter((x) => x.id !== id));
+    setMessages((prev) => [...prev.slice(-99), { id, from: me.id, name: me.display_name, text: t, at: Date.now(), pending: true }]);
+    try {
+      const signed = await api<SignedChat>(`/api/tables/${code}/chat`, { body: { text: t } });
+      await receive(signed);
+    } finally {
+      drop();
+    }
+  }, [code, enabled, me.id, me.display_name]);
 
   return { messages, unread, setVisible, send, me: me.id, unsupported };
 }

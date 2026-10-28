@@ -5,9 +5,12 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 export type { ChatMessage } from "@/lib/chatAuth";
 import { CHAT_MAX_LENGTH, type ChatMessage } from "@/lib/chatAuth";
 
+/** A message as the talk shows it: `pending` while your own is still on its way to the server. */
+export type ShownMessage = ChatMessage & { pending?: boolean };
+
 /** Table talk as the screens see it. `useTableChat` (Chat.tsx) makes the live one; the lab makes a local one. */
 export interface TableChat {
-  messages: ChatMessage[];
+  messages: ShownMessage[];
   unsupported?: boolean;
   /** messages from others that arrived while the talk was not on screen */
   unread: number;
@@ -60,9 +63,10 @@ export function ChatBody({ chat, open, text, setText, inputRef, compact = false 
         {chat.unsupported && <p>Update your browser to see table talk.</p>}
         {!chat.unsupported && messages.length === 0 && <p className="text-ink-soft">Say hello. Messages stay at the table and are not saved.</p>}
         {messages.map((m) => (
-          <p key={m.id} className="mb-1.5 leading-snug">
+          <p key={m.id} className={`mb-1.5 leading-snug ${m.pending ? "opacity-60" : ""}`}>
             <span className="font-semibold" style={{ color: m.from === chat.me ? "var(--deck-blue)" : "var(--ink)" }}>{m.from === chat.me ? "You" : m.name}</span>{" "}
             <span className="text-ink">{m.text}</span>
+            {m.pending && <span className="text-xs text-ink-soft"> sending…</span>}
           </p>
         ))}
       </div>
