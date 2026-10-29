@@ -114,12 +114,20 @@ describe("trick play status above the hand", () => {
     // The lead has cleared the meld from the cloth; three cards of the first trick lie there.
     expect(document.querySelectorAll("[data-trick-card]")).toHaveLength(3);
     expect(screen.queryByRole("button", { name: "Last trick" })).toBeNull();
+    const counts = () => [...document.querySelectorAll('[role="img"][aria-label$=" cards"]')].map((el) => el.getAttribute("aria-label"));
+    const before = counts();
+    expect(before.length).toBeGreaterThan(0);
     await act(() => { fireEvent.click(screen.getByRole("button", { name: "Meld" })); });
+    // Opponents' hands keep their counts, and the button carries no pressed state (its words change instead).
+    expect(counts()).toEqual(before);
+    expect(screen.getByRole("button", { name: "Back to the table" }).hasAttribute("aria-pressed")).toBe(false);
     expect(text()).toMatch(/^Meld this hand\./);
     // The meld takes the cloth to itself, and is said aloud seat by seat.
     expect(document.querySelectorAll("[data-trick-card]")).toHaveLength(0);
     expect(document.querySelectorAll('[aria-label$="meld: 0 cards"]')).toHaveLength(0);
-    expect(document.querySelector('[aria-label*="meld:"]')).toBeTruthy();
+    // Every seat that declared meld has it on the cloth.
+    const declared = Object.values(view.melds).filter((m) => m.length).length;
+    expect(document.querySelectorAll('[aria-label*="meld:"]')).toHaveLength(declared);
     expect(document.querySelector("[data-announcer]")?.textContent).toMatch(/^Meld this hand: You, /);
     // Your hand keeps every card: the meld shown again is not taken out of it.
     expect(document.querySelectorAll("[data-hand-card]")).toHaveLength(view.hand.length);
