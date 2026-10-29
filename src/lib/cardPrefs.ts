@@ -27,7 +27,7 @@ export type CardPrefs = {
   fourColour: boolean; bigIndex: boolean; sort: HandSortPrefs; motion: MotionPref; confirmPlay: boolean;
   /** lay down your best meld and confirm it without any taps (default on); off means you pick the cards yourself */
   autoMeld: boolean;
-  /** a faint wash on trump cards in your hand (default on) */
+  /** a faint wash on trump cards in your hand and in tricks (default on) */
   trumpTint: boolean;
 };
 
