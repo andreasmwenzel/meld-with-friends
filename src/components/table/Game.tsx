@@ -299,6 +299,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const [displayedTrick, setDisplayedTrick] = useState<PlayerView["currentTrick"]>(null);
   /** The revision at which you asked to see the last trick again; any move puts the table back. */
   const [peekRev, setPeekRev] = useState<number | null>(null);
+  /** The same for the meld, during the first trick, when there is no last trick yet to see. */
+  const [meldPeekRev, setMeldPeekRev] = useState<number | null>(null);
   const trickHold = useRef<{ key: string; until: number }>({ key: "", until: 0 });
   // Before paint, so a card you play never shows gone from your hand and not yet on the table.
   useLayoutEffect(() => {
@@ -696,10 +698,19 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const lastTrick = view.lastTrick && view.lastTrick.winner !== null ? view.lastTrick : null;
   const peeking = !!lastTrick && view.phase === "playing" && peekRev === view.rev;
   const showingLast = !!lastTrick && displayedTrick?.winner != null && displayedTrick.plays.every((p, i) => p.card === lastTrick.plays[i].card);
-  const peek = { last: peeking ? lastTrick : null, can: !!lastTrick && view.phase === "playing" && !showingLast,
-    toggle: () => setPeekRev((r) => (r === view.rev ? null : view.rev)) };
-  // The cloth is not read out, so say what the last trick held when it is shown again.
-  const peekSpoken = peeking && lastTrick ? `Last trick, ${nameOf(lastTrick.winner!)} took it: ${lastTrick.plays.map((p) => `${nameOf(p.seat)}, ${cardName(p.card)}`).join("; ")}` : null;
+  // Before the first trick is taken there is no last trick, so the meld takes its place once the lead has cleared it from the cloth.
+  const meldShown = ALL_SEATS.some((s) => (view.melds[s] ?? []).length > 0);
+  const canMeld = view.phase === "playing" && !lastTrick && view.playedCards.length > 0 && meldShown;
+  const meldPeeking = canMeld && meldPeekRev === view.rev;
+  const peek: Peek = meldPeeking || canMeld
+    ? { last: null, meld: meldPeeking, can: canMeld, label: "Meld", toggle: () => setMeldPeekRev((r) => (r === view.rev ? null : view.rev)) }
+    : { last: peeking ? lastTrick : null, meld: false, label: "Last trick", can: !!lastTrick && view.phase === "playing" && !showingLast,
+      toggle: () => setPeekRev((r) => (r === view.rev ? null : view.rev)) };
+  // The cloth is not read out, so say what the last trick held, or each seat's meld, when it is shown again.
+  const peekSpoken = peeking && lastTrick ? `Last trick, ${nameOf(lastTrick.winner!)} took it: ${lastTrick.plays.map((p) => `${nameOf(p.seat)}, ${cardName(p.card)}`).join("; ")}`
+    : meldPeeking ? `Meld this hand: ${ALL_SEATS.map((s) => `${nameOf(s)}, ${(view.melds[s] ?? []).length ? (view.melds[s] ?? []).map(itemLabel).join(", ") : "none"}`).join("; ")}` : null;
+  /** Meld on the cloth: as it lies until the first lead, or shown again from the first trick. */
+  const clothMeld = (seat: SeatIndex): CardId[] => meldPeeking ? sortHand([...new Set((view.melds[seat] ?? []).flatMap((m) => m.cards))], view.trump, cardPrefs.sort) : laidOf(seat);
 
   const armedCard = armed && armed.rev === view.rev && isMyTurn && view.phase === "playing" && view.legal.playableCards.includes(armed.card) ? armed.card : null;
   const trickCards = displayedTrick;
@@ -872,7 +883,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
               <div className="board-flat grid grid-cols-[minmax(64px,auto)_minmax(0,1fr)_minmax(64px,auto)] items-center gap-2">
                 <OpponentRow className="board-west" align="left" {...seatProps(1)} />
                 <Centre compact={short} view={view} trick={trickCards} rel={rel} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge} peek={peek}
-                  laid={{ 0: laidOf(seatAt(0)), 1: laidOf(seatAt(1)), 2: laidOf(seatAt(2)), 3: laidOf(seatAt(3)) }} lit={lit}
+                  laid={{ 0: clothMeld(seatAt(0)), 1: clothMeld(seatAt(1)), 2: clothMeld(seatAt(2)), 3: clothMeld(seatAt(3)) }} lit={lit}
                   mySeat={<MySeat view={view} me={me} score={scoreOf(view.seat)} profileHref={local ? undefined : "/#profile"} />} />
                 <OpponentRow className="board-east" align="right" {...seatProps(3)} />
               </div>
@@ -1250,8 +1261,11 @@ function MeldLine({ rules, hand, trump, lit, setLit }: { rules: PlayerView["rule
   );
 }
 
-/** Seeing the last trick again: `last` is set while it shows, `can` when there is one to see. */
-type Peek = { last: NonNullable<PlayerView["lastTrick"]> | null; can: boolean; toggle: () => void };
+/**
+ * Seeing the last trick again: `last` is set while it shows, `can` when there is one to see. In the first trick
+ * there is none yet, and the same control shows the hand's meld instead: `meld` is set while it shows.
+ */
+type Peek = { last: NonNullable<PlayerView["lastTrick"]> | null; meld: boolean; can: boolean; label: "Last trick" | "Meld"; toggle: () => void };
 
 /** Your own chair below the cloth: the same name and score chip as the other three. */
 function MySeat({ view, me, score, profileHref }: { view: PlayerView; me: Profile; score: SeatScore; profileHref?: string }) {
@@ -1295,13 +1309,13 @@ function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact, busy, 
   armed: { card: CardId; play: () => void } | null;
 }) {
   const mine = view.turn === view.seat;
-  const done = !peek.last && !!trick && trick.winner !== null;
+  const done = !peek.last && !peek.meld && !!trick && trick.winner !== null;
   const took = done && view.sittingOut == null ? countersIn(trick, view.rules) : 0;
   const shootStatus = view.sittingOut == null ? null : view.seat === view.sittingOut
     ? "Your partner is shooting the moon. You sit this hand out."
     : view.seat === view.bidder ? "Shooting alone; take every trick."
     : `${nameOf(view.bidder!)} is shooting alone; win one trick to win the game.`;
-  const detail = peek.last ? null
+  const detail = peek.last || peek.meld ? null
     : done ? <><Name name={nameOf(trick.winner!)} />{` took it${took > 0 ? `, ${took} ${took === 1 ? "counter" : "counters"}` : view.sittingOut == null ? ", no counters" : ""}.`}</>
     : mine ? shootStatus ?? constraintSentence(view) ?? "Tap a card to play it."
     : shootStatus;
@@ -1313,6 +1327,7 @@ function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact, busy, 
       {/* Rows 44px tall, so each row's controls take a full tap without reaching into the other row's. */}
       <div className="flex h-11 max-w-full items-center gap-3">
         {peek.last ? <p className={`display text-chalk ${line}`} style={{ fontSize: compact ? 17 : 19 }}>Last trick: <Name name={nameOf(peek.last.winner!)} /> took it.</p>
+          : peek.meld ? <p className={`display text-chalk ${line}`} style={{ fontSize: compact ? 17 : 19 }}>Meld this hand.</p>
           // In the status's own row, not floating over it: a Play button laid over the bar covered "Last trick" and
           // "Claim all" (scripts/overlap.mjs, the armed screen).
           : mine && armed ? <button type="button" data-keep-armed="" data-overlay="play" data-own-card={armed.card} onClick={armed.play} aria-label={`Play ${cardName(armed.card)}`}
@@ -1325,7 +1340,7 @@ function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact, busy, 
       </div>
       <div className="flex h-11 max-w-full flex-wrap content-center items-center justify-center gap-x-3 text-xs leading-5 text-chalk-faint">
         {detail && <span className={typeof detail === "string" ? "max-w-full truncate" : line}>{detail}</span>}
-        {(peek.can || peek.last) && <button type="button" onClick={peek.toggle} className={link}>{peek.last ? "Back to the table" : "Last trick"}</button>}
+        {(peek.can || peek.last || peek.meld) && <button type="button" onClick={peek.toggle} className={link}>{peek.last || peek.meld ? "Back to the table" : peek.label}</button>}
         {stalled && <button type="button" onClick={nudge} className={link}>Nudge the computers</button>}
       </div>
     </div>
@@ -1372,7 +1387,8 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
   const mine = view.turn === view.seat && view.phase !== "hand_over" && view.phase !== "game_over";
   const inPlay = view.phase === "playing";
   const peeking = !!peek.last;
-  const shown = peek.last ?? trick;
+  // The meld shown again takes the cloth to itself; the trick comes back with the next move.
+  const shown = peek.meld ? null : peek.last ?? trick;
   const emptyTap = peek.can && !trick?.plays.length;
   return (
     <div className="board-centre mx-auto w-full max-w-[420px]">
@@ -1427,6 +1443,8 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
     </div>
   );
 }
+
+const ALL_SEATS: SeatIndex[] = [0, 1, 2, 3];
 
 /** The rule that dims some cards, or null when any card is fine. */
 /** What it is your turn to do, said once when the turn reaches you. */
