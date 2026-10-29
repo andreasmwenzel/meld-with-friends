@@ -1334,7 +1334,7 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
   lit: CardId[] | null;
 }) {
   // Sideways on a phone the trick shrinks to fit between your hand and the seat across.
-  const four = useCardPrefs().prefs.fourColour;
+  const { fourColour: four, trumpTint: tint } = useCardPrefs().prefs;
   const trickW = compact ? 42 : 56;
   const done = !!trick && trick.winner !== null;
   const dim = trick !== view.currentTrick && (view.phase === "hand_over" || view.phase === "game_over");
@@ -1389,7 +1389,7 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
           <div key={(peeking ? "p" : "") + p.card} className={`absolute ${spots[r]}`} style={{ opacity: dim ? 0.55 : 1 }}>
             <div className={peeking ? undefined : "trick-card"} data-trick-card={peeking ? undefined : p.card} data-sweep={sweeping ? "" : undefined}
               style={peeking ? undefined : { ...flyFrom(r, p.card), ...(sweeping ? sweepTo(rel(shown.winner!)) : null) } as React.CSSProperties}>
-              <PlayingCard card={p.card} width={trickW} fourColour={four} selected={shown.winner === p.seat} />
+              <PlayingCard card={p.card} width={trickW} fourColour={four} tint={tint} trump={splitCard(p.card).suit === view.trump} selected={shown.winner === p.seat} />
             </div>
           </div>
         );

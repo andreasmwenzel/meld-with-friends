@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { CardId, PlayerView, SeatIndex, Team } from "@/engine/types";
 import { sortHand } from "@/engine/hand";
-import { PlayingCard, SUIT_GLYPH, SUIT_NAME, suitInk } from "@/components/cards/PlayingCard";
+import { PlayingCard, SUIT_GLYPH, SUIT_NAME, suitInk, splitCard } from "@/components/cards/PlayingCard";
 import { useCardPrefs } from "@/lib/cardPrefs";
 import { api } from "@/lib/api";
 import { teamOf } from "./types";
@@ -148,7 +148,7 @@ export function Recap({ view, nameOf, lastSeenRev }: {
         {(r.tricks.length > 0 || r.current) && (
           <div>
             <p className="text-sm font-semibold">Tricks</p>
-            <TrickReview key={r.handNumber} tricks={r.tricks} seat={view.seat} nameOf={nameOf} />
+            <TrickReview key={r.handNumber} tricks={r.tricks} trump={r.trump} seat={view.seat} nameOf={nameOf} />
             <ol className="mt-1 space-y-2">
               {r.tricks.map((t, i) => (
                 <li key={t.index} className={mark(firstNew !== null && firstNew !== "current" && i >= firstNewTrick)}>
@@ -158,7 +158,7 @@ export function Recap({ view, nameOf, lastSeenRev }: {
                     <span className="inline-flex gap-1">
                       {t.plays.map((p) => (
                         <span key={p.card} className="flex flex-col items-center gap-0.5" title={`${nameOf(p.seat)}${p.seat === t.leader ? ", led" : ""}`}>
-                          <PlayingCard card={p.card} width={30} prefs={prefs} selected={p.seat === t.winner} />
+                          <PlayingCard card={p.card} width={30} prefs={prefs} trump={splitCard(p.card).suit === r.trump} selected={p.seat === t.winner} />
                           <span className="h-0.5 w-5 rounded" style={{ background: p.seat === t.leader ? "var(--brass)" : "transparent" }} />
                         </span>
                       ))}
@@ -177,7 +177,7 @@ export function Recap({ view, nameOf, lastSeenRev }: {
                     <span className="inline-flex gap-1">
                       {r.current.plays.map((p) => (
                         <span key={p.card} className="flex flex-col items-center gap-0.5" title={nameOf(p.seat)}>
-                          <PlayingCard card={p.card} width={30} prefs={prefs} />
+                          <PlayingCard card={p.card} width={30} prefs={prefs} trump={splitCard(p.card).suit === r.trump} />
                           <span className="h-0.5 w-5 rounded" style={{ background: p.seat === r.current!.leader ? "var(--brass)" : "transparent" }} />
                         </span>
                       ))}

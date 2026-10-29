@@ -1,13 +1,13 @@
 "use client";
 
 import { useId, useState } from "react";
-import type { HandRecap, SeatIndex } from "@/engine/types";
-import { PlayingCard } from "@/components/cards/PlayingCard";
+import type { HandRecap, SeatIndex, Suit } from "@/engine/types";
+import { PlayingCard, splitCard } from "@/components/cards/PlayingCard";
 import { useCardPrefs } from "@/lib/cardPrefs";
 
 /** Browse completed public tricks without changing the live board or its turn. */
-export function TrickReview({ tricks, seat, nameOf }: {
-  tricks: HandRecap["tricks"]; seat: SeatIndex; nameOf: (seat: SeatIndex) => string;
+export function TrickReview({ tricks, trump, seat, nameOf }: {
+  tricks: HandRecap["tricks"]; trump: Suit | null; seat: SeatIndex; nameOf: (seat: SeatIndex) => string;
 }) {
   const [selected, setSelected] = useState(() => tricks.at(-1)?.index ?? 1);
   const { prefs } = useCardPrefs();
@@ -31,7 +31,7 @@ export function TrickReview({ tricks, seat, nameOf }: {
         {trick.plays.map((play) => (
           <div key={play.seat} className={`flex min-w-0 flex-col items-center gap-1 ${spots[(play.seat - seat + 4) % 4]}`}>
             <p className="w-full break-words text-center text-xs">{nameOf(play.seat)}</p>
-            <PlayingCard card={play.card} width={48} prefs={prefs} selected={play.seat === trick.winner} />
+            <PlayingCard card={play.card} width={48} prefs={prefs} trump={splitCard(play.card).suit === trump} selected={play.seat === trick.winner} />
             <p className="min-h-4 text-center text-xs text-ink-soft">
               {[play.seat === trick.leader && "Led", play.seat === trick.winner && "Won"].filter(Boolean).join(" · ")}
             </p>
