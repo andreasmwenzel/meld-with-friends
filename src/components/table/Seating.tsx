@@ -8,7 +8,7 @@ import { Avatar } from "@/components/site/Avatar";
 import { SEAT_LABEL, teamOf, type Snapshot } from "./types";
 import { RulesForm } from "@/components/rules/RulesForm";
 import { usePushNotifications } from "@/lib/push";
-import { describeRules, resolveRules, type RulesPatch } from "@/components/rules/rules";
+import { resolveRules, type RulesPatch } from "@/components/rules/rules";
 import { useTableTurn } from "./turn";
 import { useTablemates } from "./tablemates";
 
@@ -205,9 +205,8 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
               </div>
             </div>
           ) : (
-            <ul className="mt-1 flex flex-col gap-0.5">
-              {describeRules(snap.table.rules).map((line) => <li key={line}>{line}</li>)}
-            </ul>
+            // The same grid the host set them in, read-only: Change swaps each value for its select in place.
+            <div className="panel mt-2 p-4"><RulesForm value={snap.table.rules} compact /></div>
           )}
           {push.supported && leisurely && (
             <div className="mt-3">

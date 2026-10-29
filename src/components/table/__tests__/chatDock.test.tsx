@@ -142,8 +142,11 @@ describe("table talk at the board", () => {
     fireEvent.click(screen.getByRole("button", { name: "Menu" }));
     fireEvent.click(screen.getByRole("tab", { name: "Rules" }));
     const panel = screen.getByRole("tabpanel", { name: "Rules" });
-    expect(panel.textContent).toContain("No passing.");
-    expect(panel.textContent).toContain("Shoot after passing");
+    // The same grid as the deal form, read-only: each rule's value where its select would be.
+    expect(within(panel).queryByRole("combobox")).toBeNull();
+    const value = (label: string) => within(panel).getByText(label).nextElementSibling?.textContent;
+    expect(value("Pass cards")).toBe("No passing");
+    expect(value("Shooting the moon")).toBe("Allowed");
     expect(panel.tabIndex).toBe(0);
   });
 

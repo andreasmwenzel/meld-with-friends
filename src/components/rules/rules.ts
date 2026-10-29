@@ -55,23 +55,3 @@ export function changeRule(patch: RulesPatch, key: keyof RulesConfig, value: Rul
     : resolveRules(patch);
   return { ...current, [key]: value };
 }
-
-/** Plain-language summary for the seating screen and lobby. */
-export function describeRules(patch: RulesPatch | Record<string, unknown> | undefined): string[] {
-  const r = resolveRules(patch);
-  const lines = [
-    `Play to ${r.target.toLocaleString()}.`,
-    `Minimum bid ${r.minBid}, in steps of ${r.bidStep}.`,
-    r.passCount ? `Pass ${r.passCount} cards each way.` : "No passing.",
-    r.counting === "classic"
-      ? `Old-style count: aces 11, tens 10, kings 4, queens 3, jacks 2, plus ${r.lastTrickBonus} for the last trick.`
-      : `Aces, tens and kings count ${r.counterValue} each, plus ${r.lastTrickBonus} for the last trick.`,
-    r.mustTakeTrickToSaveMeld ? "Take a trick to keep your meld." : "Meld counts even without a trick.",
-    r.dealerStuck ? `If everyone passes, the dealer is stuck at ${r.minBid}.` : "If everyone passes, redeal.",
-    ...r.ninesMisdeal ? ["Five or more nines and no other meld: you may throw the hand in before you bid, and the same dealer redeals."] : [],
-  ];
-  lines.push(r.revealHands ? "Everyone's cards are shown after each hand." : "Hands stay hidden after each hand.");
-  if (r.shoot === "on") lines.push(`Shoot after passing: partner sits out, no meld. Take every trick for ${r.target.toLocaleString()} points; miss and lose the game.`);
-  if (r.pace === "leisurely") lines.push("Leisurely pace: the table waits for you for weeks.");
-  return lines;
-}

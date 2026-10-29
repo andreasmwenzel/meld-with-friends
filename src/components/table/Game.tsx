@@ -28,7 +28,7 @@ import { useCardPrefs } from "@/lib/cardPrefs";
 import { usePushNotifications } from "@/lib/push";
 import { autoMeldSelection, meldBySuit, sortHand } from "@/engine/hand";
 import { describeConstraint } from "@/engine/rules";
-import { describeRules } from "@/components/rules/rules";
+import { RulesForm } from "@/components/rules/RulesForm";
 import { cardLabel } from "@/engine/deck";
 import { motionTimings, flyFrom, sweepTo } from "./motion";
 import { ClaimButton, useClaimReveal } from "./Claim";
@@ -985,9 +985,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           {tab === "rules" && (
             <div role="tabpanel" id="menu-panel-rules" aria-labelledby="menu-tab-rules" tabIndex={0}>
               <p className="text-sm font-semibold text-chalk">House rules</p>
-              <ul className="mt-2 flex flex-col gap-2 text-sm text-chalk-faint">
-                {describeRules(view.rules).map((line) => <li key={line}>{line}</li>)}
-              </ul>
+              <div className="panel mt-2 p-4"><RulesForm value={view.rules} compact /></div>
             </div>
           )}
           {tab === "options" && (

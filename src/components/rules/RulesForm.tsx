@@ -36,16 +36,37 @@ function decode(k: Key, raw: string): RulesConfig[Key] {
   return Number(raw) as RulesConfig[Key];
 }
 
-/** House rules editor. Controlled: emits the full patch on every change. */
-export function RulesForm({ value, onChange, compact = false }: { value: RulesPatch; onChange: (next: RulesPatch) => void; compact?: boolean }) {
+/**
+ * House rules, the one way they are shown: with `onChange` an editor, without it the same grid read-only, so a
+ * rule sits where it was set. Each value is the text its select shows.
+ */
+export function RulesForm({ value, onChange, compact = false }: { value: RulesPatch | Record<string, unknown> | undefined; onChange?: (next: RulesPatch) => void; compact?: boolean }) {
   const r = resolveRules(value);
+  const grid = `grid gap-3 ${compact ? "grid-cols-1 min-[480px]:grid-cols-2" : "grid-cols-1 min-[480px]:grid-cols-2 sm:grid-cols-3"}`;
+  const fields = FIELDS.filter((f) => !f.when || f.when(r));
+  const optionsOf = (f: typeof FIELDS[number]) => typeof f.options === "function" ? f.options(r) : f.options;
+  if (!onChange) {
+    return (
+      <dl className={grid}>
+        {fields.map((f) => (
+          <div key={f.k} className="min-w-0 text-sm">
+            <dt className="text-ink-soft">{f.label}</dt>
+            {/* As tall as the select it stands in for, so the grid lines up with the editor. */}
+            <dd className="mt-1 flex min-h-11 items-center rounded-[10px] bg-ink/5 px-[.9rem] text-base text-ink">
+              {optionsOf(f).find(([v]) => v === String(r[f.k]))?.[1] ?? String(r[f.k])}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    );
+  }
   return (
-    <div className={`grid gap-3 ${compact ? "grid-cols-1 min-[480px]:grid-cols-2" : "grid-cols-1 min-[480px]:grid-cols-2 sm:grid-cols-3"}`}>
-      {FIELDS.filter((f) => !f.when || f.when(r)).map((f) => (
+    <div className={grid}>
+      {fields.map((f) => (
         <label key={f.k} className="min-w-0 text-sm text-ink-soft">
           {f.label}
-          <select className="field mt-1" value={String(r[f.k])} onChange={(e) => onChange(changeRule(value, f.k, decode(f.k, e.target.value)))}>
-            {(typeof f.options === "function" ? f.options(r) : f.options).map(([v, text]) => <option key={v} value={v}>{text}</option>)}
+          <select className="field mt-1" value={String(r[f.k])} onChange={(e) => onChange(changeRule(value as RulesPatch, f.k, decode(f.k, e.target.value)))}>
+            {optionsOf(f).map(([v, text]) => <option key={v} value={v}>{text}</option>)}
           </select>
         </label>
       ))}

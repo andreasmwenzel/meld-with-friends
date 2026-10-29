@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changeRule, changeScoring, describeRules, POINT_OPTIONS, resolveRules } from "../rules";
+import { changeRule, changeScoring, POINT_OPTIONS, resolveRules } from "../rules";
 
 describe("scoring selection", () => {
   it("converts every point setting when switching the default rules to classic and back", () => {
@@ -40,19 +40,7 @@ describe("scoring selection", () => {
   });
 });
 
-describe("rules summary", () => {
-  it("describes modern default values", () => {
-    expect(describeRules({})).toContain("Play to 150.");
-    expect(describeRules({})).toContain("Minimum bid 25, in steps of 1.");
-    expect(describeRules({})).toContain("Aces, tens and kings count 1 each, plus 1 for the last trick.");
-  });
-
-  it("describes classic values and old-style counting separately", () => {
-    expect(describeRules({ scoring: "classic" })).toContain("Aces, tens and kings count 10 each, plus 10 for the last trick.");
-    expect(describeRules({ scoring: "classic", counting: "classic" }))
-      .toContain("Old-style count: aces 11, tens 10, kings 4, queens 3, jacks 2, plus 10 for the last trick.");
-  });
-
+describe("scale conversion", () => {
   it("keeps the minimum bid reachable after converting, and leaves values alone when the scale stays", () => {
     const modern = changeScoring({ scoring: "classic", minBid: 250, bidStep: 25 }, "modern");
     expect(modern.minBid % modern.bidStep).toBe(0);
