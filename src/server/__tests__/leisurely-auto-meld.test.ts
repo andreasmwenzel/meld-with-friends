@@ -79,6 +79,14 @@ describe('automatic meld at a leisurely table', () => {
     expect(commits().filter(c => c.p_action.seat === 0).map(c => c.p_action.type)).toEqual(['confirm_meld']);
   });
 
+  it('picks up a pass that was cut short, melding only who still owes it', async () => {
+    // An earlier pass confirmed seats 0 and 1, then a pause or failed commit stopped it; a later tick finishes.
+    state.players[0].meldConfirmed = true; state.players[1].meldConfirmed = true;
+    await botTick('ABC234');
+    expect([...new Set(commits().map(c => c.p_action.seat))]).toEqual([3]);
+    expect(commits().at(-1)).toMatchObject({ p_action: { type: 'confirm_meld', seat: 3 } });
+  });
+
   it('stops quietly when the player left the seat or another worker got there first', async () => {
     mocks.commit.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'Action seat does not belong to you' } });
     await expect(botTick('ABC234')).resolves.toEqual({ acted: false, rev: state.rev + 9 });

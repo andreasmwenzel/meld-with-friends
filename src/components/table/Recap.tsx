@@ -15,7 +15,7 @@ const THREE_MINUTES = 3 * 60 * 1000;
  * Tells the server how far you have read: when the tab is hidden, when you leave, and at most
  * every three minutes while you watch. Pass null to stay silent (spectators). The report also carries
  * your automatic-meld choice, so a leisurely table can meld for you while you are away; a changed
- * choice goes out on the next half-minute check.
+ * choice goes out at once.
  */
 export function useSeenReporting(code: string, rev: number | null, send: (path: string, init: Parameters<typeof api>[1]) => Promise<unknown> = api, autoMeld?: boolean) {
   const latest = useRef<{ rev: number | null; autoMeld?: boolean }>({ rev, autoMeld });
@@ -30,6 +30,13 @@ export function useSeenReporting(code: string, rev: number | null, send: (path: 
     sent.current = { at: Date.now(), rev: r, autoMeld: a };
     void send(`/api/tables/${code}/seen`, { body: a === undefined ? { rev: r } : { rev: r, autoMeld: a } }).catch(() => { sent.current = { at: 0, rev: null }; });
   }, [code, send]);
+  // A changed choice must reach the server before meld can start without you.
+  const firstChoice = useRef(autoMeld);
+  useEffect(() => {
+    if (autoMeld === firstChoice.current) return;
+    firstChoice.current = autoMeld;
+    report(true);
+  }, [autoMeld, report]);
   useEffect(() => {
     const onVisibility = () => { if (document.hidden) report(true); };
     document.addEventListener("visibilitychange", onVisibility);

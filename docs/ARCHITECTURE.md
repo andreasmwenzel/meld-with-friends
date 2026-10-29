@@ -251,7 +251,9 @@ bot worker's melding pass also declares `autoMeldSelection` and confirms for eve
 has not confirmed and keeps automatic meld on, committing through `commit_game_action` as that player
 with the request id `auto-meld:{game}:{hand}:{seat}:{type}`, so concurrent workers land each step once.
 Meld therefore finishes without those players at the table. A bot move that opens meld runs this pass
-at once. If the preference read fails, no human is melded and their browsers meld as before.
+at once. If the preference read fails, no human is melded and their browsers meld as before. A changed
+choice is reported at once. If a pass stops short (a pause, a failed commit), a seated board that sees
+another human still owing meld sends one tick per revision, so the pass resumes after a resume or retry.
 
 ## Notifications
 
