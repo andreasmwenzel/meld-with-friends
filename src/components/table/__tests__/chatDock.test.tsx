@@ -144,7 +144,7 @@ describe("table talk at the board", () => {
     const panel = screen.getByRole("tabpanel", { name: "Rules" });
     // The same grid as the deal form, read-only: each rule's value where its select would be.
     expect(within(panel).queryByRole("combobox")).toBeNull();
-    const value = (label: string) => within(panel).getByText(label).nextElementSibling?.textContent;
+    const value = (label: string) => within(panel).getByText(label).nextElementSibling?.firstElementChild?.textContent;
     expect(value("Pass cards")).toBe("No passing");
     expect(value("Shooting the moon")).toBe("Allowed");
     expect(panel.tabIndex).toBe(0);
