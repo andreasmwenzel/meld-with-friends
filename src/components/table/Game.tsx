@@ -468,7 +468,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     if (updatingRef.current) return Promise.resolve(null);
     return api(path, init);
   }, []);
-  useSeenReporting(code, snap.mySeat !== null && view ? view.rev : null, sendSeen);
+  useSeenReporting(code, snap.mySeat !== null && view ? view.rev : null, sendSeen, cardPrefs.autoMeld);
   useEffect(() => {
     if (!view || autoRecap.current) return;
     autoRecap.current = true;

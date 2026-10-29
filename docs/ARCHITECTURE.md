@@ -245,6 +245,14 @@ snapshot exposes `lastSeenRev`, or null when no visit is available. Starting a n
 game clears visits because revision numbers restart. `last_seen` records the write
 time. The client can write when hidden or every few minutes rather than per render.
 
+The same report may carry `autoMeld`, the browser's automatic-meld choice; the server saves it on
+`profiles.auto_meld` (migration 0021, default on) only when it differs. At a leisurely table, the
+bot worker's melding pass also declares `autoMeldSelection` and confirms for every seated human who
+has not confirmed and keeps automatic meld on, committing through `commit_game_action` as that player
+with the request id `auto-meld:{game}:{hand}:{seat}:{type}`, so concurrent workers land each step once.
+Meld therefore finishes without those players at the table. A bot move that opens meld runs this pass
+at once. If the preference read fails, no human is melded and their browsers meld as before.
+
 ## Notifications
 
 Web Push uses `web-push` and the browser's push service, with no paid notification

@@ -17,9 +17,14 @@ it('returns the saved revision and keeps responses private', async () => {
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ lastSeenRev: 12 });
   expect(response.headers.get('cache-control')).toBe('private, no-store');
-  expect(mocks.seen).toHaveBeenCalledWith('BCDFGH', 'human', 12);
+  expect(mocks.seen).toHaveBeenCalledWith('BCDFGH', 'human', 12, undefined);
 });
-it.each([{}, { rev: -1 }, { rev: 1.5 }, { rev: '12' }, { rev: 2147483648 }, { rev: 1, userId: 'other' }])('rejects invalid body %j', async input => {
+it.each([true, false])('passes on the automatic meld choice (%s)', async autoMeld => {
+  mocks.seen.mockResolvedValue({ lastSeenRev: 3 });
+  expect((await POST(request({ rev: 3, autoMeld }), context)).status).toBe(200);
+  expect(mocks.seen).toHaveBeenCalledWith('BCDFGH', 'human', 3, autoMeld);
+});
+it.each([{}, { rev: -1 }, { rev: 1.5 }, { rev: '12' }, { rev: 2147483648 }, { rev: 1, userId: 'other' }, { rev: 1, autoMeld: 'yes' }])('rejects invalid body %j', async input => {
   expect((await POST(request(input), context)).status).toBe(400);
   expect(mocks.seen).not.toHaveBeenCalled();
 });

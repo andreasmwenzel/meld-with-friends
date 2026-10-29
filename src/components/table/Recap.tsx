@@ -13,18 +13,22 @@ const THREE_MINUTES = 3 * 60 * 1000;
 
 /**
  * Tells the server how far you have read: when the tab is hidden, when you leave, and at most
- * every three minutes while you watch. Pass null to stay silent (spectators).
+ * every three minutes while you watch. Pass null to stay silent (spectators). The report also carries
+ * your automatic-meld choice, so a leisurely table can meld for you while you are away; a changed
+ * choice goes out on the next half-minute check.
  */
-export function useSeenReporting(code: string, rev: number | null, send: (path: string, init: Parameters<typeof api>[1]) => Promise<unknown> = api) {
-  const latest = useRef<number | null>(rev);
-  const sent = useRef<{ at: number; rev: number | null }>({ at: 0, rev: null });
-  useEffect(() => { latest.current = rev; }, [rev]);
+export function useSeenReporting(code: string, rev: number | null, send: (path: string, init: Parameters<typeof api>[1]) => Promise<unknown> = api, autoMeld?: boolean) {
+  const latest = useRef<{ rev: number | null; autoMeld?: boolean }>({ rev, autoMeld });
+  const sent = useRef<{ at: number; rev: number | null; autoMeld?: boolean }>({ at: 0, rev: null });
+  useEffect(() => { latest.current = { rev, autoMeld }; }, [rev, autoMeld]);
   const report = useCallback((force: boolean) => {
-    const r = latest.current;
-    if (r === null || r === sent.current.rev) return;
-    if (!force && Date.now() - sent.current.at < THREE_MINUTES) return;
-    sent.current = { at: Date.now(), rev: r };
-    void send(`/api/tables/${code}/seen`, { body: { rev: r } }).catch(() => { sent.current = { at: 0, rev: null }; });
+    const { rev: r, autoMeld: a } = latest.current;
+    if (r === null) return;
+    const changed = a !== sent.current.autoMeld;
+    if (r === sent.current.rev && !changed) return;
+    if (!force && !changed && Date.now() - sent.current.at < THREE_MINUTES) return;
+    sent.current = { at: Date.now(), rev: r, autoMeld: a };
+    void send(`/api/tables/${code}/seen`, { body: a === undefined ? { rev: r } : { rev: r, autoMeld: a } }).catch(() => { sent.current = { at: 0, rev: null }; });
   }, [code, send]);
   useEffect(() => {
     const onVisibility = () => { if (document.hidden) report(true); };
