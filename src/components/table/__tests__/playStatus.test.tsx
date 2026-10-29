@@ -108,6 +108,31 @@ describe("trick play status above the hand", () => {
     expect(screen.getByRole("button", { name: "Last trick" })).toBeTruthy();
   });
 
+  it("in the first trick, shows the hand's meld again in place of a last trick", async () => {
+    const view = await table("play-must-trump");
+    expect(Object.values(view.melds).some((m) => m.length)).toBe(true);
+    // The lead has cleared the meld from the cloth; three cards of the first trick lie there.
+    expect(document.querySelectorAll("[data-trick-card]")).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: "Last trick" })).toBeNull();
+    await act(() => { fireEvent.click(screen.getByRole("button", { name: "Meld" })); });
+    expect(text()).toMatch(/^Meld this hand\./);
+    // The meld takes the cloth to itself, and is said aloud seat by seat.
+    expect(document.querySelectorAll("[data-trick-card]")).toHaveLength(0);
+    expect(document.querySelectorAll('[aria-label$="meld: 0 cards"]')).toHaveLength(0);
+    expect(document.querySelector('[aria-label*="meld:"]')).toBeTruthy();
+    expect(document.querySelector("[data-announcer]")?.textContent).toMatch(/^Meld this hand: You, /);
+    // Your hand keeps every card: the meld shown again is not taken out of it.
+    expect(document.querySelectorAll("[data-hand-card]")).toHaveLength(view.hand.length);
+    await act(() => { fireEvent.click(screen.getByRole("button", { name: "Back to the table" })); });
+    expect(text()).toContain("Your play.");
+    expect(document.querySelectorAll("[data-trick-card]")).toHaveLength(3);
+  });
+
+  it("offers no meld before the first lead, while it still lies on the cloth", async () => {
+    await table("meld-review");
+    expect(screen.queryByRole("button", { name: "Meld" })).toBeNull();
+  });
+
   it("offers a nudge once the computers have been quiet for 20 seconds, and it asks the server again", async () => {
     await table("play-waiting");
     await wait(19000);
