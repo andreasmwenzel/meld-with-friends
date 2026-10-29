@@ -14,11 +14,12 @@ describe("rules, read-only", () => {
   it("shows every rule in the editor's order, with the text its select would show", () => {
     render(<RulesForm value={{ scoring: "classic", counting: "classic", passCount: 0, shoot: "on" }} />);
     expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.getByText("Aces 11, tens 10, kings 4, queens 3, jacks 2.")).toBeTruthy();
     expect(read()).toEqual(expect.arrayContaining([
       ["Scoring", "Classic, counted in tens"],
       ["Play to", "1,500"],
       ["Pass cards", "No passing"],
-      ["Counting", "Aces 11, tens 10, kings 4, queens 3, jacks 2"],
+      ["Counting", "Old-style, by rank"],
       ["Last trick", "10 points"],
       ["Shooting the moon", "Allowed"],
     ]));

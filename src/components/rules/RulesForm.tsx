@@ -25,7 +25,9 @@ const FIELDS: {
   { k: "bidStep", label: "Bid steps", values: (r) => POINT_OPTIONS[r.scoring].bidStep, text: (v) => (v as number).toLocaleString() },
   { k: "passCount", label: "Pass cards", values: () => [0, 3, 4, 5], text: (v) => v === 0 ? "No passing" : `${v} each way` },
   { k: "counting", label: "Counting", values: () => ["tens", "classic"],
-    text: (v, r) => v === "classic" ? "Aces 11, tens 10, kings 4, queens 3, jacks 2" : `Aces, tens, kings: ${r.counterValue} each` },
+    text: (v, r) => v === "classic" ? "Old-style, by rank" : `Aces, tens, kings: ${r.counterValue} each`,
+    // Too long for a closed select on a phone, so the ranks go underneath, where the line can wrap.
+    help: (r) => r.counting === "classic" ? "Aces 11, tens 10, kings 4, queens 3, jacks 2." : null },
   { k: "lastTrickBonus", label: "Last trick", values: (r) => POINT_OPTIONS[r.scoring].lastTrickBonus,
     text: (v) => v === 0 ? "Nothing" : points(v as number) },
   { k: "mustTakeTrickToSaveMeld", label: "Keeping meld", values: () => [true, false], text: (v) => v ? "Must take a trick" : "Always counts" },
