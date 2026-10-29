@@ -244,6 +244,15 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
 
   // Computer players move one card at a time, paced by the table so everyone can follow the trick.
   const botTurn = !!view && (view.phase === "melding" ? snap.seats.some((x) => x.bot && !view.meldConfirmed[x.seat]) : isBot(view.turn)) && view.phase !== "hand_over" && view.phase !== "game_over";
+  // At a leisurely table the server lays down automatic meld for players who are away. If its pass was cut short
+  // (a pause, a failed commit), nothing else would restart it, so a present board nudges once per revision.
+  const awayMeld = !!view && !local && snap.mySeat !== null && view.rules.pace === "leisurely" && view.phase === "melding" && !snap.paused
+    && snap.seats.some((x) => x.user_id && x.user_id !== me.id && !view.meldConfirmed[x.seat]) ? `${view.handNumber}:${view.rev}` : null;
+  useEffect(() => {
+    if (!awayMeld) return;
+    const timer = setTimeout(() => { if (!updatingRef.current) void api(`/api/tables/${code}/tick`, { body: {} }).catch(() => {}); }, 1500);
+    return () => clearTimeout(timer);
+  }, [awayMeld, code]);
   const firstHuman = snap.seats.find((x) => x.user_id)?.user_id;
   const leader = firstHuman === me.id;
   const [pace, setPace] = useState(900);
@@ -468,7 +477,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     if (updatingRef.current) return Promise.resolve(null);
     return api(path, init);
   }, []);
-  useSeenReporting(code, snap.mySeat !== null && view ? view.rev : null, sendSeen);
+  useSeenReporting(code, snap.mySeat !== null && view ? view.rev : null, sendSeen, cardPrefs.autoMeld);
   useEffect(() => {
     if (!view || autoRecap.current) return;
     autoRecap.current = true;

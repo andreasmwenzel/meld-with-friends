@@ -5,6 +5,7 @@ import { getSettings } from "./settings";
 import { enforce } from "./limits";
 import { chooseAction } from "@/engine/ai";
 import { applyAction, viewFor } from "@/engine";
+import { autoMeldSelection } from "@/engine/hand";
 import { publicMove } from "@/engine/publicMove";
 import { movePublicKey, signMove } from "./moveSigning";
 import { BUILD_ID } from "@/lib/staleClient";
@@ -135,18 +136,28 @@ async function performBotTick(code: string, meldingOnly: boolean): Promise<{ act
   let state = game.state;
   let acted = false;
   if (table.status !== "playing") return { acted, rev: game.rev };
-  const bots = (seatsResult.data ?? []).filter(s => s.bot && !s.user_id).map(s => s.seat as SeatIndex);
+  const seats = seatsResult.data ?? [];
+  const bots = seats.filter(s => s.bot && !s.user_id).map(s => s.seat as SeatIndex);
   if ((meldingOnly && state.phase !== "melding") || state.phase === "hand_over" || state.phase === "game_over") return { acted, rev: game.rev };
   const melding = state.phase === "melding";
-  const actions: Action[] = melding ? bots.filter(seat => !state.players[seat].meldConfirmed).flatMap(seat => [
-    { type: "declare_meld", seat, cards: [...state.players[seat].hand] } as Action,
-    { type: "confirm_meld", seat } as Action,
-  ]) : state.turn !== null && bots.includes(state.turn) ? [chooseAction(viewFor(state, state.turn), { seed: `${game.id}:${state.rev}`, config: settings.bots })] : [];
-  for (const action of actions) {
+  // Each move carries the human it is made for; bot moves have none.
+  type Move = { action: Action; user?: string };
+  const moves: Move[] = melding ? [
+    ...bots.filter(seat => !state.players[seat].meldConfirmed).flatMap(seat => [
+      { action: { type: "declare_meld", seat, cards: [...state.players[seat].hand] } },
+      { action: { type: "confirm_meld", seat } },
+    ] as Move[]),
+    ...(table.rules.pace === "leisurely" ? await awayMelds(state, seats) : []),
+  ] : state.turn !== null && bots.includes(state.turn) ? [{ action: chooseAction(viewFor(state, state.turn), { seed: `${game.id}:${state.rev}`, config: settings.bots }) }] : [];
+  for (const { action, user } of moves) {
     const next = applyAction(state, action);
-    const { data: committedRev, error } = await admin.rpc("commit_bot_action", { p_game: game.id, p_old_rev: state.rev, p_state: next, p_action: action });
+    // A human's automatic meld commits as that player, under a request id any concurrent worker shares, so it lands once.
+    const { data: committedRev, error } = user
+      ? await admin.rpc("commit_game_action", { p_game: game.id, p_user: user, p_old_rev: state.rev, p_state: next, p_action: action, p_request_id: `auto-meld:${game.id}:${state.handNumber}:${action.seat}:${action.type}` })
+      : await admin.rpc("commit_bot_action", { p_game: game.id, p_old_rev: state.rev, p_state: next, p_action: action });
     if (error?.message === "The table is paused.") throw new ApiError(409, error.message);
-    if (isStaleCommit(error) || (!error && committedRev === null)) {
+    // A player who stood up between the read and the commit no longer owns the seat: stop like a lost race.
+    if ((user && error?.code === "42501") || isStaleCommit(error) || (!error && committedRev === null)) {
       const current = await admin.from("games").select("rev").eq("id", game.id).single();
       checkDb(current.error);
       return { acted: false, rev: current.data!.rev };
@@ -158,7 +169,37 @@ async function performBotTick(code: string, meldingOnly: boolean): Promise<{ act
     await broadcastTable(table.code, gameEvent(game.id, state, next, action));
     state = next; acted = true;
   }
+  // A bot's move (trump, the last pass, a shoot decision) can open meld; lay down the automatic melds now
+  // rather than waiting for a client to tick again, since at a leisurely table there may be none.
+  // This tick's move is already committed, so a failed follow-up (a pause, the tick quota) is left to the next tick.
+  if (acted && !melding && state.phase === "melding") {
+    try { return { acted, rev: (await performBotTick(code, true)).rev }; }
+    catch (error) { console.error("Melding after a bot move failed", error); }
+  }
   return { acted, rev: state.rev };
+}
+/**
+ * At a leisurely table, the meld for each seated human who still owes one and keeps automatic meld on
+ * (the default): the same cards and confirmation their own browser would send, so meld never waits for
+ * them to come back. A failed preference read melds no one; their browsers still meld when they return.
+ */
+async function awayMelds(state: GameState, seats: { seat: number; user_id: string | null }[]): Promise<{ action: Action; user: string }[]> {
+  if (!state.trump) return [];
+  const humans = seats.filter(s => s.user_id && !state.players[s.seat].meldConfirmed);
+  if (!humans.length) return [];
+  const { data, error } = await createAdminClient().from("profiles").select("id,auto_meld").in("id", humans.map(s => s.user_id!));
+  if (error) { console.error("Auto meld preferences failed", error); return []; }
+  const auto = new Set((data ?? []).filter(p => p.auto_meld !== false).map(p => p.id as string));
+  return humans.filter(s => auto.has(s.user_id!)).flatMap(({ seat, user_id }) => {
+    const player = state.players[seat];
+    const cards = autoMeldSelection(player.hand, state.trump!);
+    const declare = cards.length > 0 && !player.meld.length;
+    const s = seat as SeatIndex, user = user_id!;
+    return [
+      ...(declare ? [{ action: { type: "declare_meld", seat: s, cards } as Action, user }] : []),
+      { action: { type: "confirm_meld", seat: s } as Action, user },
+    ];
+  });
 }
 export async function tickForHuman(code: string, userId: string) {
   await loadGame(code, userId);
