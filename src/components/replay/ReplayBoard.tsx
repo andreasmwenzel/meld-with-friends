@@ -2,7 +2,7 @@
 
 import type { CardId, GameState, SeatIndex, Team, Trick } from "@/engine/types";
 import { sortHand } from "@/engine/hand";
-import { CardBack, PlayingCard, SUIT_GLYPH } from "@/components/cards/PlayingCard";
+import { CardBack, PlayingCard, SUIT_GLYPH, splitCard } from "@/components/cards/PlayingCard";
 import { Avatar } from "@/components/site/Avatar";
 import { useCardPrefs } from "@/lib/cardPrefs";
 import { teamOf } from "@/components/table/types";
@@ -225,7 +225,7 @@ function Centre({ frame, trick, rel, nameOf, compact, flying, sweep }: {
     0: "bottom-0 left-1/2 -translate-x-1/2", 1: "left-0 top-1/2 -translate-y-1/2", 2: "top-0 left-1/2 -translate-x-1/2", 3: "right-0 top-1/2 -translate-y-1/2",
   };
   const done = !!trick && trick.winner !== null;
-  const four = useCardPrefs().prefs.fourColour;
+  const { fourColour: four, trumpTint: tint } = useCardPrefs().prefs;
 
   return (
     <div className="mx-auto w-full max-w-[300px]">
@@ -245,7 +245,7 @@ function Centre({ frame, trick, rel, nameOf, compact, flying, sweep }: {
           return (
             <div key={p.card} className={`absolute ${spots[rel(p.seat)]}`}>
               <div className={cls} data-sweep={entering && sweeping ? "" : undefined} style={style}>
-                <PlayingCard card={p.card} width={w} fourColour={four} selected={done && trick.winner === p.seat} />
+                <PlayingCard card={p.card} width={w} fourColour={four} tint={tint} trump={splitCard(p.card).suit === frame.trump} selected={done && trick.winner === p.seat} />
               </div>
             </div>
           );

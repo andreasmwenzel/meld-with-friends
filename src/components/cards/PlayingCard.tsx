@@ -42,17 +42,19 @@ type Props = {
   title?: string;
   /** display options; omit for the standard deck with regular indices */
   prefs?: CardPrefs;
-  /** a trump card in your hand: the face takes a wash when the trump tint option is on */
+  /** a trump card: the face takes a wash when the trump tint option is on */
   trump?: boolean;
   /** the deck's colours alone, for cards on the table that keep the standard indices; overrides prefs */
   fourColour?: boolean;
+  /** the trump tint option alone, for those same table cards; overrides prefs */
+  tint?: boolean;
 };
 
 /**
  * A pinochle card. Chalk face, Bodoni rank, one large pip. Pure SVG so it scales from a 36px
  * trick thumbnail to a 220px hero card without losing its edge.
  */
-export function PlayingCard({ card, width = 96, selected, dimmed, className, style, title, prefs, trump, fourColour }: Props) {
+export function PlayingCard({ card, width = 96, selected, dimmed, className, style, title, prefs, trump, fourColour, tint }: Props) {
   const { rank, suit } = splitCard(card);
   const four = fourColour ?? prefs?.fourColour === true;
   const big = prefs?.bigIndex === true;
@@ -80,7 +82,7 @@ export function PlayingCard({ card, width = 96, selected, dimmed, className, sty
         ...style,
       }}
     >
-      <rect width="100" height="140" rx="8.5" fill={trump && prefs?.trumpTint ? "var(--chalk-trump)" : "var(--chalk)"} />
+      <rect width="100" height="140" rx="8.5" fill={trump && (tint ?? prefs?.trumpTint) ? "var(--chalk-trump)" : "var(--chalk)"} />
       {/* corner indices */}
       {big ? (
         <g fill={ink} fontFamily="var(--font-bodoni), serif" fontWeight={700}>
