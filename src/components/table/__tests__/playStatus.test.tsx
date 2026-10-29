@@ -117,12 +117,13 @@ describe("trick play status above the hand", () => {
     const counts = () => [...document.querySelectorAll('[role="img"][aria-label$=" cards"]')].map((el) => el.getAttribute("aria-label"));
     const before = counts();
     expect(before.length).toBeGreaterThan(0);
-    await act(() => { fireEvent.click(screen.getByRole("button", { name: "Meld" })); });
+    await act(() => { fireEvent.click(screen.getByRole("button", { name: "Review meld" })); });
     // Opponents' hands keep their counts, and the button carries no pressed state (its words change instead).
     expect(counts()).toEqual(before);
     expect(screen.getByRole("button", { name: "Back to the table" }).hasAttribute("aria-pressed")).toBe(false);
     expect(text()).toMatch(/^Meld this hand\./);
-    // The meld takes the cloth to itself, and is said aloud seat by seat.
+    // The meld takes the cloth to itself, flying in from each seat, and is said aloud seat by seat.
+    expect(document.querySelectorAll(".meld-fly").length).toBeGreaterThan(0);
     expect(document.querySelectorAll("[data-trick-card]")).toHaveLength(0);
     expect(document.querySelectorAll('[aria-label$="meld: 0 cards"]')).toHaveLength(0);
     // Every seat that declared meld has it on the cloth.
@@ -138,7 +139,7 @@ describe("trick play status above the hand", () => {
 
   it("offers no meld before the first lead, while it still lies on the cloth", async () => {
     await table("meld-review");
-    expect(screen.queryByRole("button", { name: "Meld" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Review meld" })).toBeNull();
   });
 
   it("offers a nudge once the computers have been quiet for 20 seconds, and it asks the server again", async () => {

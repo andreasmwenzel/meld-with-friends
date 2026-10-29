@@ -167,6 +167,10 @@ body {
 .trick-card[data-sweep] {
   animation: card-play var(--pm, 280ms) cubic-bezier(.2,.8,.25,1) both, card-sweep var(--sm) cubic-bezier(.5,0,.8,.4) var(--sd) forwards;
 }
+/* Meld shown again in the first trick: each card comes back from its seat like a played card, a beat apart. */
+.meld-fly { animation: card-play var(--pm, 280ms) cubic-bezier(.2,.8,.25,1) var(--md, 0ms) both; will-change: transform; }
+[data-motion="off"] .meld-fly { animation: card-fade var(--pm) linear both; }
+@media (prefers-reduced-motion: reduce) { .meld-fly { animation: card-fade 150ms linear both; } }
 /* Turning the table: the new seating starts where the old one stood and settles into place.
    Each keyframe set exists twice; switching between the two names restarts the turn without a remount. */
 @keyframes table-turn { from { transform: rotate(var(--turn-from, 0deg)) scale(.94); } to { transform: none; } }

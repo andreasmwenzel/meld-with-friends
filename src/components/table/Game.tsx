@@ -703,7 +703,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const canMeld = view.phase === "playing" && !lastTrick && view.playedCards.length > 0 && meldShown;
   const meldPeeking = canMeld && meldPeekRev === view.rev;
   const peek: Peek = meldPeeking || canMeld
-    ? { last: null, meld: meldPeeking, can: canMeld, label: "Meld", toggle: () => setMeldPeekRev((r) => (r === view.rev ? null : view.rev)) }
+    ? { last: null, meld: meldPeeking, can: canMeld, label: "Review meld", toggle: () => setMeldPeekRev((r) => (r === view.rev ? null : view.rev)) }
     : { last: peeking ? lastTrick : null, meld: false, label: "Last trick", can: !!lastTrick && view.phase === "playing" && !showingLast,
       toggle: () => setPeekRev((r) => (r === view.rev ? null : view.rev)) };
   // The cloth is not read out, so say what the last trick held, or each seat's meld, when it is shown again.
@@ -1194,14 +1194,22 @@ function CompactSeat({ seat, className, team, active, name, person, actions, chi
 }
 
 /** Small face-up cards overlapping so each shows only its corner index, wrapping after `perRow`. */
-function SmallFan({ cards, perRow, label, width = MELD_W, lit, hand }: { cards: CardId[]; perRow: number; label: string; width?: number; lit?: CardId[] | null; hand?: string }) {
+/** `fly`: the meld shown again comes back from its seat, card after card, the way a played card reaches the trick. */
+function SmallFan({ cards, perRow, label, width = MELD_W, lit, hand, fly }: { cards: CardId[]; perRow: number; label: string; width?: number; lit?: CardId[] | null; hand?: string; fly?: 0 | 1 | 2 | 3 }) {
   const four = useCardPrefs().prefs.fourColour;
   const w = width, h = (w * 7) / 5, peekX = Math.round(w / 2), peekY = Math.round(w * 0.72);
   const cols = Math.min(perRow, cards.length);
   return (
     <div data-hand={hand} data-hand-cards={hand ? cards.length : undefined} className="flex flex-wrap" role="group" aria-label={label} title={label}
       style={{ width: w + (cols - 1) * peekX + 0.5, paddingLeft: w - peekX, paddingTop: h - peekY }}>
-      {cards.map((c) => <span key={c} data-claim-card={c} style={{ marginLeft: peekX - w, marginTop: peekY - h, flexShrink: 0 }}><PlayingCard card={c} width={w} fourColour={four} selected={lit?.includes(c) ?? false} /></span>)}
+      {cards.map((c, i) => (
+        <span key={c} data-claim-card={c} style={{ marginLeft: peekX - w, marginTop: peekY - h, flexShrink: 0 }}>
+          {fly === undefined ? <PlayingCard card={c} width={w} fourColour={four} selected={lit?.includes(c) ?? false} />
+            : <span className="meld-fly block" style={{ ...flyFrom(fly, c), "--md": `${Math.min(i, 8) * 35}ms` } as React.CSSProperties}>
+              <PlayingCard card={c} width={w} fourColour={four} selected={lit?.includes(c) ?? false} />
+            </span>}
+        </span>
+      ))}
     </div>
   );
 }
@@ -1265,7 +1273,7 @@ function MeldLine({ rules, hand, trump, lit, setLit }: { rules: PlayerView["rule
  * Seeing the last trick again: `last` is set while it shows, `can` when there is one to see. In the first trick
  * there is none yet, and the same control shows the hand's meld instead: `meld` is set while it shows.
  */
-type Peek = { last: NonNullable<PlayerView["lastTrick"]> | null; meld: boolean; can: boolean; label: "Last trick" | "Meld"; toggle: () => void };
+type Peek = { last: NonNullable<PlayerView["lastTrick"]> | null; meld: boolean; can: boolean; label: "Last trick" | "Review meld"; toggle: () => void };
 
 /** Your own chair below the cloth: the same name and score chip as the other three. */
 function MySeat({ view, me, score, profileHref }: { view: PlayerView; me: Profile; score: SeatScore; profileHref?: string }) {
@@ -1403,7 +1411,7 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
       {/* Meld lies on the cloth in front of whoever laid it, until the first lead. */}
       {([0, 1, 2, 3] as const).map((r) => laid[r].length > 0 && (
         <div key={`meld${r}`} className={`absolute ${meldSpots[r]}`}>
-          <SmallFan cards={laid[r]} width={compact ? 24 : 30} perRow={r % 2 ? (compact ? 4 : 3) : 9} lit={r === 0 ? lit : null}
+          <SmallFan cards={laid[r]} width={compact ? 24 : 30} perRow={r % 2 ? (compact ? 4 : 3) : 9} lit={r === 0 ? lit : null} fly={peek.meld ? r : undefined}
             label={`${r === 0 ? "Your" : `${nameOf(seatFrom(r))}'s`} meld: ${laid[r].length} cards`} />
         </div>
       ))}
