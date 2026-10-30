@@ -6,17 +6,17 @@ import { useCardPrefs } from "@/lib/cardPrefs";
 import { teamOf } from "./types";
 import { usePopover } from "./popover";
 
-/** What a chip shows beside a player's name: the taker's contract and total, or a defender's meld, then their side's total. */
+/** What a chip shows beside a player's name: the taker's contract and total, or a defender's own meld and counters. */
 export interface SeatScore {
   dealer: boolean;
   /** the bid, "moon", or "–" for a pass */
   main: string | null; suit: Suit | null;
   /** the taking side's points this hand so far, or its change once the hand is scored */
   total: number | null;
-  /** a defender's own meld while meld is being laid down; from the first trick their side's points so far, then the side's change once the hand is scored, as `total` is for the taker */
+  /** a defender's own meld, plus the counters in the tricks they have won once play starts */
   small: number | null;
-  /** `small` is the side's points this hand rather than the seat's own meld */
-  smallSide: boolean;
+  /** `small` includes the seat's counters, not only its meld */
+  smallCounters: boolean;
   /** the breakdown behind the numbers: `top` (the bid), each melder's cards, then `rows` */
   top: [string, string][];
   meld: SeatMeld[];
@@ -34,17 +34,18 @@ export interface ScoreFacts {
   melds: Record<SeatIndex, MeldItem[]>;
   /** counter points taken by each side so far, without the last-trick bonus */
   counters: Record<Team, number>;
+  /** the tricks taken so far: who won each and the counters in it */
+  tricks: { winner: SeatIndex; counters: number }[];
   history: HandRecord[];
 }
 
 const SEATS: SeatIndex[] = [0, 1, 2, 3];
-const EMPTY = (dealer: boolean): SeatScore => ({ dealer, main: null, suit: null, total: null, small: null, smallSide: false, top: [], meld: [], rows: [] });
+const EMPTY = (dealer: boolean): SeatScore => ({ dealer, main: null, suit: null, total: null, small: null, smallCounters: false, top: [], meld: [], rows: [] });
 
 /**
  * Numbers only, no sentences: during bidding each chip shows its bid; afterwards the taker carries
- * the contract and the side's running total, each defender a small number for their own meld while
- * meld is laid down, their side's running total once play starts (so it agrees with the breakdown's
- * "So far"), and the side's change once the hand is scored; the taker's partner nothing. `meldOut` lists zero melds too while meld lies on the table.
+ * the contract and the side's running total, each defender a small number for their own meld plus the
+ * counters in the tricks they took themselves, the taker's partner nothing. `meldOut` lists zero melds too while meld lies on the table.
  */
 export function seatScore(f: ScoreFacts, seat: SeatIndex, nameOf: (s: SeatIndex) => string, meldOut = false): SeatScore {
   const dealer = f.dealer === seat;
@@ -73,13 +74,21 @@ export function seatScore(f: ScoreFacts, seat: SeatIndex, nameOf: (s: SeatIndex)
   } else rows.push(["So far", String(soFar)]);
   if (f.bidder === seat && f.highBid) {
     const total = record ? record.delta[team] : f.phase === "melding" || playing ? soFar : null;
-    return { dealer, main: f.highBid.shoot ? "moon" : String(f.highBid.amount), suit: f.trump, total, small: null, smallSide: false, top: [["Bid", f.highBid.shoot ? "the moon" : String(f.highBid.amount)]], meld: melded, rows };
+    return { dealer, main: f.highBid.shoot ? "moon" : String(f.highBid.amount), suit: f.trump, total, small: null, smallCounters: false, top: [["Bid", f.highBid.shoot ? "the moon" : String(f.highBid.amount)]], meld: melded, rows };
   }
   if (f.bidder !== null && teamOf(f.bidder) === team) return EMPTY(dealer);
-  if (f.sittingOut != null) return { ...EMPTY(dealer), meld: melded, rows };
-  if (record) return { ...EMPTY(dealer), small: record.delta[team], smallSide: true, meld: melded, rows };
-  if (playing) return { ...EMPTY(dealer), small: soFar, smallSide: true, meld: melded, rows };
-  return { ...EMPTY(dealer), small: f.phase === "melding" ? f.meldPoints[seat] : null, meld: melded, rows };
+  // A defender counts alone: their own meld and the counters in the tricks they won, not their partner's.
+  if (f.sittingOut != null) return EMPTY(dealer);
+  const own: SeatMeld[] = f.meldPoints[seat] > 0 || meldOut ? [{ name: nameOf(seat), items: f.melds[seat] ?? [], points: f.meldPoints[seat] }] : [];
+  if (f.phase === "melding") return { ...EMPTY(dealer), small: f.meldPoints[seat], meld: own };
+  if (!playing) return EMPTY(dealer);
+  const counters = f.tricks.filter(t => t.winner === seat).reduce((n, t) => n + t.counters, 0);
+  const lost = record != null && record.breakdown[team].meldDeclared > 0 && record.breakdown[team].meldSaved === 0 && f.meldPoints[seat] > 0;
+  const mine = (lost ? 0 : f.meldPoints[seat]) + counters;
+  const ownRows: [string, string][] = [["Counters", String(counters)]];
+  if (lost) ownRows.push(["Meld lost, no trick", `-${f.meldPoints[seat]}`]);
+  ownRows.push([record ? "Total" : "So far", String(mine)]);
+  return { ...EMPTY(dealer), small: mine, smallCounters: true, meld: own, rows: ownRows };
 }
 
 function Rows({ rows, total = false }: { rows: [string, string][]; total?: boolean }) {
@@ -155,7 +164,7 @@ export function ScoreTag({ score, name, align, placement = "below" }: { score: S
   const call = score.main === "–" ? "passed" : score.main === "moon" ? "shooting the moon" : `bid ${score.main}`;
   const label = score.main !== null
     ? `${name}: ${call}${score.suit ? ` in ${{ S: "spades", H: "hearts", D: "diamonds", C: "clubs" }[score.suit]}` : ""}${score.total !== null ? `, ${score.total} this hand` : ""}`
-    : score.smallSide ? `${name === "You" ? "Your" : `${name}'s`} side: ${score.small} this hand` : `${name}: meld ${score.small}`;
+    : score.smallCounters ? `${name}: ${score.small}, meld and counters taken` : `${name}: meld ${score.small}`;
   const side = align === "left" ? "left-0" : align === "right" ? "right-0" : "left-1/2 -translate-x-1/2";
   const cls = "flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs leading-5";
   // The chip stays 24px tall so nothing round it moves; the button's hit area reaches 44x44 (`hit`, globals.css).
