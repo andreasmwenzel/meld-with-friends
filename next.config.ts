@@ -9,6 +9,12 @@ const nextConfig: NextConfig = {
     return [{ source: "/home", destination: "/", permanent: false }];
   },
   partialPrefetching: true,
+  experimental: {
+    // Vercel restores .next/cache between builds, and a restored Turbopack cache once shipped an old globals.css
+    // (the table cloth rules were missing) under a new deploy's other changes. A clean rebuild fixed it; build from
+    // scratch every time rather than risk a stale stylesheet in production.
+    turbopackFileSystemCacheForBuild: false,
+  },
   turbopack: {
     rules: {
       "*.css": {
