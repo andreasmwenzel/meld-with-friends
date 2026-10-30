@@ -28,20 +28,22 @@ it("propagates database failures so callers can report them", async () => {
   mocks.rpc.mockResolvedValue({ error: { code: "42501", message: "Denied" } });
   await expect(recordGameResult("game")).rejects.toMatchObject({ status: 403 });
 });
-it("limits history to the user and maps saved seats rather than current profiles", async () => {
+it.each([
+  { abandoned: false, hands: 5 }, { abandoned: true, hands: 5 }, { abandoned: true, hands: 0 },
+])("maps saved seats and nullable wins for abandoned=$abandoned, hands=$hands", async ({ abandoned, hands }) => {
   const query = {
     select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), order: vi.fn().mockReturnThis(),
     limit: vi.fn().mockResolvedValue({ data: [{
-      game_id: "game", code: "BCDFGH", finished_at: "2026-10-20T00:00:00Z", score: { red: 1510, blue: 900 }, hands: 5,
+      game_id: "game", code: "BCDFGH", finished_at: "2026-10-20T00:00:00Z", score: { red: 1510, blue: 900 }, hands, abandoned,
       seats: [{ seat: 0, user_id: "me", name: "Me", bot: false }, { seat: 1, name: "Mabel", bot: true },
         { seat: 2, name: "Partner", bot: false }, { seat: 3, name: "Opponent", bot: false }],
-      game_result_players: [{ team: "red", won: true }],
+      game_result_players: [{ team: "red", won: abandoned ? null : true }],
     }], error: null }),
   };
   mocks.from.mockReturnValue(query);
   expect(await listHistory("me")).toEqual([{
     gameId: "game", code: "BCDFGH", finishedAt: "2026-10-20T00:00:00Z", score: { red: 1510, blue: 900 },
-    hands: 5, myTeam: "red", won: true, partner: "Partner", opponents: ["Mabel", "Opponent"],
+    hands, myTeam: "red", won: !abandoned, abandoned, partner: "Partner", opponents: ["Mabel", "Opponent"],
   }]);
   expect(query.eq).toHaveBeenCalledWith("game_result_players.user_id", "me");
   expect(query.limit).toHaveBeenCalledWith(50);

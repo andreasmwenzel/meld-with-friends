@@ -1,5 +1,5 @@
-// Game replay: rebuild a game from its action log, cut it at the last completed hand, and strip
-// everything a browser could use to deal the hand still in progress. Pure; no I/O.
+// Game replay: rebuild a game from its action log, optionally cut at the last completed hand,
+// and remove the seed from every position. Pure; no I/O.
 import { cardLabel } from './deck';
 import { legacyShootRules, resolveRules } from './scoring';
 import { applyAction, applyLegacyAction, newGame, viewFor } from './game';
@@ -14,7 +14,7 @@ export interface Replay {
   /** position after the first deal, seed removed */
   start: GameState;
   steps: ReplayStep[];
-  /** hands fully contained in the replay; a hand still being played is left out */
+  /** completed hands, or all hands shown (including partial hands and redeals) in a complete replay */
   hands: number;
   finished: boolean;
 }
@@ -22,6 +22,7 @@ export interface Replay {
 export interface ReplaySeat { seat: SeatIndex; name: string; bot: boolean }
 /** What `/api/replay/[id]` returns. */
 export interface ReplayPayload extends Replay {
+  abandoned: boolean;
   gameId: string; code: string; seats: ReplaySeat[];
   /** where the signed-in reader sat, so the board can face them; null for anyone else */
   viewerSeat: SeatIndex | null;
@@ -105,13 +106,14 @@ const sealed = (state: GameState): GameState => ({ ...state, seed: '', log: [] }
 
 /**
  * Packs a replayed game for a browser. Only hands that reached `hand_over` are included; the hand in
- * progress and its deal stay on the server. Returns null when no hand is complete yet.
+ * progress and its deal stay on the server. `complete` keeps every action and deal for a game that
+ * cannot continue. Returns null when there are no completed hands unless `complete` is set.
  */
-export function buildReplay(states: readonly GameState[], actions: readonly Action[]): Replay | null {
+export function buildReplay(states: readonly GameState[], actions: readonly Action[], options: { complete?: boolean } = {}): Replay | null {
   const final = states[states.length - 1];
   const finished = final.phase === 'game_over';
   let cut = actions.length;
-  if (!finished) {
+  if (!finished && !options.complete) {
     cut = -1;
     for (let i = states.length - 1; i >= 1; i--) if (states[i].phase === 'hand_over') { cut = i; break; }
     if (cut < 0) return null;
@@ -122,7 +124,8 @@ export function buildReplay(states: readonly GameState[], actions: readonly Acti
     steps.push(after.handNumber !== before.handNumber ? { action: actions[i], state: sealed(after) }
       : { action: actions[i], ...(actions[i].type === 'shoot' && after.sittingOut == null ? { legacyShoot: true } : {}) });
   }
-  return { version: 1, start: sealed(states[0]), steps, hands: states[cut].history.length, finished };
+  const hands = options.complete ? new Set(states.slice(0, cut + 1).map(state => state.handNumber)).size : states[cut].history.length;
+  return { version: 1, start: sealed(states[0]), steps, hands, finished };
 }
 
 /** Every position in a replay: index 0 is the opening deal, index i the position after step i. */

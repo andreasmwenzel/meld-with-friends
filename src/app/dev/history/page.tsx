@@ -5,11 +5,11 @@ import { HistoryList, type HistoryEntry } from "@/components/lobby/History";
 import { PastGames } from "@/components/lobby/PastGames";
 
 const SAMPLE_HISTORY: HistoryEntry[] = [
-  { gameId: "g1", code: "KQJ9TA", finishedAt: "2026-10-26T21:40:00Z", score: { red: 152, blue: 118 }, myTeam: "red", won: true, hands: 7, partner: "June", opponents: ["Margaret", "Theo"] },
-  { gameId: "g2", code: "BRDGPX", finishedAt: "2026-10-24T19:05:00Z", score: { red: 96, blue: 150 }, myTeam: "red", won: false, hands: 9, partner: "Otto", opponents: ["Lee", "Sam"] },
-  { gameId: "g3", code: "MNPQRS", finishedAt: "2026-10-19T02:15:00Z", score: { red: 1210, blue: 1520 }, myTeam: "blue", won: true, hands: 23, partner: "Bartholomew Featherstonehaugh", opponents: ["Maximiliana Oyelaran-Whitfield", "Jo"] },
-  { gameId: "g4", code: "WXYZBC", finishedAt: "2026-10-02T23:59:00Z", score: { red: 151, blue: -40 }, myTeam: "blue", won: false, hands: 1, partner: "Grace", opponents: ["Ruth", "Mabel"] },
-  { gameId: "g5", code: "HJKLMN", finishedAt: "2025-12-31T22:30:00Z", score: { red: 150, blue: 149 }, myTeam: "red", won: true, hands: 12, partner: "Sam", opponents: ["Lee", "Theo"] },
+  { gameId: "g1", code: "KQJ9TA", finishedAt: "2026-10-26T21:40:00Z", score: { red: 152, blue: 118 }, myTeam: "red", won: true, abandoned: false, hands: 7, partner: "June", opponents: ["Margaret", "Theo"] },
+  { gameId: "g2", code: "BRDGPX", finishedAt: "2026-10-24T19:05:00Z", score: { red: 96, blue: 150 }, myTeam: "red", won: false, abandoned: false, hands: 9, partner: "Otto", opponents: ["Lee", "Sam"] },
+  { gameId: "g3", code: "MNPQRS", finishedAt: "2026-10-19T02:15:00Z", score: { red: 1210, blue: 1520 }, myTeam: "blue", won: true, abandoned: false, hands: 23, partner: "Bartholomew Featherstonehaugh", opponents: ["Maximiliana Oyelaran-Whitfield", "Jo"] },
+  { gameId: "g4", code: "WXYZBC", finishedAt: "2026-10-02T23:59:00Z", score: { red: 0, blue: 0 }, myTeam: "blue", won: false, abandoned: true, hands: 0, partner: "Grace", opponents: ["Ruth", "Mabel"] },
+  { gameId: "g5", code: "HJKLMN", finishedAt: "2025-12-31T22:30:00Z", score: { red: 150, blue: 149 }, myTeam: "red", won: true, abandoned: false, hands: 12, partner: "Sam", opponents: ["Lee", "Theo"] },
 ];
 
 /**

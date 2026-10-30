@@ -106,3 +106,21 @@ it('describes tricks, hand outcomes and redeals', () => {
   }
   throw new Error('No seed produced a redeal');
 });
+
+
+it.each([0, 2])('keeps all actions and deals when complete, with %s completed hands', completed => {
+  const { state, states, actions } = play(`${SECRET}:partial`, {}, 0,
+    s => s.history.length === completed && s.phase === 'playing' && (s.currentTrick?.plays.length ?? 0) > 0);
+  const replay = buildReplay(states, actions, { complete: true })!;
+  expect(replay.finished).toBe(false);
+  expect(replay.hands).toBe(state.handNumber);
+  expect(replay.steps).toHaveLength(actions.length);
+  expect(replay.steps.map(step => step.action)).toEqual(actions);
+  expect(JSON.stringify(replay)).not.toContain(SECRET);
+  const frames = expandReplay(replay);
+  frames.forEach((frame, i) => {
+    expect(frame.seed).toBe('');
+    expect({ ...frame, log: [] }).toEqual({ ...states[i], seed: '', log: [] });
+  });
+  if (completed > 0) expect(replay.steps.some(step => step.state?.handNumber === state.handNumber)).toBe(true);
+});

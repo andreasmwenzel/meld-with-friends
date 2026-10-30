@@ -56,13 +56,38 @@ describe("getReplay", () => {
     const { state, actions } = playUntil(s => s.phase === "game_over");
     database({ games: gameRow(state), game_actions: log(actions), game_results: { code: "BCDFGH", seats: snapshot, finished_at: "2026-10-02T00:00:00Z" } });
     const replay = await getReplay(GAME, "bob");
-    expect(replay).toMatchObject({ gameId: GAME, code: "BCDFGH", finished: true, hands: state.history.length, viewerSeat: 2, finishedAt: "2026-10-02T00:00:00Z" });
+    expect(replay).toMatchObject({ gameId: GAME, code: "BCDFGH", finished: true, abandoned: false, hands: state.history.length, viewerSeat: 2, finishedAt: "2026-10-02T00:00:00Z" });
     expect(replay.seats.map(s => s.name)).toEqual(["Alice", "Mabel", "Bob", "Carol"]);
     expect(replay.steps.length).toBe(actions.length);
     expect(JSON.stringify(replay)).not.toContain(SEED);
     expect(JSON.stringify(replay)).not.toContain("alice");
     expect((await getReplay(GAME, null)).viewerSeat).toBeNull();
     expect((await getReplay(GAME, "stranger")).viewerSeat).toBeNull();
+  });
+  it.each([
+    { viewer: null, completed: 0 }, { viewer: "stranger", completed: 1 }, { viewer: "alice", completed: 1 },
+  ])("opens abandoned private-hand games for $viewer with $completed completed hands", async ({ viewer, completed }) => {
+    const { state, actions } = playUntil(s => s.history.length === completed && s.phase === "playing", { revealHands: false });
+    database({
+      games: gameRow(state), game_actions: log(actions),
+      game_results: { code: "BCDFGH", seats: snapshot, abandoned: true, finished_at: "2026-10-03T00:00:00Z" },
+      // The departed human's live chair is now a bot. Only the result snapshot is authoritative.
+      seats: [{ seat: 0, user_id: null, bot: "Otto", profile: null }],
+    });
+    const replay = await getReplay(GAME, viewer);
+    expect(replay).toMatchObject({
+      abandoned: true, finished: false, hands: state.handNumber, code: "BCDFGH",
+      viewerSeat: viewer === "alice" ? 0 : null, finishedAt: "2026-10-03T00:00:00Z",
+    });
+    expect(replay.seats).toEqual(snapshot.map(({ seat, name, bot }) => ({ seat, name, bot })));
+    expect(replay.steps.length).toBe(actions.length);
+    const final = expandReplay(replay).at(-1)!;
+    expect(final.phase).toBe("playing");
+    expect(final.players.map(p => p.hand)).toEqual(state.players.map(p => p.hand));
+    expect(final.rev).toBe(state.rev);
+    expect(final.score).toEqual(state.score);
+    expect(JSON.stringify(replay)).not.toContain(SEED);
+    expect(JSON.stringify(replay)).not.toContain("alice");
   });
   it("uses live seats for a game in progress and leaves the current hand out", async () => {
     const { state, actions } = playUntil(s => s.history.length === 1 && s.phase === "playing");
@@ -74,7 +99,7 @@ describe("getReplay", () => {
       ],
     });
     const replay = await getReplay(GAME, "alice");
-    expect(replay).toMatchObject({ code: "JKMNPQ", finished: false, hands: 1, viewerSeat: 0, finishedAt: null });
+    expect(replay).toMatchObject({ code: "JKMNPQ", finished: false, abandoned: false, hands: 1, viewerSeat: 0, finishedAt: null });
     expect(replay.seats).toEqual([
       { seat: 0, name: "Alice", bot: false }, { seat: 1, name: "Otto", bot: true }, { seat: 2, name: "Bob", bot: false }, { seat: 3, name: "Empty seat", bot: false },
     ]);
@@ -128,6 +153,15 @@ describe("GET /api/replay/[id]", () => {
     expect(expandReplay(replay).at(-1)!.score).toEqual(state.score);
   });
 
+  it.each([null, { id: "stranger" }])("serves an abandoned game without player membership for session %s", async session => {
+    const { state, actions } = playUntil(s => s.history.length === 1 && s.phase === "playing", { revealHands: false });
+    database({ games: gameRow(state), game_actions: log(actions),
+      game_results: { code: "BCDFGH", seats: snapshot, abandoned: true, finished_at: "2026-10-03T00:00:00Z" } });
+    mocks.session.mockResolvedValue(session);
+    const response = await GET(new Request("http://localhost/api/replay"), context);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ abandoned: true, finished: false, hands: state.handNumber, viewerSeat: null });
+  });
   it("serves anonymous readers, keyed by the forwarded address", async () => {
     const { state, actions } = playUntil(s => s.phase === "game_over");
     database({ games: gameRow(state), game_actions: log(actions), game_results: { code: "BCDFGH", seats: snapshot, finished_at: "x" } });
