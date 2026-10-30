@@ -30,6 +30,8 @@ describe("seatScore", () => {
   it("gives a defender only their own pieces", () => {
     const marriage: MeldItem = { kind: "marriage", cards: ["KS0", "QS0"], points: 2 };
     const score = seatScore(facts({ meldPoints: { 0: 3, 1: 0, 2: 2, 3: 17 }, melds: { 0: [], 1: [], 2: [marriage], 3: [run] } }), 2, nameOf);
+    expect(score.small).toBe(2);
+    expect(score.smallCounters).toBe(true);
     expect(score.top).toEqual([]);
     expect(score.meld).toEqual([{ name: "Otto", items: [marriage], points: 2 }]);
   });
@@ -53,5 +55,11 @@ describe("seatScore", () => {
     const lost = seatScore(facts({ ...at, tricks: [], history: [record(b({ meldDeclared: 2 }))] }), 2, nameOf);
     expect(lost.small).toBe(0);
     expect(lost.rows).toEqual([["Counters", "0"], ["Meld lost, no trick", "-2"], ["Total", "0"]]);
+    // The last-trick bonus goes to the defender who took the last trick.
+    const last = seatScore(facts({ ...at, tricks: [{ winner: 0, counters: 2 }, { winner: 2, counters: 3 }], history: [record(b({ meldDeclared: 2, meldSaved: 2, counters: 5, lastTrick: 1 }))] }), 2, nameOf);
+    expect(last.rows).toEqual([["Counters", "3"], ["Last trick", "1"], ["Total", "6"]]);
+    // A shoot leaves meld unsaved in the record; that is not a lost meld.
+    const shoot = seatScore(facts({ ...at, highBid: { seat: 3, amount: null, shoot: true }, history: [record(b({ meldDeclared: 2, counters: 3, shoot: 20 }))] }), 2, nameOf);
+    expect(shoot.rows).toEqual([["Counters", "3"], ["Total", "5"]]);
   });
 });

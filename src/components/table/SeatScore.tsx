@@ -34,7 +34,7 @@ export interface ScoreFacts {
   melds: Record<SeatIndex, MeldItem[]>;
   /** counter points taken by each side so far, without the last-trick bonus */
   counters: Record<Team, number>;
-  /** the tricks taken so far: who won each and the counters in it */
+  /** the tricks taken so far: who won each and the counters in it, without the last-trick bonus */
   tricks: { winner: SeatIndex; counters: number }[];
   history: HandRecord[];
 }
@@ -83,9 +83,14 @@ export function seatScore(f: ScoreFacts, seat: SeatIndex, nameOf: (s: SeatIndex)
   if (f.phase === "melding") return { ...EMPTY(dealer), small: f.meldPoints[seat], meld: own };
   if (!playing) return EMPTY(dealer);
   const counters = f.tricks.filter(t => t.winner === seat).reduce((n, t) => n + t.counters, 0);
-  const lost = record != null && record.breakdown[team].meldDeclared > 0 && record.breakdown[team].meldSaved === 0 && f.meldPoints[seat] > 0;
-  const mine = (lost ? 0 : f.meldPoints[seat]) + counters;
+  const b = record?.breakdown[team];
+  // A shoot never marks meld saved, so only an ordinary hand can lose it.
+  const lost = b != null && !f.highBid?.shoot && !b.shoot && b.meldDeclared > 0 && b.meldSaved === 0 && f.meldPoints[seat] > 0;
+  // The last-trick bonus goes to whoever took that trick.
+  const lastTrick = b?.lastTrick && f.tricks.at(-1)?.winner === seat ? b.lastTrick : 0;
+  const mine = (lost ? 0 : f.meldPoints[seat]) + counters + lastTrick;
   const ownRows: [string, string][] = [["Counters", String(counters)]];
+  if (lastTrick) ownRows.push(["Last trick", String(lastTrick)]);
   if (lost) ownRows.push(["Meld lost, no trick", `-${f.meldPoints[seat]}`]);
   ownRows.push([record ? "Total" : "So far", String(mine)]);
   return { ...EMPTY(dealer), small: mine, smallCounters: true, meld: own, rows: ownRows };
@@ -176,7 +181,7 @@ export function ScoreTag({ score, name, align, placement = "below" }: { score: S
         {body}
       </button>
       {open && (
-        <div ref={pop} id={popId} role="group" style={nudged} aria-label={name === "You" ? "Your side this hand" : `${name}'s side this hand`} className={`panel absolute z-30 w-max min-w-[150px] max-w-[min(280px,calc(100vw-16px))] ${above ? "bottom-full mb-1" : "top-full mt-1"} px-3 py-2 text-xs ${side}`}>
+        <div ref={pop} id={popId} role="group" style={nudged} aria-label={score.smallCounters ? `${name} this hand` : name === "You" ? "Your side this hand" : `${name}'s side this hand`} className={`panel absolute z-30 w-max min-w-[150px] max-w-[min(280px,calc(100vw-16px))] ${above ? "bottom-full mb-1" : "top-full mt-1"} px-3 py-2 text-xs ${side}`}>
           <Rows rows={score.top} />
           {score.meld.length > 0 && (
             <div className={score.top.length ? "mt-1 border-t border-ink/10 pt-1" : ""}>
