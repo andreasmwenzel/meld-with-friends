@@ -133,7 +133,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     },
   }));
   const reconnecting = connection === "reconnecting" || degraded;
-  const { prefs: cardPrefs, width: cardW, short, reducedMotion } = useCardPrefs();
+  const { prefs: cardPrefs, width: prefW, short, reducedMotion } = useCardPrefs();
   useEffect(() => {
     if (!armed) return;
     const away = (e: PointerEvent) => { if (!(e.target as Element).closest("[data-keep-armed]")) setArmed(null); };
@@ -773,9 +773,13 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     ? { me: isReady(view.seat), all: waitingNames.length === 0, readyNames, waitingNames, post: postReady } : null;
   // Tighten the fan until it fits the row; scroll only once cards would get too thin to tap.
   const handCount = view.sittingOut === view.seat && view.phase === "playing" ? view.handCounts[view.seat] : hand.length;
+  // A hand past what the row holds at its tightest (the bidder's sixteen while passing back) shrinks a little, down to
+  // three quarters of the chosen size, before it would scroll.
+  const tightest = prefW + (handCount - 1) * Math.max(20, prefW * 0.34);
+  const cardW = handW > 0 && tightest > handW ? Math.floor(prefW * Math.max(0.75, handW / tightest)) : prefW;
   const baseStep = cardW * (cardW < 60 ? 0.42 : 0.5);
   const fitStep = handW > 0 && handCount > 1 ? (handW - cardW) / (handCount - 1) : baseStep;
-  const step = Math.max(Math.max(20, cardW * 0.34), Math.min(baseStep, fitStep));
+  const step = Math.max(Math.max(20 * (cardW / prefW), cardW * 0.34), Math.min(baseStep, fitStep));
   const overlap = cardW - step;
   const scrollHand = handW > 0 && cardW + (handCount - 1) * step > handW + 0.5;
 
@@ -942,7 +946,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           {/* Passing: the meld in trump that the cards you keep would make, redone as you choose. */}
           {passingNow && view.trump && (
             <MeldLine key={`${view.phase}:${selected.join()}`} rules={view.rules} hand={view.hand.filter((c) => !selected.includes(c))} trump={view.trump}
-              kept={selected.length > 0} lit={lit} setLit={setLit} />
+              passing lit={lit} setLit={setLit} />
           )}
           {/* In the flow, not over the hand, so it never lands on the meld chips. */}
           {view.melds[view.seat]?.length > 0 && view.phase === "melding" && (
@@ -1295,8 +1299,8 @@ function SmallFan({ cards, perRow, label, width = MELD_W, lit, hand, fly }: { ca
 }
 
 /** Meld by suit while bidding, or the trump suit's items once trump is named. Tapping lights the cards in your hand.
- *  `kept`: the hand given is what is left once the cards chosen to pass are gone. */
-function MeldLine({ rules, hand, trump, kept = false, lit, setLit }: { rules: PlayerView["rules"]; hand: CardId[]; trump: Suit | null; kept?: boolean; lit: CardId[] | null; setLit: (c: CardId[] | null) => void }) {
+ *  `passing`: the hand given is what is left once the cards chosen to pass are gone, shown as one trump pill. */
+function MeldLine({ rules, hand, trump, passing = false, lit, setLit }: { rules: PlayerView["rules"]; hand: CardId[]; trump: Suit | null; passing?: boolean; lit: CardId[] | null; setLit: (c: CardId[] | null) => void }) {
   const [open, setOpen] = useState<string | null>(null);
   const all = useMemo(() => meldBySuit(hand, rules), [hand, rules]);
   const same = (a: CardId[]) => lit !== null && lit.length === a.length && a.every((c) => lit.includes(c));
@@ -1306,12 +1310,25 @@ function MeldLine({ rules, hand, trump, kept = false, lit, setLit }: { rules: Pl
   useEffect(() => () => setLit(null), [setLit]);
   const worth = all.filter((x) => x.total > 0);
   const four = useCardPrefs().prefs.fourColour;
+  if (trump && passing) {
+    const mine = all.find((x) => x.suit === trump), total = mine?.total ?? 0, on = open === trump && !!mine && same(mine.cards);
+    return (
+      <div className="mt-2 mb-1.5 flex justify-center text-xs">
+        <button type="button" aria-pressed={on} disabled={total === 0} onClick={() => mine && pick(trump, mine.cards)}
+          aria-label={`Meld you keep in ${SUIT_NAME[trump]}: ${total}`}
+          className={`hit inline-flex h-8 min-w-11 items-center justify-center gap-1 rounded-full px-2.5 disabled:opacity-60 ${on ? "bg-chalk" : "bg-white/10 hover:bg-white/20"}`}>
+          <span style={{ color: on ? suitInk(trump, four) : suitInkOnCloth(trump, four) }}>{SUIT_GLYPH[trump]}</span>
+          {" "}<span className={on ? "text-[color:var(--pip-black)]" : "text-chalk"}>{total}</span>
+        </button>
+      </div>
+    );
+  }
   if (trump) {
     const mine = all.find((x) => x.suit === trump);
-    if (!mine || mine.items.length === 0) return <p className="mt-2 text-center text-xs text-chalk-faint">{kept ? "No meld left" : "No meld"} in {SUIT_NAME[trump]}.</p>;
+    if (!mine || mine.items.length === 0) return <p className="mt-2 text-center text-xs text-chalk-faint">No meld in {SUIT_NAME[trump]}.</p>;
     return (
       <div className="mt-2 mb-1.5 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-3 text-xs text-chalk-faint">
-        <span>{kept ? `You keep ${mine.total} meld, tap to see it:` : "Your meld, tap to see it:"}</span>
+        <span>Your meld, tap to see it:</span>
         {mine.items.map((it, i) => {
           const key = `${i}`, on = open === key && same(it.cards);
           return (
