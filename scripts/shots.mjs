@@ -1,5 +1,6 @@
 // Screenshot lab positions with headless Chrome and write a contact sheet.
 // Usage: node scripts/shots.mjs [--base http://localhost:3000] [--size 390x844,1440x900] [--only bid-stuck,play-must-trump]
+//        Sizes default to the breakpoints every UI PR shows: phone, small phone, phone sideways, tablet, desktop.
 //        [--url "/dev/lab?spec=..."] [--out .dev/shots]
 // Needs `pnpm dev` running. Bots are paused so each picture is the exact position.
 import { execFile } from "node:child_process";
@@ -10,7 +11,7 @@ import { promisify } from "node:util";
 const run = promisify(execFile);
 const args = Object.fromEntries(process.argv.slice(2).reduce((pairs, arg, i, all) => (arg.startsWith("--") ? [...pairs, [arg.slice(2), all[i + 1]]] : pairs), []));
 const base = args.base ?? "http://localhost:3000";
-const sizes = (args.size ?? "390x844").split(",").map(s => s.split("x").map(Number));
+const sizes = (args.size ?? "390x844,360x640,844x390,768x1024,1440x900").split(",").map(s => s.split("x").map(Number));
 const out = resolve(args.out ?? ".dev/shots");
 const chrome = process.env.CHROME ?? "google-chrome";
 mkdirSync(out, { recursive: true });

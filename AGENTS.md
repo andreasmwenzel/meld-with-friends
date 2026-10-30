@@ -32,8 +32,10 @@ Everything committed, and every issue, PR and comment, is world-readable. Before
 2. Commit by explicit path list (`git add path1 path2`, never `git add -A`) so other work in the checkout
    is not swept in. Commit messages say what changed and why.
 3. Verify locally: `pnpm next typegen && pnpm tsc --noEmit && pnpm lint && pnpm vitest run` (a fresh checkout
-   needs the typegen step first, as CI does). For anything a player sees, check it
-   at 390x844 with the dev tools below and put before/after screenshots in the PR.
+   needs the typegen step first, as CI does). For anything a player sees, check it with the dev tools below
+   at every breakpoint, and put before/after screenshots of each in the PR: 390x844 phone, 360x640 small
+   phone, 844x390 phone sideways, 768x1024 tablet and 1440x900 desktop (full size, not cropped).
+   `node scripts/shots.mjs --only <ids>` takes all five by default.
 4. `gh pr create` with a summary, how it was verified, and `Closes #N` for the issues it finishes.
 5. Review: an agent may review and merge its own PR, but the review must be a separate pass with fresh
    context (a second agent given the diff, not the author's conclusions). Address findings or reply to them.
@@ -58,10 +60,11 @@ Everything committed, and every issue, PR and comment, is world-readable. Before
 
 ### Verifying and dev tools
 - Stale worktrees under `.claude/worktrees` break lint: `git worktree remove --force <path>; git worktree prune`.
-- Headless screenshots: `google-chrome --headless --screenshot --window-size=390,844 URL`.
+- Headless screenshots: `google-chrome --headless --screenshot --window-size=390,844 URL` (repeat for each
+  breakpoint above).
 - Dev tools on `pnpm dev` (:3000), full guide in [docs/DEV_TOOLS.md](docs/DEV_TOOLS.md): `/dev/lab` puts the
   real table in any position (`?preset=<id>`, `?spec=`, `?state=`), plays any seat, and rewinds.
-  `node scripts/shots.mjs [--only ids]` screenshots presets at 390x844 into `.dev/shots`.
+  `node scripts/shots.mjs [--only ids]` screenshots presets at every breakpoint into `.dev/shots`.
   `node scripts/pull-game.mjs CODE` copies a production game into the lab. `node scripts/fuzz.mjs N` fuzzes
   the engine. Older boards: `/dev/game` (`?play`, `?meld`, `?end=1`).
 - App env lives in `.env.local` (see `.env.example`). Never print or commit it. It holds production

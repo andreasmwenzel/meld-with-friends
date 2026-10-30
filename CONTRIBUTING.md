@@ -18,8 +18,8 @@ That's the fastest way to see or reproduce a change.
 
 - Branch from `main` and open a pull request. `main` is protected and CI must pass.
 - Before pushing: `pnpm tsc --noEmit && pnpm lint && pnpm vitest run`.
-- For anything a player sees, check it at phone size (390x844) and include screenshots.
-  `node scripts/shots.mjs --only <preset ids>` takes them for you.
+- For anything a player sees, check it and include screenshots at every breakpoint: 390x844 phone, 360x640 small phone, 844x390 phone sideways, 768x1024 tablet and 1440x900 desktop
+  (desktop full size). `node scripts/shots.mjs --only <preset ids>` takes all five for you.
 - Engine changes need tests. `src/engine` is pure and deterministic, and `node scripts/fuzz.mjs`
   plays thousands of random games checking invariants and that no player can see hidden cards.
 - Keep commits and PR descriptions about what changed and why.
