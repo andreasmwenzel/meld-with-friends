@@ -778,7 +778,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const sum = (seat: SeatIndex) => (view.melds[seat] ?? []).reduce((n, m) => n + m.points, 0);
   const facts: ScoreFacts = {
     sittingOut: view.sittingOut, phase: view.phase, handNumber: view.handNumber, dealer: view.dealer, bidder: view.bidder, highBid: view.highBid, trump: view.trump, bids: view.bids,
-    meldPoints: { 0: sum(0), 1: sum(1), 2: sum(2), 3: sum(3) }, melds: view.melds, counters: view.recap.counters, history: view.history,
+    meldPoints: { 0: sum(0), 1: sum(1), 2: sum(2), 3: sum(3) }, melds: view.melds, counters: view.recap.counters, tricks: view.recap.tricks, history: view.history,
   };
   const over = view.phase === "hand_over" || view.phase === "game_over";
   const hidePoints = hideOpponentPoints && !over;

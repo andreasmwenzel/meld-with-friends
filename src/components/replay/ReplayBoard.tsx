@@ -92,7 +92,7 @@ export function ReplayBoard({ frame, move, bottom, seats, viewerSeat, onSit, ani
     sittingOut: frame.sittingOut, phase: frame.phase, handNumber: frame.handNumber, dealer: frame.dealer, bidder: frame.bidder, highBid: frame.highBid, trump: frame.trump, bids: frame.bids,
     meldPoints: { 0: frame.players[0].meldPoints, 1: frame.players[1].meldPoints, 2: frame.players[2].meldPoints, 3: frame.players[3].meldPoints },
     melds: { 0: frame.players[0].meld, 1: frame.players[1].meld, 2: frame.players[2].meld, 3: frame.players[3].meld },
-    counters: view.recap.counters, history: view.history,
+    counters: view.recap.counters, tricks: view.recap.tricks, history: view.history,
   };
   const scoreOf = (seat: SeatIndex): SeatScore => seatScore(facts, seat, s => seats[s].name, meldOut);
   // A bidder holds 16 cards after the pass; fans tighten to stay inside the row.

@@ -11,7 +11,7 @@ const nameOf = (s: SeatIndex) => names[s];
 const facts = (over: Partial<ScoreFacts> = {}): ScoreFacts => ({
   phase: "playing", handNumber: 1, dealer: 2, bidder: 3, highBid: { seat: 3, amount: 35 }, trump: "H", bids: [],
   meldPoints: { 0: 0, 1: 0, 2: 0, 3: 17 }, melds: { 0: [], 1: [], 2: [], 3: [run, dix, dix2] },
-  counters: { red: 0, blue: 4 }, history: [], ...over,
+  counters: { red: 0, blue: 4 }, tricks: [], history: [], ...over,
 });
 
 describe("seatScore", () => {
@@ -27,31 +27,39 @@ describe("seatScore", () => {
     expect(seatScore(facts({ phase: "melding" }), 3, nameOf, true).meld.map(m => m.name)).toEqual(["Mabel", "Pearl"]);
   });
 
-  it("gives a defender their side's pieces", () => {
+  it("gives a defender only their own pieces", () => {
     const marriage: MeldItem = { kind: "marriage", cards: ["KS0", "QS0"], points: 2 };
-    const score = seatScore(facts({ meldPoints: { 0: 0, 1: 0, 2: 2, 3: 17 }, melds: { 0: [], 1: [], 2: [marriage], 3: [run] } }), 2, nameOf);
+    const score = seatScore(facts({ meldPoints: { 0: 3, 1: 0, 2: 2, 3: 17 }, melds: { 0: [], 1: [], 2: [marriage], 3: [run] } }), 2, nameOf);
     expect(score.small).toBe(2);
-    expect(score.smallSide).toBe(true);
+    expect(score.smallCounters).toBe(true);
     expect(score.top).toEqual([]);
     expect(score.meld).toEqual([{ name: "Otto", items: [marriage], points: 2 }]);
   });
 
-  it("shows a defender their own meld while meld is laid down, then their side's running total", () => {
-    const marriage: MeldItem = { kind: "marriage", cards: ["KS0", "QS0"], points: 2 };
-    const over = { meldPoints: { 0: 0, 1: 0, 2: 2, 3: 17 } as Record<SeatIndex, number>, melds: { 0: [], 1: [], 2: [marriage], 3: [run] }, counters: { red: 10, blue: 4 } };
-    expect(seatScore(facts({ ...over, phase: "melding" }), 0, nameOf, true).small).toBe(0);
-    const playing = seatScore(facts(over), 0, nameOf);
-    expect(playing.small).toBe(12);
-    expect(playing.rows.at(-1)).toEqual(["So far", "12"]);
-    expect(seatScore(facts(over), 2, nameOf).small).toBe(12);
+  it("scores a defender alone: their own meld while melding, then meld plus the counters in tricks they won", () => {
+    const over = { meldPoints: { 0: 0, 1: 0, 2: 1, 3: 17 } as Record<SeatIndex, number>, counters: { red: 13, blue: 4 },
+      tricks: [{ winner: 2 as SeatIndex, counters: 10 }, { winner: 3 as SeatIndex, counters: 4 }, { winner: 0 as SeatIndex, counters: 3 }] };
+    expect(seatScore(facts({ ...over, phase: "melding" }), 2, nameOf, true).small).toBe(1);
+    const otto = seatScore(facts(over), 2, nameOf);
+    expect(otto.small).toBe(11);
+    expect(otto.rows).toEqual([["Counters", "10"], ["So far", "11"]]);
+    expect(seatScore(facts(over), 0, nameOf).small).toBe(3);
   });
 
-  it("shows a defender their side's change once the hand is scored, as the breakdown does", () => {
+  it("keeps a defender's own total once the hand is scored; meld lost with no trick counts nothing", () => {
     const b = (over: Partial<HandScoreBreakdown>) => ({ meldDeclared: 0, meldSaved: 0, counters: 0, lastTrick: 0, setPenalty: 0, shoot: 0, ...over }) as HandScoreBreakdown;
-    const record = { handNumber: 1, dealer: 2, bidder: 3, bid: 35, trump: "H", meld: { red: 2, blue: 17 }, tricks: { red: 4, blue: 8 }, delta: { red: 13, blue: 39 },
-      breakdown: { red: b({ meldDeclared: 2, meldSaved: 2, counters: 10, lastTrick: 1 }), blue: b({ meldDeclared: 17, meldSaved: 17, counters: 22 }) }, wentSet: false } as HandRecord;
-    const score = seatScore(facts({ phase: "hand_over", history: [record], meldPoints: { 0: 0, 1: 0, 2: 2, 3: 17 } }), 0, nameOf);
-    expect(score.small).toBe(13);
-    expect(score.rows.at(-1)).toEqual(["This hand", "+13"]);
+    const record = (red: HandScoreBreakdown) => ({ handNumber: 1, dealer: 2, bidder: 3, bid: 35, trump: "H", meld: { red: 2, blue: 17 }, tricks: { red: 1, blue: 11 }, delta: { red: 0, blue: 39 },
+      breakdown: { red, blue: b({ meldDeclared: 17, meldSaved: 17, counters: 22 }) }, wentSet: false }) as HandRecord;
+    const at = { phase: "hand_over" as const, meldPoints: { 0: 0, 1: 0, 2: 2, 3: 17 } as Record<SeatIndex, number>, tricks: [{ winner: 2 as SeatIndex, counters: 3 }] };
+    expect(seatScore(facts({ ...at, history: [record(b({ meldDeclared: 2, meldSaved: 2, counters: 3 }))] }), 2, nameOf).rows).toEqual([["Counters", "3"], ["Total", "5"]]);
+    const lost = seatScore(facts({ ...at, tricks: [], history: [record(b({ meldDeclared: 2 }))] }), 2, nameOf);
+    expect(lost.small).toBe(0);
+    expect(lost.rows).toEqual([["Counters", "0"], ["Meld lost, no trick", "-2"], ["Total", "0"]]);
+    // The last-trick bonus goes to the defender who took the last trick.
+    const last = seatScore(facts({ ...at, tricks: [{ winner: 0, counters: 2 }, { winner: 2, counters: 3 }], history: [record(b({ meldDeclared: 2, meldSaved: 2, counters: 5, lastTrick: 1 }))] }), 2, nameOf);
+    expect(last.rows).toEqual([["Counters", "3"], ["Last trick", "1"], ["Total", "6"]]);
+    // A shoot leaves meld unsaved in the record; that is not a lost meld.
+    const shoot = seatScore(facts({ ...at, highBid: { seat: 3, amount: null, shoot: true }, history: [record(b({ meldDeclared: 2, counters: 3, shoot: 20 }))] }), 2, nameOf);
+    expect(shoot.rows).toEqual([["Counters", "3"], ["Total", "5"]]);
   });
 });
