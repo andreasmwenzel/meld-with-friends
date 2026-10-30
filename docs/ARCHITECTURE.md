@@ -48,8 +48,8 @@ only the revision and every seat refetches its view.
 - `seat_trade_offers` (id, table_id, from_user, to_user, from_seat, to_seat, status: pending|accepted|declined|cancelled, created_at)
 - `games` (id, table_id, game_kind, state jsonb, rev int, created_at, updated_at) — service role only
 - `game_actions` (id, game_id, seat, action jsonb, rev, created_at) — append-only audit log
-- `game_results` (game_id primary key, table_id, code, finished_at, score, winner, hands, seats) stores a finish snapshot with seat number, user id, name, and bot flag. Deleting its game cascades to the result.
-- `game_result_players` (game_id, user_id, team, won) indexes each seated human, including guests. RLS permits users to read their own index rows and matching results.
+- `game_results` (game_id primary key, table_id, code, finished_at, score, winner, hands, seats, abandoned) stores a finish snapshot with seat number, user id, name, and bot flag. Abandoned results have no winner. Deleting its game cascades to the result.
+- `game_result_players` (game_id, user_id, team, won) indexes each seated human, including guests; `won` is null for abandoned games. RLS permits users to read their own index rows and matching results.
 - `banned_users` (user_id primary key, reason, created_at) is service-role only. Bans survive guest pruning.
 
 Logical conflicts in SQL functions (a stale revision, a table that changed, a paused table) raise `PT409`, which the database API returns as HTTP 409, or return null as `commit_bot_action` does. They are never raised as `40001`: the API treats that serialization failure as transient and retries the statement until its upstream timeout, so a burst of stale requests holds every pooled connection (migration 0017). `src/server/__tests__/conflict-codes.test.ts` checks the live definition of every function.
@@ -130,9 +130,17 @@ Supabase also limits anonymous sign-ins per IP; tune that setting in Authenticat
 
 ## History and administration
 
-`GET /api/history` requires a session and returns a bare array, newest finish first, capped at 50 entries. Each entry has `gameId`, `code`, `finishedAt`, `score: { red, blue }`, `myTeam`, `won`, `hands`, `partner`, and `opponents: [name, name]`. Seat names come from the finish snapshot. Guests can read their own history. Results follow the existing finished-table retention policy and disappear when their games are deleted.
+`GET /api/history` requires a session and returns a bare array, newest finish first, capped at 50 entries. Each entry has `gameId`, `code`, `finishedAt`, `score: { red, blue }`, `myTeam`, `won`, `abandoned`, `hands`, `partner`, and `opponents: [name, name]`. Seat names come from the finish snapshot. Guests can read their own history. Results follow the existing finished-table retention policy and disappear when their games are deleted.
 
-The `record_game_result` service RPC inserts the snapshot and human player index in one transaction using `ON CONFLICT DO NOTHING`. A trigger on the transition to `game_over` captures seats under the action transaction's table lock for both human and bot commits. `src/server/history.ts` exposes the same idempotent recorder. Force-finishing an unfinished game does not create a win or history entry.
+The `record_game_result` service RPC inserts the snapshot and human player index in one transaction using `ON CONFLICT DO NOTHING`. A trigger on the transition to `game_over` captures seats under the action transaction's table lock for both human and bot commits. `src/server/history.ts` exposes the same idempotent recorder.
+
+A game that cannot continue is also over: idle cleanup, admin close, and the last human leaving
+record an abandoned result if at least one action was logged. `record_abandoned_game` stores the current
+score, completed-hand count, no winner, `abandoned: true`, and null player `won` values. The history API exposes `won: false`
+for these entries; the client labels them "Unfinished" and excludes them from wins and losses.
+A table-status trigger captures cleanup and admin closes. Last-human departures capture seats before
+the human becomes a bot, and the trigger's duplicate insert does nothing. Migration 0022 backfills
+finished tables from surviving seats, but cannot recover humans already replaced by bots.
 
 All `/api/admin/*` routes require `requireAdmin`, which checks a saved session against `ADMIN_EMAILS`. `GET /api/admin/tables?status=playing&limit=50` returns a bare array with `code`, `status`, `hostHandle`, `seats: [{ seat, name, bot }]`, `createdAt`, `lastActivity`, `rev`, and `phase`. Status can be `open`, `playing`, or `finished`; omit it for all statuses. Limit defaults to 50 and accepts 1 through 200. Seats use boolean bot flags and null names for empty chairs. `hostHandle` is null if unavailable; `rev` and `phase` are null before the first game. Activity is the active game's `updated_at`, falling back to the table creation time. Full game state stays on the server.
 
@@ -142,7 +150,7 @@ All `/api/admin/*` routes require `requireAdmin`, which checks a saved session a
 
 ## Game replay
 
-`GET /api/replay/[gameId]` needs no session for a finished game: a game id is an unguessable uuid
+`GET /api/replay/[gameId]` needs no session for a finished or abandoned game: a game id is an unguessable uuid
 that only its players receive (through the table snapshot and `/api/history`), so holding the link
 is the permission, and players share it deliberately. While a game is still going, only its seated
 players may open the replay (403 for anyone else); the link becomes public once the game is over.
@@ -158,15 +166,21 @@ redeal) also carries the position after it. Every embedded position has its `see
 browser replays actions with `applyAction`. For a game still in progress the steps stop at the last
 `hand_over`, so the hand being played and its deal never leave the server; before the first hand is
 over the route answers 404. Tables with `revealHands` off are
-replayable only once the game is over. The payload adds `seats` (display names and bot flags from the
-result snapshot, or the live seats for an unfinished game), the table `code`, `viewerSeat` for a
+replayable only once the game is over, including an abandoned result. Abandoned replays include every logged action and the final partial hand with its deal;
+`buildReplay(states, actions, { complete: true })` keeps those steps while blanking the seed. `finished` stays false
+because nobody won, and `hands` counts all hands shown, including the partial one and redeals. The payload's `abandoned`
+flag distinguishes them from games still in progress. Their seats and `finishedAt` come from the
+result snapshot, and their links are public even when `revealHands` is off.
+The payload adds `seats` (display names and bot flags from the
+result snapshot, or the live seats for a game in progress), the table `code`, `viewerSeat` for a
 signed-in player so the board faces them, and timestamps. No user ids are included.
 
 `/replay/[gameId]` renders it: `walk()` in `src/components/replay/model.ts` expands the steps into
 positions, merges a player's lay-down and confirm into one move, and groups moves into hands with
 their `HandRecord`. The address carries `?m=<frame>` so a copied link opens at that move. The live
 table links to the replay of its current game once a hand is complete; each game on the past games page at
-`/history` links to its own. `/dev/replay` (local only) shows the viewer on a game the bots play on the spot.
+`/history` links to its own. A final hand without a score record is labeled "unfinished" in the
+replay chapters, and an abandoned replay title names the hand where it stopped. `/dev/replay` (local only) shows the viewer on a game the bots play on the spot.
 
 ## Operational telemetry
 

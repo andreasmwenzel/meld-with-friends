@@ -153,7 +153,9 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
   const final = frames[frames.length - 1];
   const chapter = chapters[chapterOf(cursor)];
   const pairs = (t: Team) => payload.seats.filter(s => teamOf(s.seat) === t).map(s => s.name).join(" and ");
-  const title = payload.finished && final.winner
+  const title = payload.abandoned
+    ? `Abandoned ${final.phase === "hand_over" ? "after" : "in"} hand ${final.handNumber}, Red ${final.score.red} to Blue ${final.score.blue}.`
+    : payload.finished && final.winner
     ? `${final.winner === "red" ? "Red" : "Blue"} team won, ${final.score[final.winner]} to ${final.score[final.winner === "red" ? "blue" : "red"]}.`
     : `${payload.hands} ${payload.hands === 1 ? "hand" : "hands"} so far. The game is still going.`;
 
@@ -208,7 +210,7 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
           <button type="button" onClick={share} className="btn btn-ghost btn-compact">{copied ? "Link copied" : "Share this replay"}</button>
           <Link href="/" className="tap-link text-chalk-faint underline underline-offset-4 hover:text-chalk">Your tables</Link>
         </div>
-        {!payload.finished && <p className="px-4 pt-1 text-xs text-chalk-faint">Others can open the link once the game is over.</p>}
+        {!payload.finished && !payload.abandoned && <p className="px-4 pt-1 text-xs text-chalk-faint">Others can open the link once the game is over.</p>}
         <p className="px-4 pt-3 text-xs text-chalk-faint">Arrow keys step, Shift and an arrow jumps a hand. Tap a player to see the table from their seat. Tap a score for its breakdown.</p>
         <h2 className="display px-4 pt-4" style={{ fontSize: 22 }}>Every move</h2>
         <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">

@@ -18,7 +18,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 it("returns history as a bare array for saved users and guests", async () => {
-  const entries = [{ gameId: "game", code: "BCDFGH", finishedAt: "now", score: { red: 1500, blue: 1000 }, myTeam: "red", won: true, hands: 3, partner: "Partner", opponents: ["A", "B"] }];
+  const entries = [{ gameId: "game", code: "BCDFGH", finishedAt: "now", score: { red: 1500, blue: 1000 }, myTeam: "red", won: true, abandoned: false, hands: 3, partner: "Partner", opponents: ["A", "B"] }];
   mocks.history.mockResolvedValue(entries);
   expect(await (await history()).json()).toEqual(entries);
   expect(mocks.history).toHaveBeenCalledWith(uuid);

@@ -10,7 +10,7 @@ const NAMES = ["Alice", "Mabel", "Bob", "Otto"];
 
 /**
  * ?seed= picks the deals, ?hands= stops after that many finished hands plus a little of the next
- * (an unfinished game), ?seat= is the reader's seat, ?target= shortens the game.
+ * (an unfinished game), ?abandoned=1 marks that game abandoned, ?seat= is the reader's seat, ?target= shortens the game.
  */
 function generate(qs: URLSearchParams): ReplayPayload {
   const seed = qs.get("seed") ?? "dev-replay";
@@ -27,13 +27,14 @@ function generate(qs: URLSearchParams): ReplayPayload {
     state = applyAction(state, action);
     states.push(state); actions.push(action);
   }
-  const replay = buildReplay(states, actions);
+  const abandoned = state.phase !== "game_over" && qs.get("abandoned") === "1";
+  const replay = buildReplay(states, actions, { complete: abandoned });
   if (!replay) throw new Error("No completed hand to replay");
   const viewer = qs.has("seat") ? (Number(qs.get("seat")) as SeatIndex) : null;
   return {
-    ...replay, gameId: "dev", code: "DEV000", viewerSeat: viewer,
+    ...replay, abandoned, gameId: "dev", code: "DEV000", viewerSeat: viewer,
     seats: NAMES.map((name, seat) => ({ seat: seat as SeatIndex, name, bot: seat % 2 === 1 })),
-    startedAt: new Date(0).toISOString(), finishedAt: replay.finished ? new Date().toISOString() : null,
+    startedAt: new Date(0).toISOString(), finishedAt: replay.finished || abandoned ? new Date().toISOString() : null,
   };
 }
 

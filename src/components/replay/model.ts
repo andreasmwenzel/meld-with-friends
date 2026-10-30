@@ -26,7 +26,7 @@ export interface Chapter {
   /** index into `moves` of the chapter's first row */
   first: number;
   last: number;
-  /** how the hand ended; null when the deal was thrown in */
+  /** how the hand ended; null for a thrown-in or unfinished hand */
   record: HandRecord | null;
   title: string;
 }
@@ -60,6 +60,10 @@ export function walk(replay: Replay, nameOf: (seat: SeatIndex) => string): Walk 
       label: describeStep(step.action, before, after, nameOf), cards: cardsOfStep(step.action, after),
       trick: completedTrick ? lastTrickOf(after) : null, record,
     });
+    if (thrownIn) moves.push({
+      frame: i + 1, hand: after.handNumber, kind: "deal", actor: null, cards: [], trick: null, record: null,
+      label: `Hand ${after.handNumber}: ${nameOf(after.dealer)} deals`,
+    });
   });
   // Melding is one moment at the table, not four: the run of lay-downs and confirms becomes one move.
   for (let i = 0; i < moves.length; i++) {
@@ -86,6 +90,7 @@ export function walk(replay: Replay, nameOf: (seat: SeatIndex) => string): Walk 
     chapter.record = end.history.find(h => h.handNumber === chapter.hand) ?? null;
     const ending = replay.steps[moves[chapter.last].frame - 1]?.action;
     chapter.title = chapter.record ? handOutcome(chapter.record, nameOf)
+      : end.handNumber === chapter.hand ? "(unfinished)"
       : ending?.type === "misdeal" ? `${nameOf(ending.seat)} threw the hand in for nines` : "Everyone passed and the cards were redealt";
   }
   return { frames, moves, chapters };

@@ -14,7 +14,7 @@ interface SnapshotSeat { seat: SeatIndex; user_id: string | null; name: string; 
 /**
  * A finished game as a replay for anyone holding its id (an unguessable uuid that only players
  * receive, shared deliberately), or the completed hands of a game in progress for its seated
- * players only. The hand being played is never included, and the seed never leaves the server.
+ * players only. Abandoned games include their partial hand. The seed never leaves the server.
  */
 export async function getReplay(gameId: string, viewerId: string | null): Promise<ReplayPayload> {
   if (!idSchema.safeParse(gameId).success) throw new ApiError(404, "No game has this link.");
@@ -22,22 +22,23 @@ export async function getReplay(gameId: string, viewerId: string | null): Promis
   const [gameResult, logResult, resultResult] = await Promise.all([
     admin.from("games").select("id,table_id,state,rev,created_at,updated_at").eq("id", gameId).maybeSingle(),
     admin.from("game_actions").select("action,rev").eq("game_id", gameId).order("rev", { ascending: true }),
-    admin.from("game_results").select("code,seats,finished_at").eq("game_id", gameId).maybeSingle(),
+    admin.from("game_results").select("code,seats,finished_at,abandoned").eq("game_id", gameId).maybeSingle(),
   ]);
   checkDb(gameResult.error); checkDb(logResult.error); checkDb(resultResult.error);
   const game = gameResult.data as GameRow | null;
   if (!game) throw new ApiError(404, "No game has this link.");
-  const finished = game.state.phase === "game_over";
+  const result = resultResult.data as { code: string; seats: SnapshotSeat[]; finished_at: string; abandoned: boolean } | null;
+  const abandoned = result?.abandoned === true;
+  const finished = game.state.phase === "game_over" || abandoned;
   if (!finished && !resolveRules(game.state.rules, true).revealHands) {
     throw new ApiError(409, "This table keeps hands private until the game is over.");
   }
   const actions = ((logResult.data ?? []) as { action: Action }[]).map(row => row.action);
   const rebuilt = rebuildFromLog(game.state, actions);
   if (!rebuilt) throw new ApiError(422, "This game's record can no longer be replayed.");
-  const replay = buildReplay(rebuilt.states, rebuilt.actions);
+  const replay = buildReplay(rebuilt.states, rebuilt.actions, { complete: abandoned });
   if (!replay) throw new ApiError(404, "No hand has finished yet. Come back after the first hand.");
 
-  const result = resultResult.data as { code: string; seats: SnapshotSeat[]; finished_at: string } | null;
   let code: string, chairs: SnapshotSeat[];
   if (result) { code = result.code; chairs = result.seats; }
   else {
@@ -62,7 +63,7 @@ export async function getReplay(gameId: string, viewerId: string | null): Promis
     throw new ApiError(403, "While the game is going, only its players can review it. Share the link once it is over.");
   }
   return {
-    ...replay, gameId: game.id, code, seats, viewerSeat,
+    ...replay, abandoned, gameId: game.id, code, seats, viewerSeat,
     startedAt: game.created_at, finishedAt: finished ? result?.finished_at ?? game.updated_at : null,
   };
 }
