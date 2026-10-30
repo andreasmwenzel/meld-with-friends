@@ -28,7 +28,8 @@ cards it passed back to its partner as out of play (they never reach the table),
 hides those cards during play. No other seat learns them from a claim.
 
 New auction shoots are illegal. Trusted log replay uses `applyLegacyAction` for archived auction
-shoots and old post-pass shoots followed by meld. Those hands keep their four-player play and stored
+shoots and old post-pass shoots followed by meld. Logs from before October 25 record a dealer stuck
+after three passes as bidding the minimum; `replayLog` reads that as the pass that sticks the dealer now. Those hands keep their four-player play and stored
 stake through `legacyShootRules`, captured before rule normalization on any continuation of an old
 game, including ordinary hands after a shoot. Replay steps mark
 legacy declarations so browser playback uses the same rules. The server rebuild and lab import share
@@ -136,11 +137,13 @@ The `record_game_result` service RPC inserts the snapshot and human player index
 
 A game that cannot continue is also over: idle cleanup, admin close, and the last human leaving
 record an abandoned result if at least one action was logged. `record_abandoned_game` stores the current
-score, completed-hand count, no winner, `abandoned: true`, and null player `won` values. The history API exposes `won: false`
+score, completed-hand count, the game's last move (`games.updated_at`) as `finished_at`, no winner, `abandoned: true`, and null player `won` values. The history API exposes `won: false`
 for these entries; the client labels them "Unfinished" and excludes them from wins and losses.
 A table-status trigger captures cleanup and admin closes. Last-human departures capture seats before
 the human becomes a bot, and the trigger's duplicate insert does nothing. Migration 0022 backfills
-finished tables from surviving seats, but cannot recover humans already replaced by bots.
+finished tables from surviving seats, but cannot recover humans already replaced by bots. Migration 0023
+dates those results by their last move and, where no human was left at all, puts the host back in the chair
+held by the latest stand-in name.
 
 All `/api/admin/*` routes require `requireAdmin`, which checks a saved session against `ADMIN_EMAILS`. `GET /api/admin/tables?status=playing&limit=50` returns a bare array with `code`, `status`, `hostHandle`, `seats: [{ seat, name, bot }]`, `createdAt`, `lastActivity`, `rev`, and `phase`. Status can be `open`, `playing`, or `finished`; omit it for all statuses. Limit defaults to 50 and accepts 1 through 200. Seats use boolean bot flags and null names for empty chairs. `hostHandle` is null if unavailable; `rev` and `phase` are null before the first game. Activity is the active game's `updated_at`, falling back to the table creation time. Full game state stays on the server.
 

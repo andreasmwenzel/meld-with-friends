@@ -68,7 +68,19 @@ insert into public.games(table_id,game_kind,state,rev) select id,'pinochle','{"p
 update public.tables t set status='playing',current_game_id=g.id from public.games g
  where g.table_id=t.id and t.code='BCDFGH' and g.id<>'$OLDER';
 SQL
+# The host left last before the migration: every chair is a bot, and the stand-in Gus took the host's chair.
+GONE=$(table BCDFGJ playing 1 9)
+psql <<SQL
+update public.seats s set bot=(array['Mabel','Otto','Gus','Pearl'])[s.seat+1] from public.tables t where t.id=s.table_id and t.code='BCDFGJ';
+update public.tables set status='finished' where code='BCDFGJ';
+update public.games set updated_at='2026-10-20 12:00:00+00' where id in ('$OLD','$GONE');
+SQL
 psql < supabase/migrations/0022_abandoned_games.sql
+expect "the backfill finds nobody on a table the last human left" "$(players "$GONE")" ""
+psql < supabase/migrations/0023_abandoned_dates_and_hosts.sql
+expect "0023 dates a backfilled game by its last move" "$(psql -c "select finished_at from public.game_results where game_id='$OLD'")" "2026-10-20 12:00:00+00"
+expect "0023 puts the host back in the stand-in's chair" "$(players "$GONE")" "$(u 1):red:-"
+expect "the snapshot names the host in that chair" "$(psql -c "select string_agg(concat(e->>'seat',':',coalesce(e->>'user_id','-'),':',e->>'bot'),',' order by (e->>'seat')::int) from public.game_results r, jsonb_array_elements(r.seats) e where r.game_id='$GONE'")" "0:-:true,1:-:true,2:$(u 1):false,3:-:true"
 expect "the backfill records a game a rematch replaced" "$(result "$OLDER")" "t|-|1|120|80"
 expect "the rematch in progress is not recorded" "$(psql -c "select count(*) from public.game_results r join public.tables t on t.current_game_id=r.game_id where t.code='BCDFGH'")" "0"
 expect "the backfill records a game closed before the migration" "$(result "$OLD")" "t|-|2|120|80"
@@ -80,6 +92,7 @@ psql -c "update public.tables set created_at=now()-interval '3 days' where code=
 psql -c "select public.cleanup_tables(48,30)" >/dev/null
 expect "idle cleanup closes the table" "$(psql -c "select status from public.tables where code='BCDFGC'")" "finished"
 expect "idle cleanup records the game as abandoned" "$(result "$IDLE")" "t|-|1|120|80"
+expect "it is dated by its last move" "$(psql -c "select r.finished_at=g.updated_at from public.game_results r join public.games g on g.id=r.game_id where r.game_id='$IDLE'")" "t"
 expect "both humans are on it" "$(players "$IDLE")" "$(u 1):red:-,$(u 2):blue:-"
 
 LAST=$(table BCDFGD playing 0 5 0 1)

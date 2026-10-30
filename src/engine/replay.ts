@@ -2,7 +2,7 @@
 // and remove the seed from every position. Pure; no I/O.
 import { cardLabel } from './deck';
 import { legacyShootRules, resolveRules } from './scoring';
-import { applyAction, applyLegacyAction, newGame, viewFor } from './game';
+import { applyAction, applyLegacyAction, legalActionsFor, newGame, viewFor } from './game';
 import type { Action, CardId, GameState, HandRecord, SeatIndex, Suit, Trick } from './types';
 
 /** One logged action. `state` is present when the action dealt new cards (next hand or a redeal): the
@@ -88,8 +88,9 @@ export function replayLog(start: GameState, actions: readonly Action[], final?: 
     }
   };
   for (let i = 0; i < actions.length; i++) {
-    const action = actions[i];
+    let action = actions[i];
     declineIfSkipped(action);
+    action = stuckDealerPass(states[states.length - 1], action);
     const at = states[states.length - 1];
     const next = actions[i + 1];
     const oldDecision = action.type === 'shoot' && (legacyShoots.includes(i) || at.phase === 'bidding'
@@ -99,6 +100,17 @@ export function replayLog(start: GameState, actions: readonly Action[], final?: 
   }
   if (final && final.phase !== 'deciding_shoot') declineIfSkipped();
   return { states, actions: applied, legacyShoots: declarations };
+}
+
+/**
+ * Games logged before October 25 let a dealer stuck after three passes "bid" the minimum. The engine now
+ * takes a pass there and sticks the dealer with the minimum, which reaches the same position.
+ */
+function stuckDealerPass(at: GameState, action: Action): Action {
+  if (action.type !== 'bid' || at.phase !== 'bidding' || action.seat !== at.dealer || !at.rules.dealerStuck
+    || action.amount !== at.rules.minBid) return action;
+  const legal = legalActionsFor(at, action.seat);
+  return !legal.canBid && legal.canPassBid ? { type: 'pass_bid', seat: action.seat } : action;
 }
 
 /** The state without its seed, so nobody can deal the next hand from it. */
