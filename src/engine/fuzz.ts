@@ -49,7 +49,7 @@ export function fuzzRules(n: number): Partial<RulesConfig> {
     passCount: pick(n >> 4, [0, 3, 4, 5]), counting: scoring === 'classic' ? pick(n >> 5, ['tens', 'classic'] as const) : 'tens',
     shoot: pick(n >> 6, ['off', 'on'] as const),
     dealerStuck: pick(n >> 7, [true, false]), mustTakeTrickToSaveMeld: pick(n >> 8, [true, false]),
-    ninesMisdeal: pick(n >> 14, [true, false]),
+    ninesMisdeal: pick(n >> 14, [true, false]), throwIn: pick(n >> 15, [true, false]),
     ...(n >> 9) % 3 === 0 ? {
       // Rarer settings, about a third of games: long passes, no last-trick bonus, odd counter values, hidden hands.
       passCount: pick(n >> 10, [6, 8, 12]), lastTrickBonus: pick(n >> 11, [0, 1, 2]) * unit,

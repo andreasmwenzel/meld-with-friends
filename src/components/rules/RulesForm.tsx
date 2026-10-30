@@ -36,6 +36,8 @@ const FIELDS: {
     help: (r) => r.shoot === "on" ? `After the pass the bidder may play alone: partner sits out, no meld. Take every trick for ${r.target.toLocaleString()}; miss and lose the game.` : null },
   { k: "ninesMisdeal", label: "Five nines, no meld", values: () => [true, false], text: (v) => v ? "May throw the hand in" : "Must play it",
     help: (r) => r.ninesMisdeal ? "Five or more nines and no other meld, before your first bid or pass. The same dealer redeals." : null },
+  { k: "throwIn", label: "Declarer's first lead", values: () => [true, false], text: (v) => v ? "May throw in" : "Must play it",
+    help: (r) => r.throwIn ? "Instead of leading, the declarer may concede: their side goes set for the bid, the other side keeps its meld, and no counters are played for." : null },
   { k: "revealHands", label: "After each hand", values: () => [true, false], text: (v) => v ? "Show everyone's cards" : "Keep hands hidden" },
   { k: "pace", label: "Pace", values: () => ["live", "leisurely"], text: (v) => v === "leisurely" ? "Leisurely (a trick a day is fine)" : "Live",
     help: (r) => r.pace === "leisurely" ? "The table waits weeks for your turn." : null },

@@ -44,6 +44,11 @@ Trump selection maximizes this projection, whose suit-dependent terms reward mel
 
 ## Trick play: determinized Monte Carlo
 
+On its opening lead, a bot declarer throws in only when its team's declared meld plus every counter
+in the deck and the last-trick bonus is still below the bid. It uses the active counting rules. The
+bidding team loses the bid, defenders keep their declared meld even without a trick, and neither
+side scores counters or the last trick. Shoots cannot be thrown in.
+
 Bots claim the rest whenever `legal.canClaim` is true, before choosing a card. This is a proof from their own hand and public plays, independent of sampling or hidden ownership; the ordinary bot tick commits the claim as one action.
 
 `play.ts` evaluates only `legal.playableCards`. For each sample, `knowledge.ts` assigns the unknown deck to the other seats, respecting remaining counts, shown voids, ownership established by public meld and passing, and leaning toward what each seat's bids suggest. Randomized backtracking gives constrained deals; an assignment has a bounded search limit and failure falls back to the heuristic. Every candidate uses the same sampled deal, reducing sampling noise between candidates.

@@ -43,6 +43,8 @@ export interface ScenarioSpec {
   shootAfterPass?: boolean;
   /** play every trick out: bots never claim the rest (a hand that ends by a claim shows no "as dealt" hands) */
   noClaims?: boolean;
+  /** Throw in on the opening lead instead of playing the hand. */
+  concede?: boolean;
   trump?: Suit;
   /** cards the bidder's partner passes over, and the bidder passes back; the bot picks when omitted */
   passToBidder?: string[];
@@ -244,6 +246,10 @@ export function buildScenario(spec: ScenarioSpec): Scenario {
       continue;
     }
     if (state.phase === 'playing') {
+      if (spec.concede && legal.canConcede) {
+        apply({ type: 'concede', seat });
+        continue;
+      }
       if (playQueue.length) {
         const card = resolveOwned([playQueue[0]], state.players[seat].hand)[0];
         if (!legal.playableCards.includes(card)) throw new Error(`${playQueue[0]} is not a legal play for seat ${seat} now`);
@@ -252,6 +258,7 @@ export function buildScenario(spec: ScenarioSpec): Scenario {
       } else {
         // A position requested mid-play must stay there even if a bot could end it by claiming.
         const view = viewFor(state, seat);
+        view.legal.canConcede = false;
         if (to === 'playing' || spec.noClaims) view.legal.canClaim = false;
         apply(chooseAction(view, { seed: `${state.seed}:${state.rev}`, config: { samples: 6, budgetMs: 4 } }));
       }

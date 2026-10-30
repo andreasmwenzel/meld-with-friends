@@ -21,6 +21,7 @@ export const rulesSchema = z.object({
   dealerStuck: z.boolean().optional(),
   revealHands: z.boolean().optional(),
   ninesMisdeal: z.boolean().optional(),
+  throwIn: z.boolean().optional(),
 }).strict().superRefine((patch, ctx) => {
   const rules = resolveRules(patch);
   const modern = rules.scoring === "modern";
@@ -51,6 +52,7 @@ export const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("confirm_meld"), seat: seatSchema }).strict(),
   z.object({ type: z.literal("play_card"), seat: seatSchema, card }).strict(),
   z.object({ type: z.literal("claim"), seat: seatSchema }).strict(),
+  z.object({ type: z.literal("concede"), seat: seatSchema }).strict(),
   z.object({ type: z.literal("next_hand"), seat: seatSchema }).strict(),
 ]);
 export const handleSchema = z.string().trim().toLowerCase().regex(/^[a-z0-9_]{3,32}$/);

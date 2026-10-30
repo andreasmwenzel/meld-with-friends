@@ -130,6 +130,16 @@ describe("accessible names and states at the table", () => {
     expect(cards().every((c) => c.getAttribute("aria-disabled") === "true")).toBe(true);
   });
 
+  it("play-concede: throwing in asks first, and Keep playing takes the question back", async () => {
+    await table("play-concede");
+    expect(screen.queryByRole("button", { name: "Keep playing" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Throw in" }));
+    expect(screen.getByText(/^Go set for \d+\? They keep their meld\.$/)).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Throw in" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Keep playing" }));
+    expect(screen.queryByText(/^Go set for/)).toBeNull();
+  });
+
   it("meld-waiting: says who the table is waiting for, with no meld buttons to press", async () => {
     await table("meld-waiting");
     expect(screen.getByText(/^Waiting for .+ to finish melding\.$/)).toBeTruthy();

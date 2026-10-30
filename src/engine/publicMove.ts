@@ -38,6 +38,7 @@ function publicAction(action: Action): PublicAction | null {
     case 'pass_bid': case 'shoot': case 'decline_shoot': case 'declare_meld': case 'confirm_meld': return { type: action.type, seat: action.seat };
     case 'declare_trump': return { type: 'declare_trump', seat: action.seat, suit: action.suit };
     case 'play_card': return { type: 'play_card', seat: action.seat, card: action.card };
+    case 'concede': return null; // Hand-end reveals require each seat to fetch its view.
     default: return null;
   }
 }
@@ -107,7 +108,7 @@ function stateFromView(view: PlayerView): GameState & Pick<PlayerView, 'playedCa
       meldConfirmed: view.meldConfirmed[seat], passBuffer: [],
     })) as unknown as GameState['players'],
     sittingOut: view.sittingOut, bids: view.bids, highBid: view.highBid, bidder: view.bidder, trump: view.trump, currentTrick: view.currentTrick,
-    tricksTaken: { red: [], blue: [] }, score: view.score, history: [], winner: view.winner, seed: '', rev: view.rev, log: [],
+    tricksTaken: { red: Array.from({ length: view.trickCounts.red }, () => []), blue: Array.from({ length: view.trickCounts.blue }, () => []) }, score: view.score, history: [], winner: view.winner, seed: '', rev: view.rev, log: [],
     playedCards: view.playedCards,
   };
 }

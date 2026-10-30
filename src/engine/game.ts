@@ -57,7 +57,7 @@ export function validateRules(rules: RulesConfig): void {
   requireAction(rules.counting === 'tens' || rules.counting === 'classic', 'counting must be tens or classic');
   requireAction(['off', 'on'].includes(rules.shoot), 'Invalid shoot mode');
   requireAction(typeof rules.dealerStuck === 'boolean' && typeof rules.mustTakeTrickToSaveMeld === 'boolean' && typeof rules.revealHands === 'boolean'
-    && typeof rules.ninesMisdeal === 'boolean', 'Rule flags must be booleans');
+    && typeof rules.ninesMisdeal === 'boolean' && typeof rules.throwIn === 'boolean', 'Rule flags must be booleans');
 }
 function emptyPlayers(): GameState['players'] {
   const player = (seat: SeatIndex): PlayerState => ({
@@ -147,6 +147,10 @@ export function legalActionsFor(state: GameState, seat: SeatIndex): LegalActions
     mustPassCount: onTurn && (state.phase === 'passing_to_bidder' || state.phase === 'passing_back') ? state.rules.passCount : null,
     canDeclareMeld: melding, canConfirmMeld: melding,
     canClaim: claimLineFor(state, seat) !== null,
+    canConcede: state.rules.throwIn && state.phase === 'playing' && onTurn && seat === state.bidder
+      && !state.highBid?.shoot && state.sittingOut == null
+      && state.tricksTaken.red.length + state.tricksTaken.blue.length === 0
+      && state.currentTrick !== null && state.currentTrick.plays.length === 0,
     playableCards: state.phase === 'playing' && onTurn && seat !== state.sittingOut && state.currentTrick && state.trump
       ? legalPlays(state.players[seat].hand, state.currentTrick, state.trump) : [],
     playConstraint: state.phase === 'playing' && onTurn && seat !== state.sittingOut && state.currentTrick && state.trump
@@ -253,18 +257,10 @@ function finishHand(state: GameState, lastWinner: SeatIndex, shotMade?: boolean)
       breakdown[bidding].shoot = delta[bidding];
       scoreNormally(defending);
     }
-    state.score.red += delta.red;
-    state.score.blue += delta.blue;
-    state.history.push({ handNumber: state.handNumber, dealer: state.dealer, bidder: state.bidder,
+    completeHand(state, { handNumber: state.handNumber, dealer: state.dealer, bidder: state.bidder,
       bid, trump: state.trump, meld, tricks, delta, breakdown, wentSet: !shotMade, shotMade,
-      ...(state.sittingOut != null ? { sittingOut: state.sittingOut } : {}) });
-    if (!state.winner && (state.score[bidding] >= state.rules.target || state.score[defending] >= state.rules.target)) {
-      state.winner = state.score[bidding] >= state.rules.target ? bidding : defending;
-    }
-    state.turn = null;
-    state.phase = state.winner ? 'game_over' : 'hand_over';
-    log(state, `${SEAT_NAMES[state.bidder]} ${shotMade ? 'makes' : 'misses'} the shoot${solo && !shotMade ? '; shooting side loses the game' : '; hand over'}`);
-    if (state.winner) log(state, `${state.winner === 'red' ? 'Red' : 'Blue'} wins the game`);
+      ...(state.sittingOut != null ? { sittingOut: state.sittingOut } : {}) },
+      `${SEAT_NAMES[state.bidder]} ${shotMade ? 'makes' : 'misses'} the shoot${solo && !shotMade ? '; shooting side loses the game' : '; hand over'}`);
     return;
   }
   const wentSet = savedMeld(bidding) + tricks[bidding] < bid;
@@ -274,18 +270,46 @@ function finishHand(state: GameState, lastWinner: SeatIndex, shotMade?: boolean)
   if (wentSet) breakdown[bidding].setPenalty = bid;
   else scoreNormally(bidding);
   scoreNormally(defending);
-  state.score.red += delta.red;
-  state.score.blue += delta.blue;
-  state.history.push({ handNumber: state.handNumber, dealer: state.dealer, bidder: state.bidder,
-    bid, trump: state.trump, meld, tricks, delta, breakdown, wentSet });
-  state.turn = null;
-  state.phase = 'hand_over';
-  log(state, `${bidding === 'red' ? 'Red' : 'Blue'} ${wentSet ? `goes set for ${bid}` : `makes ${delta[bidding]}`}; hand over`);
-  if (state.score[bidding] >= state.rules.target || state.score[defending] >= state.rules.target) {
+  completeHand(state, { handNumber: state.handNumber, dealer: state.dealer, bidder: state.bidder,
+    bid, trump: state.trump, meld, tricks, delta, breakdown, wentSet },
+    `${bidding === 'red' ? 'Red' : 'Blue'} ${wentSet ? `goes set for ${bid}` : `makes ${delta[bidding]}`}; hand over`);
+}
+
+/** Apply every hand's score and the same bidder-first target check. */
+function completeHand(state: GameState, record: HandRecord, message: string): void {
+  state.score.red += record.delta.red;
+  state.score.blue += record.delta.blue;
+  state.history.push(record);
+  const bidding = teamOf(record.bidder);
+  const defending = otherTeam(bidding);
+  if (!state.winner && (state.score[bidding] >= state.rules.target || state.score[defending] >= state.rules.target)) {
     state.winner = state.score[bidding] >= state.rules.target ? bidding : defending;
-    state.phase = 'game_over';
-    log(state, `${state.winner === 'red' ? 'Red' : 'Blue'} wins the game`);
   }
+  state.turn = null;
+  state.phase = state.winner ? 'game_over' : 'hand_over';
+  log(state, message);
+  if (state.winner) log(state, `${state.winner === 'red' ? 'Red' : 'Blue'} wins the game`);
+}
+
+function concedeHand(state: GameState): void {
+  requireAction(state.bidder !== null && state.highBid?.amount != null && state.trump !== null, 'Hand is missing its contract');
+  const bidding = teamOf(state.bidder);
+  const defending = otherTeam(bidding);
+  const bid = state.highBid.amount;
+  const meld = { red: 0, blue: 0 };
+  for (const player of state.players) meld[teamOf(player.seat)] += player.meldPoints;
+  const delta = { red: 0, blue: 0 };
+  delta[bidding] = -bid;
+  delta[defending] = meld[defending];
+  const empty = (): HandScoreBreakdown => ({ meldDeclared: 0, meldSaved: 0, counters: 0, lastTrick: 0, setPenalty: 0, shoot: 0 });
+  const breakdown = { red: empty(), blue: empty() };
+  breakdown[bidding].setPenalty = bid;
+  breakdown[defending].meldDeclared = meld[defending];
+  breakdown[defending].meldSaved = meld[defending];
+  state.currentTrick = null;
+  completeHand(state, { handNumber: state.handNumber, dealer: state.dealer, bidder: state.bidder,
+    bid, trump: state.trump, meld, tricks: { red: 0, blue: 0 }, delta, breakdown, wentSet: true, conceded: true },
+    `${SEAT_NAMES[state.bidder]} throws in; ${bidding === 'red' ? 'Red' : 'Blue'} goes set for ${bid}`);
 }
 
 /** Mutates a cloned state through the same legal trick and scoring path for plays and claims. */
@@ -365,6 +389,10 @@ function apply(previous: GameState, action: Action, legacyShoot: boolean): GameS
       }
       break;
     }
+    case 'concede':
+      requireAction(legal.canConcede, 'You can only throw in on your opening lead');
+      concedeHand(state);
+      break;
     case 'decline_shoot':
       requireAction(legal.canDeclineShoot, 'You cannot decline a shoot now');
       log(state, `${name} plays it out`);
@@ -494,6 +522,7 @@ export function normaliseHandRecord(h: Omit<HandRecord, 'breakdown'> & { breakdo
   const bidding = teamOf(h.bidder);
   const forTeam = (team: Team): HandScoreBreakdown => {
     const result = { meldDeclared: h.meld[team], meldSaved: 0, counters: 0, lastTrick: 0, setPenalty: 0, shoot: 0 };
+    if (h.conceded && team === bidding) result.meldDeclared = 0;
     if (h.shotMade !== undefined) {
       // No mode was stored. A bidder's delta is the stake; defenders may score normally.
       if (team === bidding || h.delta[team] !== h.meld[team] + h.tricks[team]) result.shoot = h.delta[team];

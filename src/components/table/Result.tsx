@@ -21,6 +21,7 @@ function headline(view: PlayerView, nameOf: (s: SeatIndex) => string) {
   const who = nameOf(h.bidder) === "You" ? "You" : nameOf(h.bidder);
   const verb = (a: string, b: string) => (who === "You" ? a : b);
   if (h.shotMade !== undefined) return h.shotMade ? `${who} ${verb("shot", "shot")} the moon.` : `${who} ${verb("missed", "missed")} the moon.`;
+  if (h.conceded) return `${who} threw in at ${h.bid} and went set.`;
   return h.wentSet ? `${who} went set on ${h.bid}.` : `${who} made ${h.bid}${verb("", "")} in ${SUIT_GLYPH[h.trump]}.`;
 }
 
@@ -147,6 +148,7 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
         className="panel outline-none max-h-[78dvh] w-full max-w-md overflow-y-auto rounded-b-none short:max-h-[calc(100dvh-1rem)] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:rounded-b-[inherit] sm:p-5">
         <p id={titleId} className="display" style={{ fontSize: 26, lineHeight: 1.1 }}>{title}</p>
         {view.claim && <p className="mt-1 text-sm text-ink-soft">{nameOf(view.claim.seat)} {nameOf(view.claim.seat) === "You" ? "claim" : "claims"} the rest. {13 - view.claim.fromTrick} remaining tricks.</p>}
+        {h?.conceded && <p className="mt-1 text-sm text-ink-soft">Thrown in before the first lead: the defenders keep their meld, and nobody takes counters.</p>}
         {h?.sittingOut != null && <p className="mt-2 text-sm text-ink-soft">
           {headline(view, nameOf)} {h.shotMade ? `Every trick taken alone adds ${view.rules.target} points.` : "The first lost trick ends the game; the shooting side loses."} {nameOf(h.sittingOut)} sat out. No meld or counters count.
         </p>}
