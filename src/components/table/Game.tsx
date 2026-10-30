@@ -457,10 +457,13 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const closeButton = useRef<HTMLButtonElement>(null);
   // Focus goes into the drawer when it opens and back to the Menu button when it closes.
   const wasOpen = useRef(false);
+  // Set when the menu closes to open the table's look, which then takes focus itself.
+  const handingOver = useRef(false);
   useEffect(() => {
     if (menu) closeButton.current?.focus();
-    else if (wasOpen.current) menuButton.current?.focus();
+    else if (wasOpen.current && !handingOver.current) menuButton.current?.focus();
     wasOpen.current = menu;
+    handingOver.current = false;
   }, [menu]);
   useEffect(() => {
     if (!menu) return;
@@ -1026,7 +1029,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
               <div className="flex flex-col items-start">
                 {/* The look opens over the board, so each change shows on the table as it is made. At hand end the result
                     sheet takes the board, so the options stay in the menu (below). */}
-                {!over && <button type="button" onClick={() => { setMenu(false); setLookOpen(true); }} className={linkCls}>Table and cards</button>}
+                {!over && <button type="button" onClick={() => { handingOver.current = true; setMenu(false); setLookOpen(true); }} className={linkCls}>Table and cards</button>}
                 <button type="button" onClick={toggleChime} aria-pressed={chime} className={linkCls}>Sound {chime ? "on" : "off"}</button>
                 {push.supported && view.rules.pace === "leisurely" && (
                   <button type="button" onClick={() => void (push.enabled ? push.disable() : push.enable())} disabled={push.busy} aria-pressed={push.enabled} className={linkCls}>

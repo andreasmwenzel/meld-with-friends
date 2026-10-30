@@ -214,4 +214,18 @@ describe("table and cards at the board", () => {
     expect(await screen.findByRole("dialog", { name: "Table and cards" })).toBeTruthy();
     expect(cog().getAttribute("aria-expanded")).toBe("true");
   });
+
+  it("hands focus to the popover from the menu, even after the cog has been opened and closed", async () => {
+    await table("play-lead");
+    fireEvent.click(cog());
+    fireEvent.click(cog());
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Options" }));
+    fireEvent.click(within(screen.getByRole("tabpanel", { name: "Options" })).getByRole("button", { name: "Table and cards" }));
+    const pop = await screen.findByRole("dialog", { name: "Table and cards" });
+    await vi.waitFor(() => { if (!pop.contains(document.activeElement)) throw new Error("focus is outside the popover"); });
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Table and cards" })).toBeNull();
+    expect(document.activeElement).toBe(cog());
+  });
 });

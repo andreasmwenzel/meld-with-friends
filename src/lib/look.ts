@@ -16,11 +16,11 @@ export const BACKS: [Back, string][] = [["lattice", "Lattice"], ["stripes", "Str
 
 /**
  * Runs in the page's head before it paints, so a chosen cloth never flashes oxblood first, and follows a change made
- * in another tab. It also writes the phone's theme-color tag. Kept to plain ES5 and standalone: it cannot import anything.
+ * in another tab (including clearing the site's storage). It also writes the phone's theme-color tag. Kept to plain ES5 and standalone: it cannot import anything.
  */
 export const CLOTH_SCRIPT = `(function(){var s=${JSON.stringify(Object.fromEntries(CLOTHS.map(([c, , hex]) => [c, hex])))};
 function a(){var c="oxblood";try{c=JSON.parse(localStorage.getItem(${JSON.stringify(CARD_PREFS_KEY)})||"{}").cloth||c}catch(e){}
 if(!Object.prototype.hasOwnProperty.call(s,c))c="oxblood";document.documentElement.setAttribute("data-cloth",c);
 var m=document.querySelector('meta[name="theme-color"]');if(!m){m=document.createElement("meta");m.name="theme-color";document.head.appendChild(m)}
 m.setAttribute("content",s[c])}
-a();addEventListener("storage",function(e){if(e.key===${JSON.stringify(CARD_PREFS_KEY)})a()})})()`;
+a();addEventListener("storage",function(e){if(e.key===null||e.key===${JSON.stringify(CARD_PREFS_KEY)})a()})})()`;

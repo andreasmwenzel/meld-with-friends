@@ -29,7 +29,9 @@ export function LookOptions({ team, trump = null }: { team: Team; trump?: Suit |
     <div className="flex flex-col gap-4">
       <div role="group" aria-label="Cloth" className="flex flex-col gap-2">
         <p className="flex justify-between text-sm text-ink-soft"><span>Cloth</span><span aria-hidden>{clothName}</span></p>
-        <div className="flex justify-between">
+        {/* Six across when there is room, three over two in a popover narrowed to clear a seat. */}
+        <div className="@container">
+        <div className="grid grid-cols-3 justify-items-center gap-y-2 @min-[15.5rem]:grid-cols-6">
           {CLOTHS.map(([cloth, name]) => (
             <button key={cloth} type="button" data-cloth-swatch={cloth} aria-pressed={look.cloth === cloth} aria-label={name} title={name}
               onClick={() => update({ cloth })}
@@ -39,6 +41,7 @@ export function LookOptions({ team, trump = null }: { team: Team; trump?: Suit |
                 style={{ background: "radial-gradient(120% 120% at 30% 20%, var(--cloth-edge), var(--cloth) 50%, var(--cloth-deep))" }} />
             </button>
           ))}
+        </div>
         </div>
       </div>
       <div role="group" aria-label="Card backs" className="flex flex-col gap-2">
@@ -62,7 +65,8 @@ export function LookOptions({ team, trump = null }: { team: Team; trump?: Suit |
 }
 
 const MAX_W = 320;
-const MIN_W = 248;
+/** As narrow as it goes to clear a seat: the option rows wrap, and the cloth swatches fall into two rows. */
+const MIN_W = 216;
 const MAX_H = 600;
 const MIN_H = 200;
 const GAP = 10;
@@ -102,28 +106,34 @@ function placeNear(button: HTMLElement): Place {
 
   let width = Math.min(MAX_W, pageW - 24);
   let left = Math.min(Math.max(12, fromLeft ? r.left : r.right - width), pageW - 12 - width);
+  // First narrow it (or, opening from the right on a sideways phone, slide it out to the screen's edge) to clear the seat.
   const east = drawnBox("east");
   if (east && fromLeft && east.left - GAP - left >= MIN_W) width = Math.min(width, east.left - GAP - left);
-  // Opening from the right (a sideways phone's action column), it may slide out to the screen's edge to clear the seat.
   if (east && !fromLeft && left < east.right + GAP) {
     const clearLeft = east.right + GAP;
     const clearWidth = Math.min(width, pageW - 12 - clearLeft);
     if (clearWidth >= MIN_W) { left = clearLeft; width = clearWidth; }
   }
 
+  // Whatever still lies under its stretch of screen (your hand; the seat, if narrowing could not clear it) bounds it
+  // from below, or from above when it opens upwards, while that leaves a usable height.
+  const under = (box: DOMRect | null) => !!box && box.right > left && box.left < left + width;
   const mine = drawnBox("mine");
-  const mineTop = mine && mine.right > left && mine.left < left + width ? mine.top - GAP : Infinity;
+  const blocks = [mine, east].filter(under) as DOMRect[];
   let top: number, height: number;
   if (above) {
     let bottom = Math.min(r.top - GAP, vBottom - EDGE);
-    if (bottom > mineTop && mineTop - (vTop + EDGE) >= MIN_H) bottom = mineTop;
-    height = Math.min(MAX_H, bottom - (vTop + EDGE));
+    // A button beside the cards (a wide screen's corner) lifts the popover clear of them; one below a seat stops under it.
+    for (const box of blocks) if (bottom > box.top - GAP && box.top - GAP - (vTop + EDGE) >= MIN_H) bottom = box.top - GAP;
+    let ceiling = vTop + EDGE;
+    for (const box of blocks) if (box.bottom + GAP <= bottom && bottom - (box.bottom + GAP) >= MIN_H) ceiling = Math.max(ceiling, box.bottom + GAP);
+    height = Math.min(MAX_H, bottom - ceiling);
     top = bottom - height;
   } else {
     top = r.bottom + GAP;
-    const room = vBottom - EDGE - top;
-    const clear = mineTop - top;
-    height = Math.min(MAX_H, room, clear >= MIN_H ? clear : Infinity);
+    let floor = vBottom - EDGE;
+    for (const box of blocks) if (box.bottom > top && box.top - GAP - top >= MIN_H) floor = Math.min(floor, box.top - GAP);
+    height = Math.min(MAX_H, floor - top);
   }
   const tail = r.left + r.width / 2 - left;
   return { top, left, width, height, tail: tail > 14 && tail < width - 14 ? tail : null, above };
