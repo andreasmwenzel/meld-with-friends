@@ -935,7 +935,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           {/* Your chair faces the partner's across the cloth, with what the table waits for in front of you. */}
           {!short && <MySeat view={view} me={me} score={scoreOf(view.seat)} profileHref={local ? undefined : "/#profile"} />}
           {!short && view.phase !== "playing" && <PhasePrompt view={view} trick={trickCards} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge} />}
-          <ActionBar key={view.rev} view={view} bidSlot={bidSlot} compact={short} selected={selected} busy={busy || updating} act={act} nameOf={nameOf} autoMeld={cardPrefs.autoMeld} previewing={previewing} />
+          <ActionBar key={view.rev} view={view} bidSlot={bidSlot} compact={short} boardScale={fit.scale} selected={selected} busy={busy || updating} act={act} nameOf={nameOf} autoMeld={cardPrefs.autoMeld} previewing={previewing} />
           {/* Whose turn it is lives here, by your hand, so the cloth holds only the cards. */}
           {view.phase === "playing" && (
             <PlayStatus view={view} trick={trickCards} nameOf={nameOf} peek={peek} stalled={stalled && !paused} nudge={nudge} compact={short}
@@ -1645,8 +1645,8 @@ function constraintSentence(view: PlayerView): string | null {
   return describeConstraint(c, SUIT_NAME);
 }
 
-function ActionBar({ view, selected, busy, act, nameOf, autoMeld, previewing, bidSlot, compact }: {
-  bidSlot: HTMLDivElement | null; compact: boolean;
+function ActionBar({ view, selected, busy, act, nameOf, autoMeld, previewing, bidSlot, compact, boardScale }: {
+  bidSlot: HTMLDivElement | null; compact: boolean; boardScale: number;
   view: PlayerView; selected: CardId[]; busy: boolean; previewing: boolean;
   act: (a: ClientAction) => Promise<unknown>; nameOf: (s: SeatIndex) => string; autoMeld: boolean;
 }) {
@@ -1686,7 +1686,7 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld, previewing, bi
         min={L.minBid ?? view.rules.minBid} step={view.rules.bidStep} busy={busy}
         onBid={(amount) => act({ type: "bid", amount })}
         pass={L.canPassBid ? { label: "Pass", run: () => act({ type: "pass_bid" }) } : null}
-        misdeal={misdeal} slot={bidSlot} compact={compact}
+        misdeal={misdeal} slot={bidSlot} compact={compact} scale={boardScale}
       />
     </>);
   }

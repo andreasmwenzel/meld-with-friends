@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BidPicker } from "../BidPicker";
+import { BidPicker, fitGrid } from "../BidPicker";
 import { NextHandCountdown } from "../NextHandCountdown";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -44,6 +44,28 @@ describe("the bid grid", () => {
     fireEvent.click(screen.getByRole("button", { name: "30" }));
     expect(onBid).toHaveBeenLastCalledWith(30);
     expect(onBid).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("fitting the bid grid on the cloth", () => {
+  // Cloth sizes and table scales measured in Chrome at each screen size.
+  const onScreen = (w: number, h: number, scale: number) => {
+    const fit = fitGrid(w, h, scale, 54);
+    const across = fit.cols * fit.cellW + (fit.beside ? Math.min(fit.cellW, fit.cellH) : 0);
+    const down = fit.rows * fit.cellH + (fit.beside ? 0 : Math.min(fit.cellW, fit.cellH));
+    return { ...fit, tap: Math.min(fit.cellW, fit.cellH) * scale, inside: across <= w && down <= h };
+  };
+  it("gives every amount a 44px tap on screen and keeps the grid on the cloth", () => {
+    expect(onScreen(214, 246, 1)).toMatchObject({ cols: 4, rows: 3, beside: false, inside: true });
+    expect(onScreen(300, 246, 1)).toMatchObject({ cols: 4, rows: 3, inside: true });
+    expect(onScreen(184, 246, 0.787)).toMatchObject({ cols: 3, rows: 2, inside: true });
+    expect(onScreen(240, 132, 1)).toMatchObject({ cols: 4, rows: 2, beside: true, inside: true });
+    for (const [w, h, s] of [[214, 246, 1], [300, 246, 1], [184, 246, 0.787], [172 / 0.81, 246, 0.81], [240, 132, 1]]) {
+      expect(onScreen(w, h, s).tap).toBeGreaterThanOrEqual(44);
+    }
+  });
+  it("on a cloth too small for full taps, still keeps the grid on it", () => {
+    expect(onScreen(184, 246, 0.5).inside).toBe(true);
   });
 });
 

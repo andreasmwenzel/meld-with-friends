@@ -1,25 +1,48 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 const BATCH_SIZE = 32;
-const COLUMNS = 4;
+
+export type GridFit = { cols: number; rows: number; beside: boolean; cellW: number; cellH: number };
+/**
+ * How the amounts lie on a cloth `w` by `h` (the table's own px, before it is scaled by `scale`). Each cell wants a
+ * full 44px tap on screen, so `44 / scale` in the table's px. Four across where they fit, else three (a 360px phone);
+ * three rows with the chevron under them, then two, then two with the chevron beside. On a cloth too small for any
+ * of them at full size, whichever layout gives the biggest cells.
+ */
+export function fitGrid(w: number, h: number, scale: number, base: number): GridFit {
+  const want = Math.ceil(44 / Math.min(1, scale)) + 1;
+  const layouts = [4, 3].flatMap((cols) => [{ cols, rows: 3, beside: false }, { cols, rows: 2, beside: false }, { cols, rows: 2, beside: true }]);
+  const sized = layouts.map((l) => {
+    const roomW = (w * 0.96) / (l.cols + (l.beside ? 1 : 0));
+    const roomH = (h * 0.84) / (l.rows + (l.beside ? 0 : 1));
+    const tall = Math.floor(Math.min(want, roomH));
+    const cellW = Math.floor(Math.min(roomW, Math.max(base, tall)));
+    // A cell too narrow for a full tap is no use taller than it is wide.
+    return { ...l, cellW, cellH: cellW < want ? Math.min(tall, cellW) : tall };
+  });
+  const tap = (l: typeof sized[number]) => Math.min(l.cellW, l.cellH);
+  return sized.find((l) => tap(l) >= want) ?? sized.reduce((a, b) => (tap(b) > tap(a) ? b : a));
+}
 
 /**
  * The bid amounts lie open on the cloth (portalled into `slot` when the table gives one), so bidding covers
  * nothing but the table. Tap an amount to pick it, then tap it again or the Bid button to bid.
  * Scrolling appends legal increments, so it never discards earlier bids or the selection.
  */
-export function BidPicker({ min, step, busy, onBid, pass, misdeal = null, slot = null, compact = false }: {
+export function BidPicker({ min, step, busy, onBid, pass, misdeal = null, slot = null, compact = false, scale = 1 }: {
   min: number; step: number; busy: boolean; onBid: (amount: number) => void;
   pass: { label: string; run: () => void } | null;
   /** throw the hand in for nines */
   misdeal?: (() => void) | null;
   /** where on the table the grid goes; without one it sits above the buttons */
   slot?: HTMLElement | null;
-  /** sideways on a phone the cloth is shallow: two rows show instead of three */
+  /** sideways on a phone: smaller pills */
   compact?: boolean;
+  /** how far the table is scaled down to fit the screen; the grid sits inside it, so its taps grow to make up */
+  scale?: number;
 }) {
   const [count, setCount] = useState(BATCH_SIZE);
   const [picked, setPicked] = useState<number | null>(null);
@@ -30,11 +53,22 @@ export function BidPicker({ min, step, busy, onBid, pass, misdeal = null, slot =
   // The engine accepts safe integers and has no game-rule maximum bid.
   const legalCount = Math.floor((Number.MAX_SAFE_INTEGER - min) / step) + 1;
   const amounts = Array.from({ length: Math.min(count, legalCount) }, (_, i) => min + i * step);
-  // Each amount takes a full 44px tap; the pill drawn inside it is smaller, so the rows still read as a grid.
-  const rowH = 44;
-  const colW = compact ? 48 : 54;
+  // The cloth's size before the table is scaled, to see how many amounts it holds.
+  const [cloth, setCloth] = useState<{ w: number; h: number } | null>(null);
+  useEffect(() => {
+    if (!slot || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setCloth({ w: slot.offsetWidth, h: slot.offsetHeight }));
+    observer.observe(slot);
+    return () => observer.disconnect();
+  }, [slot]);
+  // Each amount takes a full 44px tap on screen where the cloth has room (fitGrid), with a smaller pill drawn inside so
+  // the rows still read as a grid.
+  const shrink = Math.min(1, scale);
+  const fit = cloth ? fitGrid(cloth.w, cloth.h, scale, compact ? 48 : 54)
+    : { cols: 4, rows: compact ? 2 : 3, beside: compact, cellW: compact ? 48 : 54, cellH: 45 };
+  const { cols: COLUMNS, rows, beside, cellW: colW, cellH: rowH } = fit;
+  const tapPx = Math.min(colW, rowH);
   const gap = 0;
-  const rows = compact ? 2 : 3;
   const more = () => setCount((current) => Math.min(current + BATCH_SIZE, legalCount));
   // Near the end of what is loaded, load the next batch so the list never runs out under a finger.
   const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -64,7 +98,7 @@ export function BidPicker({ min, step, busy, onBid, pass, misdeal = null, slot =
   };
 
   const board = (
-    <div className={`flex items-center ${compact ? "flex-row" : "flex-col"}`}>
+    <div className={`flex items-center ${beside ? "flex-row" : "flex-col"}`}>
       <div ref={scroller} onScroll={onScroll} role="group" aria-label="Bid amounts"
         className="overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         style={{ height: rows * rowH + (rows - 1) * gap, scrollSnapType: "y mandatory" }}>
@@ -75,7 +109,7 @@ export function BidPicker({ min, step, busy, onBid, pass, misdeal = null, slot =
               className="group flex items-center justify-center rounded-full disabled:cursor-not-allowed disabled:opacity-45" onClick={() => tap(amount, i)}
               style={{ height: rowH, width: colW, scrollSnapAlign: "start" }}>
               <span className="btn btn-chalk tabular-nums group-hover:bg-white"
-                style={{ height: compact ? 34 : 36, width: colW - 5, padding: 0, fontSize: compact ? 16 : 18,
+                style={{ height: Math.min(rowH - 6, (compact ? 34 : 36) / shrink), width: colW - 5, padding: 0, fontSize: Math.min((compact ? 16 : 18) / shrink, rowH * 0.45),
                   ...(picked === amount ? { background: "var(--brass)", boxShadow: "inset 0 0 0 3px var(--chalk)" } : null) }}>
                 {amount}
               </span>
@@ -84,7 +118,7 @@ export function BidPicker({ min, step, busy, onBid, pass, misdeal = null, slot =
         </div>
       </div>
       <button type="button" aria-label="Higher bids" onClick={down} disabled={busy}
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-chalk-faint hover:text-chalk">
+        className="flex shrink-0 items-center justify-center rounded-full text-chalk-faint hover:text-chalk" style={{ width: tapPx, height: tapPx }}>
         <svg width="18" height="10" viewBox="0 0 18 10" aria-hidden fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M2 2l7 6 7-6" />
         </svg>
