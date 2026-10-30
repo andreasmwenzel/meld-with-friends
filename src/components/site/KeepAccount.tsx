@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 /** Supabase's answer when the email or Google login already belongs to an account. */
@@ -11,6 +11,8 @@ const TAKEN = /already (been )?registered|already exists|already linked|email_ex
  * account cannot be attached; `onSignIn` offers to switch to that account instead.
  */
 export function KeepAccount({ onSignIn }: { onSignIn?: () => void }) {
+  // The form can show twice on one page (account menu and the lobby's Friends popover), so its id is per instance.
+  const fieldId = useId();
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error" | "taken">("idle");
   const [message, setMessage] = useState("");
@@ -46,8 +48,8 @@ export function KeepAccount({ onSignIn }: { onSignIn?: () => void }) {
             You are playing as a guest on this browser. Add an email to keep your history and friends list.
           </p>
           <form onSubmit={attachEmail} className="mt-3 flex flex-wrap gap-2">
-            <label htmlFor="keep-email" className="sr-only">Email</label>
-            <input id="keep-email" className="field min-w-0 flex-1 basis-40" type="email" required placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <label htmlFor={fieldId} className="sr-only">Email</label>
+            <input id={fieldId} className="field min-w-0 flex-1 basis-40" type="email" required placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
             <button className="btn btn-ink shrink-0" disabled={state === "sending"}>{state === "sending" ? "Sending" : "Add email"}</button>
           </form>
           <button className="tap mt-1 text-sm text-deck-blue underline" onClick={google}>Or link a Google account</button>
