@@ -576,11 +576,23 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
       const padY = parseFloat(cs.paddingTop || "0") + parseFloat(cs.paddingBottom || "0");
       const padX = parseFloat(cs.paddingLeft || "0") + parseFloat(cs.paddingRight || "0");
       const w = b.offsetWidth, h = b.offsetHeight, room = s.clientHeight - padY;
-      const scale = flat ? 1 : Math.min(1, room / Math.max(1, h), (s.clientWidth - padX) / Math.max(1, w));
+      // The side seats' names hang below the cloth's row, past the board's own box: count how far, in the board's pixels.
+      const row = b.querySelector<HTMLElement>(".board-lift");
+      const shown = b.getBoundingClientRect().height / Math.max(1, h);
+      let below = 0;
+      if (row && !flat) {
+        const rowBottom = row.getBoundingClientRect().bottom;
+        for (const el of b.querySelectorAll<HTMLElement>("[data-seat-hang]")) below = Math.max(below, (el.getBoundingClientRect().bottom - rowBottom) / Math.max(0.01, shown));
+      }
+      // They may reach a little way past the room, over the corners of your own area (SPILL); only past that does the
+      // board shrink for them.
+      const ext = h + below;
+      const scale = flat ? 1 : Math.min(1, room / Math.max(1, h), (room + SPILL) / Math.max(1, ext), (s.clientWidth - padX) / Math.max(1, w));
       // The partner across stays at the top of the room; the cloth's row drops by half what the board leaves free, so it
       // sits midway between that seat and yours at the room's foot. Whole screen pixels, so cards stay crisp, given in the
       // board's own pixels, since the row moves inside the board's scale.
-      const top = flat ? 0 : Math.max(0, Math.floor((room - h * scale) / 2) / scale);
+      // Never so low that the names hanging below go further.
+      const top = flat ? 0 : Math.max(0, Math.floor(Math.min((room - h * scale) / 2, room + SPILL - ext * scale)) / scale);
       setFit((prev) => (prev.scale === scale && prev.w === w && prev.h === h && prev.top === top ? prev : { scale, w, h, top }));
     };
     measure();
@@ -885,7 +897,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
             go midway between. When the action bar grows or shrinks they glide to the new middle (globals.css, .board-lift)
             rather than jumping. The stage's padding keeps the side seats' turn rings, which stand 2px outside their plates,
             inside the stage's clip. */}
-        <div ref={stage} className="board-flat flex min-h-0 flex-1 items-start justify-center overflow-hidden p-1">
+        <div ref={stage} className="board-flat flex min-h-0 flex-1 items-start justify-center overflow-hidden p-1"
+          style={short ? undefined : { paddingBottom: 4 + SPILL, marginBottom: -SPILL }}>
           <div className="board-flat" style={fit.scale < 1 ? { width: fit.w * fit.scale, height: fit.h * fit.scale } : undefined}>
             <div ref={boardRef} className="board-flat w-[min(100vw-2rem,760px)] origin-top-left" style={{ transform: fit.scale < 1 ? `scale(${fit.scale})` : undefined, "--board-scale": fit.scale } as React.CSSProperties}>
               {/* partner across */}
@@ -1084,6 +1097,9 @@ function shootLine(who: string): string {
 }
 
 const REV_W = 36;
+/** How far the side seats' names, hanging under their fans, may reach below the board's room: over the corners of your
+ * own area, which holds only your centred chip at its top. The stage's clip is that much taller (Game). */
+const SPILL = 32;
 /** A side seat's fan of twelve backs (34 wide, standing 40 apart less a card): the room both side fans keep. */
 const SIDE_FAN_H = (34 * 7) / 5 + 11 * ((34 * 7) / 5 - 40);
 /** Where a seat sits from your chair, for `data-hand` (scripts/overlap.mjs finds the hands by it). */
@@ -1137,45 +1153,57 @@ function OpponentRow({ seat, view, name, person, actions, align, score, laid, st
       {name} seems to be away. Hand to a computer
     </button>
   );
-  return (
-    // A side seat is laid out round its fan of backs alone: the name rises above it out of a row of no height, so the fan's
-    // middle is the felt's middle. The fan keeps the room of a full twelve, so both plates stay in line while cards are
-    // played, and a longer fan (passing) grows both ways. A hand shown face up at the end is taller than the cloth, so
-    // there the name takes its own room and the board scales to fit.
-    <div data-claim-seat={seat} className={`group flex min-w-0 flex-col ${items} ${vertical ? "" : "gap-1 py-1 sm:gap-1.5 sm:py-2"} ${className}`}>
-      {vertical ? (
-        <div className={`flex flex-col justify-end ${faceUp ? "" : "h-0"} ${items}`}>
+  // A shoot sets this hand aside: a small stack where the fan was, until the hand is shown at the end.
+  const hand = sittingOut && !faceUp ? (
+    <SitOutStack n={n} team={team} cardW={34} step={vertical ? (34 * 7) / 5 - 40 : 10} pad={7} orient={vertical ? align as "left" | "right" : "row"}
+      fold={fold} label={`${name} sits this hand out; cards set aside`} hand={side} handCards={n} />
+  ) : <div data-hand={side} data-hand-cards={n} className={`flex ${vertical ? "flex-col justify-center" : "flex-row"}`} style={vertical ? { padding: "0 7px", minHeight: faceUp ? undefined : SIDE_FAN_H } : undefined} role={faceUp ? "group" : "img"} aria-label={`${n} cards`}>
+    {faceUp ? faceUp.map((c, i) => vertical ? (
+      <div key={c} data-claim-card={view.claim ? c : undefined} className="relative shrink-0" style={{ width: (REV_W * 7) / 5, height: i === faceUp.length - 1 ? REV_W : 17, zIndex: align === "right" ? faceUp.length - i : i }}>
+        <PlayingCard card={c} width={REV_W} fourColour={four} style={{ position: "absolute", left: "50%", top: REV_W / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg)` }} />
+      </div>
+    ) : <span key={c} data-claim-card={view.claim ? c : undefined} style={{ marginLeft: i ? -REV_W * 0.45 : 0 }}><PlayingCard card={c} width={REV_W} fourColour={four} /></span>)
+    : Array.from({ length: n }).map((_, i) => (
+      <CardBack key={i} width={34} team={team}
+        style={vertical ? { marginTop: i ? -40 : 0, transform: align === "left" ? "rotate(90deg)" : "rotate(-90deg)" } : { marginLeft: i ? -24 : 0 }} />
+    ))}
+  </div>;
+  if (vertical) {
+    return (
+      // A side seat is laid out round its fan alone, so the fan's middle is the cloth's middle. The fan keeps the room of a
+      // full twelve, so it and the name hold still while cards are played (a longer fan, while passing, grows both ways).
+      // The name hangs straight under it, the score under the name, out of a row of no height; the board's fit counts what
+      // hangs below (data-seat-hang). A hand shown face up at the end is taller than the cloth, so there the name sits
+      // above it in its own room, and the column starts below the table's corner buttons.
+      <div data-claim-seat={seat} className={`group flex min-w-0 flex-col ${items} ${className}`}>
+        {faceUp ? (
           <div className="relative flex max-w-full flex-col items-center pb-1 sm:pb-1.5">
             {plate}
             <div className="flex h-7 items-center"><ScoreTag score={score} name={name} align={align} /></div>
           </div>
-        </div>
-      ) : (
-        <div className="relative flex max-w-full flex-row items-center">
-          {plate}
-          {/* Out of the layout flow, so nothing moves when a number appears. */}
-          <div className="absolute left-full top-1/2 ml-1 -translate-y-1/2 whitespace-nowrap">
-            <ScoreTag score={score} name={name} align={align} />
+        ) : null}
+        {hand}
+        <div className={`flex flex-col ${faceUp ? "" : "h-0"} ${items}`}>
+          <div data-seat-hang="" className="relative flex max-w-full flex-col items-center pt-1 sm:pt-1.5">
+            {!faceUp && plate}
+            {!faceUp && <div className="flex h-7 items-center"><ScoreTag score={score} name={name} align={align} /></div>}
+            {/* Handing a seat over and making a host live in the player's menu; a seat that seems away also says so here. */}
+            {offer}
           </div>
         </div>
-      )}
-      {/* A shoot sets this hand aside: a small stack where the fan was, until the hand is shown at the end. */}
-      {sittingOut && !faceUp ? (
-        <SitOutStack n={n} team={team} cardW={34} step={vertical ? (34 * 7) / 5 - 40 : 10} pad={7} orient={vertical ? align as "left" | "right" : "row"}
-          fold={fold} label={`${name} sits this hand out; cards set aside`} hand={side} handCards={n} />
-      ) : <div data-hand={side} data-hand-cards={n} className={`flex ${vertical ? "flex-col justify-center" : "flex-row"}`} style={vertical ? { padding: "0 7px", minHeight: faceUp ? undefined : SIDE_FAN_H } : undefined} role={faceUp ? "group" : "img"} aria-label={`${n} cards`}>
-        {faceUp ? faceUp.map((c, i) => vertical ? (
-          <div key={c} data-claim-card={view.claim ? c : undefined} className="relative shrink-0" style={{ width: (REV_W * 7) / 5, height: i === faceUp.length - 1 ? REV_W : 17, zIndex: align === "right" ? faceUp.length - i : i }}>
-            <PlayingCard card={c} width={REV_W} fourColour={four} style={{ position: "absolute", left: "50%", top: REV_W / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg)` }} />
-          </div>
-        ) : <span key={c} data-claim-card={view.claim ? c : undefined} style={{ marginLeft: i ? -REV_W * 0.45 : 0 }}><PlayingCard card={c} width={REV_W} fourColour={four} /></span>)
-        : Array.from({ length: n }).map((_, i) => (
-          <CardBack key={i} width={34} team={team}
-            style={vertical ? { marginTop: i ? -40 : 0, transform: align === "left" ? "rotate(90deg)" : "rotate(-90deg)" } : { marginLeft: i ? -24 : 0 }} />
-        ))}
-      </div>}
-      {/* Handing a seat over and making a host live in the player's menu; a seat that seems away also says so here.
-          It takes its own room, so the board's fit counts it; the fan sits a little off the cloth's middle meanwhile. */}
+      </div>
+    );
+  }
+  return (
+    <div data-claim-seat={seat} className={`group flex min-w-0 flex-col gap-1 py-1 sm:gap-1.5 sm:py-2 ${items} ${className}`}>
+      <div className="relative flex max-w-full flex-row items-center">
+        {plate}
+        {/* Out of the layout flow, so nothing moves when a number appears. */}
+        <div className="absolute left-full top-1/2 ml-1 -translate-y-1/2 whitespace-nowrap">
+          <ScoreTag score={score} name={name} align={align} />
+        </div>
+      </div>
+      {hand}
       {offer}
     </div>
   );
