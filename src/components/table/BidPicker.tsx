@@ -110,6 +110,23 @@ export function BidPicker({ min, step, busy, onBid, pass, misdeal = null, slot =
   const upButton = <Chevron label="Lower bids" onClick={up} up size={tapPx} disabled={busy} hidden={!scrolled} />;
   const downButton = <Chevron label="Higher bids" onClick={down} size={tapPx} disabled={busy} />;
 
+  // Pass and the picked bid ride beside the down chevron on the cloth; sideways the cloth is too shallow, so they sit
+  // by your seat instead. The bid only shows once an amount is picked (tapping the amount again bids it too).
+  const sideFont = beside ? undefined : Math.min(16 / shrink, tapPx * 0.36);
+  const sideW = beside ? 0 : Math.ceil(3.6 * (sideFont ?? 16));
+  const sideStyle = beside ? undefined : { height: tapPx, minHeight: tapPx, padding: `0 ${Math.round(tapPx * 0.28)}px`, fontSize: sideFont, minWidth: tapPx };
+  const bidButton = (
+    <button type="button" className="btn btn-brass tabular-nums" style={{ ...sideStyle, visibility: picked === null ? "hidden" : undefined }}
+      onClick={() => { if (picked !== null) onBid(picked); }} disabled={busy || picked === null} aria-hidden={picked === null || undefined} tabIndex={picked === null ? -1 : undefined}>
+      Bid {picked ?? min}
+    </button>
+  );
+  const passButton = pass && (
+    <button type="button" className="btn btn-ghost" style={{ ...sideStyle, color: "var(--chalk)", boxShadow: "inset 0 0 0 1.5px var(--chalk-faint)" }} onClick={pass.run} disabled={busy}>
+      {pass.label}
+    </button>
+  );
+
   const board = (
     <div className={`flex items-center ${beside ? "flex-row" : "flex-col"}`}>
       {!beside && upButton}
@@ -131,19 +148,26 @@ export function BidPicker({ min, step, busy, onBid, pass, misdeal = null, slot =
           ))}
         </div>
       </div>
-      {beside ? <div className="flex flex-col">{upButton}{downButton}</div> : downButton}
+      {beside ? <div className="flex flex-col">{upButton}{downButton}</div> : (
+        // Under the amounts: the picked bid to its left, the chevron in the middle, Pass to its right.
+        <div className="grid items-center" style={{ gridTemplateColumns: `1fr ${tapPx}px 1fr`, width: Math.max(COLUMNS * colW, tapPx + 2 * sideW) }}>
+          <span className="flex justify-end pr-1">{bidButton}</span>
+          {downButton}
+          <span className="flex justify-start pl-1">{passButton}</span>
+        </div>
+      )}
     </div>
   );
 
   return (<>
     {slot ? createPortal(board, slot) : <div className="flex justify-center pt-1">{board}</div>}
-    <div className="flex flex-wrap items-center justify-center gap-2 px-2 py-1 sm:gap-3 sm:px-3">
-      <button type="button" className="btn btn-brass tabular-nums" onClick={() => { if (picked !== null) onBid(picked); }} disabled={busy || picked === null}>
-        {picked === null ? "Pick a bid" : `Bid ${picked}`}
-      </button>
-      {pass && <button type="button" className="btn btn-ghost btn-compact" style={{ color: "var(--chalk-faint)" }} onClick={pass.run} disabled={busy}>{pass.label}</button>}
-      {misdeal && <MisdealButton busy={busy} run={misdeal} />}
-    </div>
+    {(beside || misdeal) && (
+      <div className="flex flex-wrap items-center justify-center gap-2 px-2 py-1 sm:gap-3 sm:px-3">
+        {beside && bidButton}
+        {beside && passButton}
+        {misdeal && <MisdealButton busy={busy} run={misdeal} />}
+      </div>
+    )}
   </>);
 }
 

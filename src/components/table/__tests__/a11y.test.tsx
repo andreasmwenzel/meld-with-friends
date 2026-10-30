@@ -122,8 +122,9 @@ describe("accessible names and states at the table", () => {
     const amounts = screen.getByRole("group", { name: "Bid amounts" });
     expect(amounts.closest("[data-felt]")).toBeTruthy();
     expect(within(amounts).getByRole("button", { name: "31" }).getAttribute("aria-pressed")).toBe("false");
-    expect(screen.getByRole("button", { name: "Pick a bid" })).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: "Pass" }).length).toBeGreaterThan(0);
+    // Pass lies on the cloth with the amounts, and nothing else asks to be pressed by your seat.
+    expect(within(amounts.closest("[data-felt]") as HTMLElement).getByRole("button", { name: "Pass" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^(Pick a bid|Bid \d+)$/ })).toBeNull();
     const chips = [...document.querySelectorAll(".sr-only")].map((n) => n.textContent).filter((t) => t?.includes(": "));
     expect(chips.length).toBeGreaterThan(0);
     for (const chip of chips) expect(chip).toMatch(/^.+: (bid \d+|passed|shooting the moon)$/);
