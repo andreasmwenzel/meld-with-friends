@@ -31,7 +31,18 @@ describe("seatScore", () => {
     const marriage: MeldItem = { kind: "marriage", cards: ["KS0", "QS0"], points: 2 };
     const score = seatScore(facts({ meldPoints: { 0: 0, 1: 0, 2: 2, 3: 17 }, melds: { 0: [], 1: [], 2: [marriage], 3: [run] } }), 2, nameOf);
     expect(score.small).toBe(2);
+    expect(score.smallSide).toBe(true);
     expect(score.top).toEqual([]);
     expect(score.meld).toEqual([{ name: "Otto", items: [marriage], points: 2 }]);
+  });
+
+  it("shows a defender their own meld while meld is laid down, then their side's running total", () => {
+    const marriage: MeldItem = { kind: "marriage", cards: ["KS0", "QS0"], points: 2 };
+    const over = { meldPoints: { 0: 0, 1: 0, 2: 2, 3: 17 } as Record<SeatIndex, number>, melds: { 0: [], 1: [], 2: [marriage], 3: [run] }, counters: { red: 10, blue: 4 } };
+    expect(seatScore(facts({ ...over, phase: "melding" }), 0, nameOf, true).small).toBe(0);
+    const playing = seatScore(facts(over), 0, nameOf);
+    expect(playing.small).toBe(12);
+    expect(playing.rows.at(-1)).toEqual(["So far", "12"]);
+    expect(seatScore(facts(over), 2, nameOf).small).toBe(12);
   });
 });
