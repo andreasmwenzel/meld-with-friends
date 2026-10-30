@@ -10,10 +10,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("the bid grid", () => {
   it("walks with plain arrows, and leaves Alt, Ctrl and Meta arrows and handled keys to the browser", () => {
-    // jsdom has no modal dialogs; opening one only needs it shown here.
-    HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) { this.open = true; };
     render(<BidPicker min={250} step={10} busy={false} onBid={() => {}} pass={null} />);
-    fireEvent.click(screen.getByRole("button", { name: "Choose bid" }));
     const at = screen.getByRole("button", { name: "260" });
     act(() => { at.focus(); });
     expect(document.activeElement).toBe(at);
@@ -27,6 +24,23 @@ describe("the bid grid", () => {
     expect(document.activeElement).toBe(at);
     fireEvent.keyDown(at, { key: "ArrowRight" });
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "270" }));
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "310" }));
+  });
+
+  it("picks an amount on the first tap and bids it on the second tap or the Bid button", () => {
+    const onBid = vi.fn();
+    render(<BidPicker min={25} step={1} busy={false} onBid={onBid} pass={null} />);
+    expect((screen.getByRole("button", { name: "Pick a bid" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "27" }));
+    expect(onBid).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "27" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Bid 27" }));
+    expect(onBid).toHaveBeenLastCalledWith(27);
+    fireEvent.click(screen.getByRole("button", { name: "30" }));
+    fireEvent.click(screen.getByRole("button", { name: "30" }));
+    expect(onBid).toHaveBeenLastCalledWith(30);
+    expect(onBid).toHaveBeenCalledTimes(2);
   });
 });
 
