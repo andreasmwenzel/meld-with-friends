@@ -714,9 +714,9 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
       play(card);
       return;
     }
-    if (!picking) return;
     // A tap on the hand while the kept meld shows closes it and changes nothing; the chosen cards come back up.
     if (previewing) { setLit(null); return; }
+    if (!picking) return;
     setSelected((s) => (s.includes(card) ? s.filter((c) => c !== card) : [...s, card]));
   }
 
@@ -1616,6 +1616,7 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld, previewing }: 
   const L = view.legal;
   const four = useCardPrefs().prefs.fourColour;
   const trumpLabel = useId();
+  const passHint = useId();
   const misdeal = L.canMisdeal ? () => void act({ type: "misdeal" }) : null;
   // Right after a throw-in, the other seats see the hand that scrapped the deal while the new one is bid.
   // The player who threw it in already knows it and does not need the reminder.
@@ -1685,8 +1686,8 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld, previewing }: 
     const n = L.mustPassCount;
     return (
       <Bar>
-        <span className="text-chalk-faint">{previewing ? "Close the meld to pass" : `${selected.length} of ${n} chosen`}</span>
-        <button className="btn btn-brass" disabled={busy || previewing || selected.length !== n} onClick={() => act({ type: "pass_cards", cards: selected })}>
+        <span id={passHint} className="text-chalk-faint">{previewing ? "Close the meld to pass" : `${selected.length} of ${n} chosen`}</span>
+        <button className="btn btn-brass" aria-describedby={previewing ? passHint : undefined} disabled={busy || previewing || selected.length !== n} onClick={() => act({ type: "pass_cards", cards: selected })}>
           Pass {n} cards
         </button>
       </Bar>
