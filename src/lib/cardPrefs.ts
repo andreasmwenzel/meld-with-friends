@@ -2,8 +2,9 @@
 
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { DEFAULT_HAND_SORT, type HandSortPrefs } from "@/engine/hand";
+import { BACKS, CARD_PREFS_KEY as KEY, CLOTHS, type Back, type Cloth } from "./look";
+export { BACKS, CLOTHS, type Back, type Cloth } from "./look";
 
-const KEY = "meld.cards";
 const EVENT = "meld:cards";
 /** A phone held sideways: wide enough to pass for a tablet, but too short for the stacked board. Matches the `short` CSS variant. */
 export const SHORT_QUERY = "(orientation: landscape) and (max-height: 500px)";
@@ -16,11 +17,12 @@ export type MotionPref = "normal" | "quick" | "off";
 
 export type CardSize = "s" | "m" | "l";
 
+
 /**
  * What is stored. `bigIndex: null` means "follow the device": on for phones, off for desktop.
  * Version 2 split the old single sort `order` into suit order and trump placement; version 1 has no `v`.
  */
-type Stored = { v: 2; fourColour: boolean; bigIndex: boolean | null; size: CardSize; sort: HandSortPrefs; motion: MotionPref; confirmPlay: boolean | null; autoMeld: boolean; trumpTint: boolean };
+type Stored = { v: 2; fourColour: boolean; bigIndex: boolean | null; size: CardSize; sort: HandSortPrefs; motion: MotionPref; confirmPlay: boolean | null; autoMeld: boolean; trumpTint: boolean; cloth: Cloth; back: Back };
 
 /** Card display and hand sorting choices. */
 export type CardPrefs = {
@@ -36,7 +38,7 @@ export const HAND_WIDTH: Record<"phone" | "desktop", Record<CardSize, number>> =
   desktop: { s: 72, m: 88, l: 104 },
 };
 
-const DEFAULTS: Stored = { v: 2, fourColour: false, bigIndex: null, size: "m", sort: DEFAULT_HAND_SORT, motion: "normal", confirmPlay: null, autoMeld: true, trumpTint: true };
+const DEFAULTS: Stored = { v: 2, fourColour: false, bigIndex: null, size: "m", sort: DEFAULT_HAND_SORT, motion: "normal", confirmPlay: null, autoMeld: true, trumpTint: true, cloth: "oxblood", back: "lattice" };
 
 /** Version 1's single choice, mapped to the pair that lays the hand out the same way. */
 const V1_ORDER: Record<string, Pick<HandSortPrefs, "suits" | "trump">> = {
@@ -72,6 +74,8 @@ export function parseCardPrefs(raw: string | null): Stored {
       autoMeld: v.autoMeld !== false,
       motion: v.motion === "quick" || v.motion === "off" ? v.motion : "normal",
       trumpTint: v.trumpTint !== false,
+      cloth: CLOTHS.find(([c]) => c === v.cloth)?.[0] ?? "oxblood",
+      back: BACKS.find(([b]) => b === v.back)?.[0] ?? "lattice",
       sort: parseSort(v.sort),
     };
   } catch { return DEFAULTS; }
@@ -128,8 +132,32 @@ export function useCardPrefs() {
   const update = useCallback((patch: Partial<Omit<Stored, "v">>) => {
     const next = { ...parseCardPrefs(readRaw() || null), ...patch };
     try { window.localStorage.setItem(KEY, JSON.stringify(next)); } catch {}
+    if (patch.cloth) applyCloth(patch.cloth);
     window.dispatchEvent(new Event(EVENT));
   }, []);
 
-  return { prefs, size: stored.size, width, phone, short, reducedMotion, update };
+  return { prefs, size: stored.size, width, phone, short, reducedMotion, look: { cloth: stored.cloth, back: stored.back }, update };
+}
+
+/** Lays the cloth on the page and tints the phone's status bar to match. CLOTH_SCRIPT does the same before first paint. */
+function applyCloth(cloth: Cloth) {
+  document.documentElement.dataset.cloth = cloth;
+  const swatch = CLOTHS.find(([c]) => c === cloth)?.[2];
+  if (swatch) document.querySelector('meta[name="theme-color"]')?.setAttribute("content", swatch);
+}
+
+
+function subscribeBack(cb: () => void) {
+  window.addEventListener(EVENT, cb);
+  window.addEventListener("storage", cb);
+  return () => { window.removeEventListener(EVENT, cb); window.removeEventListener("storage", cb); };
+}
+
+/**
+ * Just the card back, for the many backs on the table: none of them needs the screen-size queries useCardPrefs
+ * listens to. Server render and first paint use the lattice.
+ */
+export function useCardBack(): Back {
+  const raw = useSyncExternalStore(subscribeBack, readRaw, () => "");
+  return useMemo(() => parseCardPrefs(raw || null).back, [raw]);
 }

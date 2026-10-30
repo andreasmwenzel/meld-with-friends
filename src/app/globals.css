@@ -43,6 +43,15 @@
   --shadow-card: 0 1px 0 rgba(0,0,0,.25), 0 10px 24px -12px rgba(0,0,0,.6);
 }
 
+/* The cloth a player picked (src/lib/look.ts, CLOTHS), set on <html>; the picker's swatches use the same rules.
+   Each is dark enough for chalk text and the soft team inks. */
+[data-cloth="oxblood"] { --cloth: #5b1d25; --cloth-deep: #46141b; --cloth-edge: #7a2a33; }
+[data-cloth="baize"] { --cloth: #1f4a36; --cloth-deep: #153526; --cloth-edge: #2c6249; }
+[data-cloth="navy"] { --cloth: #1d2a48; --cloth-deep: #141d34; --cloth-edge: #2b3c63; }
+[data-cloth="slate"] { --cloth: #2f3337; --cloth-deep: #222528; --cloth-edge: #43494e; }
+[data-cloth="plum"] { --cloth: #43243f; --cloth-deep: #31192e; --cloth-edge: #5c3357; }
+[data-cloth="walnut"] { --cloth: #4a3223; --cloth-deep: #372418; --cloth-edge: #654532; }
+
 @theme inline {
   --color-cloth: var(--cloth);
   --color-cloth-deep: var(--cloth-deep);
@@ -252,6 +261,10 @@ body {
 .chat-pop:not([hidden]) { animation: chat-pop 140ms cubic-bezier(.2,.8,.25,1) both; transform-origin: 100% 100%; }
 @keyframes chat-pop-down { from { opacity: 0; transform: translateY(-6px) scale(.97); } to { opacity: 1; transform: none; } }
 .chat-pop-below:not([hidden]) { animation-name: chat-pop-down; transform-origin: 100% 0; }
+/* The table's look opens from its button in the opposite corner. */
+.look-pop:not([hidden]) { animation: chat-pop-down 140ms cubic-bezier(.2,.8,.25,1) both; transform-origin: 0 0; }
+.look-pop-above:not([hidden]) { animation-name: chat-pop; transform-origin: 0 100%; }
+@media (prefers-reduced-motion: reduce) { .look-pop:not([hidden]) { animation: none; } }
 
 /* A shoot sets the partner's hand aside: the fan gathers into a squared stack, which then settles small and quiet.
    The end state is the element's own style, so a reload, motion off or reduced motion show it with no animation. */

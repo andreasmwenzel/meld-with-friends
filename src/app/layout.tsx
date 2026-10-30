@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Bodoni_Moda, Albert_Sans } from "next/font/google";
 import "./globals.css";
+import { CLOTH_SCRIPT } from "@/lib/look";
 
 const bodoni = Bodoni_Moda({
   variable: "--font-bodoni",
@@ -27,11 +28,17 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport: Viewport = { themeColor: "#5b1d25" };
+// No themeColor here: the cloth script writes the theme-color tag itself, in the chosen cloth. A tag rendered by React
+// would come back in oxblood beside it on hydration.
+export const viewport: Viewport = {};
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${bodoni.variable} ${albert.variable} h-full`}>
+    // The cloth script sets data-cloth on <html> before React hydrates, so the attribute is expected to differ.
+    <html lang="en" className={`${bodoni.variable} ${albert.variable} h-full`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: CLOTH_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

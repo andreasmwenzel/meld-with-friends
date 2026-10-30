@@ -10,7 +10,7 @@ import { SUIT_GLYPH, SUIT_NAME, suitInk } from "@/components/cards/PlayingCard";
 function Row({ label, children, stacked = false, description }: { label: string; children: React.ReactNode; stacked?: boolean; description?: string }) {
   const descriptionId = useId();
   return (
-    <div className={stacked ? "flex flex-col gap-1" : "flex items-center justify-between gap-4"}>
+    <div className={stacked ? "flex flex-col gap-1" : "flex flex-wrap items-center justify-between gap-x-4 gap-y-1"}>
       <span className="text-sm text-ink-soft">{label}</span>
       <div role="group" aria-label={label} aria-describedby={description ? descriptionId : undefined} className="flex gap-1 rounded-full bg-chalk-dim p-0.5 text-sm">{children}</div>
       {description && <p id={descriptionId} className="text-xs text-ink-soft">{description}</p>}

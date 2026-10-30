@@ -183,3 +183,49 @@ describe("table talk at the board", () => {
     expect(screen.getByRole("dialog", { name: /made/ })).toBe(sheet);
   });
 });
+
+describe("table and cards at the board", () => {
+  const cog = () => screen.getByRole("button", { name: "Table and cards" });
+
+  it("opens every card option from a cog, and a choice lays the cloth and changes the backs at once", async () => {
+    await table("play-lead");
+    fireEvent.click(cog());
+    const pop = await screen.findByRole("dialog", { name: "Table and cards" });
+    expect(within(pop).getByRole("group", { name: "Deck" })).toBeTruthy();
+    expect(within(pop).getByRole("group", { name: "Hand order" })).toBeTruthy();
+    fireEvent.click(within(pop).getByRole("button", { name: "Baize" }));
+    expect(document.documentElement.dataset.cloth).toBe("baize");
+    expect(JSON.parse(localStorage.getItem("meld.cards")!).cloth).toBe("baize");
+    fireEvent.click(within(pop).getByRole("button", { name: "Rosette" }));
+    const backs = [...document.querySelectorAll("[data-hand=north] [data-back]")].map((b) => (b as HTMLElement).dataset.back);
+    expect(backs.length).toBeGreaterThan(0);
+    expect(new Set(backs)).toEqual(new Set(["rosette"]));
+    fireEvent.keyDown(pop, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Table and cards" })).toBeNull();
+  });
+
+  it("keeps the card options out of the menu, which hands over to the cog", async () => {
+    await table("play-lead");
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Options" }));
+    const panel = screen.getByRole("tabpanel", { name: "Options" });
+    expect(within(panel).queryByRole("group", { name: "Deck" })).toBeNull();
+    fireEvent.click(within(panel).getByRole("button", { name: "Table and cards" }));
+    expect(await screen.findByRole("dialog", { name: "Table and cards" })).toBeTruthy();
+    expect(cog().getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("hands focus to the popover from the menu, even after the cog has been opened and closed", async () => {
+    await table("play-lead");
+    fireEvent.click(cog());
+    fireEvent.click(cog());
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Options" }));
+    fireEvent.click(within(screen.getByRole("tabpanel", { name: "Options" })).getByRole("button", { name: "Table and cards" }));
+    const pop = await screen.findByRole("dialog", { name: "Table and cards" });
+    await vi.waitFor(() => { if (!pop.contains(document.activeElement)) throw new Error("focus is outside the popover"); });
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Table and cards" })).toBeNull();
+    expect(document.activeElement).toBe(cog());
+  });
+});
