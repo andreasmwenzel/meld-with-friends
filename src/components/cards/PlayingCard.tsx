@@ -138,29 +138,9 @@ export function PlayingCard({ card, width = 96, selected, dimmed, className, sty
         </g>
       )}
       {/* unavailable: tint laid over the face so overlapping cards stay opaque */}
-      <rect width="100" height="140" rx="8.5" fill="#5b1d25" opacity={dimmed ? 0.55 : 0} style={{ transition: "opacity .16s ease", pointerEvents: "none" }} />
+      <rect width="100" height="140" rx="8.5" opacity={dimmed ? 0.55 : 0} style={{ fill: "var(--cloth)", transition: "opacity .16s ease", pointerEvents: "none" }} />
     </svg>
   );
 }
 
-export function CardBack({ width = 96, team = "blue", className, style }: {
-  width?: number; team?: "red" | "blue"; className?: string; style?: CSSProperties;
-}) {
-  const h = (width * 7) / 5;
-  const fill = team === "red" ? "var(--deck-red)" : "var(--deck-blue)";
-  const id = `lattice-${team}`;
-  return (
-    <svg data-card="back" viewBox="0 0 100 140" width={width} height={h} aria-hidden className={className}
-      style={{ display: "block", borderRadius: `${Math.max(4, width * 0.085)}px`, boxShadow: "var(--shadow-card)", ...style }}>
-      <defs>
-        <pattern id={id} width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <path d="M0 4h8M4 0v8" stroke="rgba(245,239,227,.22)" strokeWidth="1" />
-        </pattern>
-      </defs>
-      <rect width="100" height="140" rx="8.5" fill="var(--chalk)" />
-      <rect x="5" y="5" width="90" height="130" rx="5" fill={fill} />
-      <rect x="5" y="5" width="90" height="130" rx="5" fill={`url(#${id})`} />
-      <rect x="11" y="11" width="78" height="118" rx="3" fill="none" stroke="rgba(245,239,227,.5)" strokeWidth="1" />
-    </svg>
-  );
-}
+export { CardBack } from "./CardBack";

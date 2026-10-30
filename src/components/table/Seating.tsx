@@ -86,7 +86,7 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
         {/* From sm up the chair cards hang half outside the oval, so the oval keeps room above and below for them. */}
         <div className={`relative aspect-[0.72] w-full max-w-[380px] sm:my-24 sm:aspect-[1.35] sm:w-[min(560px,86vw)] sm:max-w-none ${turn.className}`} style={turn.style}>
           <div className="absolute inset-x-[54px] inset-y-[72px] rounded-[48%] border-[6px] border-cloth-edge sm:inset-0"
-            style={{ background: "radial-gradient(ellipse at 50% 40%, #6b2530, var(--cloth-deep))", boxShadow: "inset 0 12px 40px rgba(0,0,0,.35), 0 20px 50px -20px rgba(0,0,0,.7)" }} />
+            style={{ background: "radial-gradient(ellipse at 50% 40%, color-mix(in srgb, var(--cloth), var(--cloth-edge)), var(--cloth-deep))", boxShadow: "inset 0 12px 40px rgba(0,0,0,.35), 0 20px 50px -20px rgba(0,0,0,.7)" }} />
           <div className={`absolute inset-0 hidden flex-col items-center justify-center text-center sm:flex ${turn.still.className}`} style={turn.still.style}>{codeBlock}</div>
           {([0, 1, 2, 3] as SeatIndex[]).map((i) => {
             const s = snap.seats.find((x) => x.seat === i);

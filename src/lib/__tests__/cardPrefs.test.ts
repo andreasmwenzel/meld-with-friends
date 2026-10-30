@@ -64,6 +64,14 @@ describe('parseCardPrefs', () => {
     expect(parseCardPrefs(JSON.stringify({ v: 2, sort: { suits: 'fixed', trump: 'off', ranks: 'high-first' } })).sort.trump).toBe('off');
   });
 
+  it('keeps a chosen cloth and card back, and falls back to oxblood and the lattice otherwise', () => {
+    expect(parseCardPrefs(null)).toMatchObject({ cloth: 'oxblood', back: 'lattice' });
+    expect(parseCardPrefs(JSON.stringify({ v: 2, cloth: 'baize', back: 'rosette' }))).toMatchObject({ cloth: 'baize', back: 'rosette' });
+    expect(parseCardPrefs(JSON.stringify({ v: 2, cloth: 'toString', back: 'plaid' }))).toMatchObject({ cloth: 'oxblood', back: 'lattice' });
+    // Older stored options carry neither and keep everything else.
+    expect(parseCardPrefs(v1({ order: 'suits' }))).toMatchObject({ cloth: 'oxblood', back: 'lattice', fourColour: true, size: 'l' });
+  });
+
   it('prefers the version 2 fields when an old tab left a stray order behind', () => {
     const mixed = JSON.stringify({ sort: { order: 'suits', suits: 'fixed', trump: 'right', ranks: 'high-first' } });
     expect(parseCardPrefs(mixed).sort).toEqual({ suits: 'fixed', trump: 'right', ranks: 'high-first' });

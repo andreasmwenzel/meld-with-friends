@@ -231,7 +231,7 @@ function Centre({ frame, trick, rel, nameOf, compact, flying, sweep }: {
     <div className="mx-auto w-full max-w-[300px]">
       <div className="relative mx-auto w-full" style={{ height: compact ? 2 * w * 1.4 + 12 : 2 * w * 1.4 + 24, maxWidth: compact ? 220 : 280 }}>
         <div className="absolute inset-x-[2%] inset-y-[8%] rounded-[46%] border-[5px] border-cloth-edge"
-          style={{ background: "radial-gradient(ellipse at 50% 40%, #6b2530, var(--cloth-deep))", boxShadow: "inset 0 10px 30px rgba(0,0,0,.35)" }} />
+          style={{ background: "radial-gradient(ellipse at 50% 40%, color-mix(in srgb, var(--cloth), var(--cloth-edge)), var(--cloth-deep))", boxShadow: "inset 0 10px 30px rgba(0,0,0,.35)" }} />
         {frame.trump && (
           <span aria-hidden className="pointer-events-none absolute inset-0 flex select-none items-center justify-center leading-none"
             style={{ fontSize: compact ? 72 : 110, color: "#fff", opacity: 0.07 }}>{SUIT_GLYPH[frame.trump]}</span>

@@ -21,7 +21,6 @@ import { ResultSheet, type Which } from "./Result";
 import { canCountdownAdvance } from "./nextHandCountdown";
 import { Recap, useSeenReporting } from "./Recap";
 import { itemLabel } from "./meldLabel";
-import { CardOptionsPanel } from "@/components/cards/CardOptions";
 import { NameChange } from "@/components/site/NameChange";
 import { useOpponentPointsPref } from "@/lib/prefs";
 import { useCardPrefs } from "@/lib/cardPrefs";
@@ -33,6 +32,7 @@ import { cardLabel } from "@/engine/deck";
 import { motionTimings, flyFrom, sweepTo } from "./motion";
 import { ClaimButton, useClaimReveal } from "./Claim";
 import { ChatDock, type TableChat } from "./ChatDock";
+import { LookDock, LookOptions } from "./LookDock";
 import { FOLD_MS, SitOutStack } from "./SitOutStack";
 import { newLogLines, speakLine } from "./announce";
 import { DOUBLE_TAP_MS, isRealPress, isTimedActivation, releasePress, secondPress, type Armed, type Press } from "./tapTwice";
@@ -474,6 +474,9 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   // The menu covers the chat popover, so opening it closes talk: hidden messages then count as unread again.
   if (menu && talkOpen) setTalkOpen(false);
   const [talkDraft, setTalkDraft] = useState("");
+  // The table's look (cloth, backs, card options) opens over the board; the menu hands over to it.
+  const [lookOpen, setLookOpen] = useState(false);
+  if (menu && lookOpen) setLookOpen(false);
   const autoRecap = useRef(false);
   const sendSeen = useCallback((path: string, init: Parameters<typeof api>[1]) => {
     if (updatingRef.current) return Promise.resolve(null);
@@ -817,6 +820,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const layoutFacts = { "data-phase": view.phase, "data-hands": drawnHands.join(" "), "data-sitting-out": outSide,
     "data-can-play": view.phase === "playing" && isMyTurn && view.legal.playableCards.length > 0 ? "" : undefined, "data-claim": view.claim ? "" : undefined };
   const talk = chat && <ChatDock chat={chat} open={talkOpen} setOpen={setTalkOpen} text={talkDraft} setText={setTalkDraft} />;
+  const look = <LookDock team={myTeam} trump={view.trump} open={lookOpen} setOpen={setLookOpen} />;
   const linkCls = "tap-link text-left text-sm text-chalk-faint underline underline-offset-4 hover:text-chalk disabled:opacity-60";
 
   return (
@@ -849,10 +853,11 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
                 ? <>Paused by {paused.by === me.id ? "you" : paused.name}{paused.reason ? `: ${paused.reason}` : ""}.</>
                 : <>Paused by {paused.name}{paused.reason ? `: ${paused.reason}` : ""}. Waiting for {paused.name} to come back.</>}
             </p>
-            {(canResume || (talk && !resultModal)) && (
+            {(canResume || !resultModal) && (
               <div className="flex items-center gap-3">
                 {canResume && <button type="button" className="btn btn-ink" style={{ height: "2.25rem" }} onClick={resumeTable}>Resume</button>}
-                {/* The paused board is out of reach, but a pause is when the table talks; table talk waits here. */}
+                {/* The paused board is out of reach, but a pause is when the table talks; table talk and the look wait here. */}
+                {!resultModal && look}
                 {!resultModal && talk}
               </div>
             )}
@@ -866,10 +871,13 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
             screen and the side seats start below it, so that corner is empty in every phase, while the bottom corner
             meets the right-hand seat's cards on shorter phones and in a hand shown face up. Sideways phones put it at
             the foot of the action column (globals.css). At hand end it moves onto the result sheet. */}
-        {talk && !resultModal && !paused && (
+        {/* The look's cog mirrors it in the cloth's top-left corner, which the left-hand seat also starts below; sideways
+            it sits beside the talk, and wide screens put it in the other bottom corner. */}
+        {!resultModal && !paused && (
           <div className="board-talk relative z-[25] h-0 shrink-0">
-            {/* Wide screens centre a narrow hand, which leaves the screen's own bottom corner free. */}
-            <div className={`absolute right-0 top-1 short:top-auto short:bottom-1 lg:fixed lg:top-auto lg:bottom-[max(1.25rem,env(safe-area-inset-bottom))] ${menu ? "lg:right-[400px]" : "lg:right-5"}`}>{talk}</div>
+            {/* Wide screens centre a narrow hand, which leaves the screen's own bottom corners free. */}
+            {talk && <div className={`absolute right-0 top-1 short:top-auto short:bottom-1 lg:fixed lg:top-auto lg:bottom-[max(1.25rem,env(safe-area-inset-bottom))] ${menu ? "lg:right-[400px]" : "lg:right-5"}`}>{talk}</div>}
+            <div className={`absolute left-0 top-1 short:left-auto short:top-auto short:bottom-1 lg:fixed lg:top-auto lg:bottom-[max(1.25rem,env(safe-area-inset-bottom))] lg:left-5 ${talk ? "short:right-14" : "short:right-0"}`}>{look}</div>
           </div>
         )}
         {/* Centred between the score strip and your actions. When the action bar grows or shrinks the board glides to the
@@ -1016,6 +1024,9 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
               </p>
               {!local && <NameChange name={me.display_name} onSaved={onTableChange} />}
               <div className="flex flex-col items-start">
+                {/* The look opens over the board, so each change shows on the table as it is made. At hand end the result
+                    sheet takes the board, so the options stay in the menu (below). */}
+                {!over && <button type="button" onClick={() => { setMenu(false); setLookOpen(true); }} className={linkCls}>Table and cards</button>}
                 <button type="button" onClick={toggleChime} aria-pressed={chime} className={linkCls}>Sound {chime ? "on" : "off"}</button>
                 {push.supported && view.rules.pace === "leisurely" && (
                   <button type="button" onClick={() => void (push.enabled ? push.disable() : push.enable())} disabled={push.busy} aria-pressed={push.enabled} className={linkCls}>
@@ -1028,10 +1039,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
                 {!local && view.phase !== "game_over" && snap.mySeat !== null && <button type="button" onClick={leave} className={linkCls}>Leave the game</button>}
                 {!local && <Link href="/" className={linkCls}>Your tables</Link>}
               </div>
-              <div className="panel flex flex-col gap-2.5 p-3 text-left">
-                <p className="text-sm font-semibold text-ink">Cards</p>
-                <CardOptionsPanel trump={view.trump} />
-              </div>
+              {over && <div className="panel p-3 text-left"><LookOptions team={myTeam} trump={view.trump} /></div>}
             </div>
           )}
         </div>
@@ -1403,7 +1411,7 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
     <div data-felt="" className={`relative mx-auto w-full ${compact ? "max-w-[240px]" : "max-w-[300px]"} ${emptyTap ? "cursor-pointer" : ""}`} style={{ height: compact ? 2 * trickW * 1.4 + 14 : 246 }}
       onClick={emptyTap ? peek.toggle : undefined}>
       <div className="absolute inset-x-[2%] inset-y-[8%] rounded-[46%] border-[5px] border-cloth-edge"
-        style={{ background: "radial-gradient(ellipse at 50% 40%, #6b2530, var(--cloth-deep))", boxShadow: "inset 0 10px 30px rgba(0,0,0,.35)" }} />
+        style={{ background: "radial-gradient(ellipse at 50% 40%, color-mix(in srgb, var(--cloth), var(--cloth-edge)), var(--cloth-deep))", boxShadow: "inset 0 10px 30px rgba(0,0,0,.35)" }} />
       {view.trump && inPlay && (
         <span aria-hidden className="pointer-events-none absolute inset-0 flex select-none items-center justify-center leading-none"
           style={{ fontSize: compact ? 84 : 128, color: "#fff", opacity: 0.07 }}>{SUIT_GLYPH[view.trump]}</span>
