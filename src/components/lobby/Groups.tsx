@@ -82,7 +82,7 @@ function GroupEditor({ group, friends, onSaved, onClose }: {
           <span className="tabular-nums">{picked.length} of {MAX_GROUP_MEMBERS}</span>
         </legend>
         {friends.length === 0 ? (
-          <p className="mt-2 text-sm text-ink-soft">Groups are made from your friends. Add a friend by handle above, then come back.</p>
+          <p className="mt-2 text-sm text-ink-soft">Groups are made from your friends. Add a friend by their handle first, then come back.</p>
         ) : (
           <ul className="mt-2 flex flex-wrap gap-2">
             {friends.map((f) => {
@@ -117,13 +117,13 @@ function GroupEditor({ group, friends, onSaved, onClose }: {
 }
 
 /** Named groups of friends. A group can be invited in one go when dealing a table. */
-export function Groups({ friends }: { friends: Profile[] }) {
+export function Groups({ friends, className = "mt-10" }: { friends: Profile[]; className?: string }) {
   const { groups, error: note } = useGroups();
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const saved = () => { setEditing(null); void reloadGroups(); };
 
   return (
-    <div className="mt-10">
+    <div className={className}>
       <div className="flex items-baseline justify-between gap-4">
         <h3 className="display" style={{ fontSize: 26 }}>Groups</h3>
         {editing !== "new" && groups && groups.length < 20 && (

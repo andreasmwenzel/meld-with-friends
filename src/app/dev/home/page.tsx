@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { Lobby, LobbyFrame } from "@/components/lobby/Lobby";
+import { Lobby } from "@/components/lobby/Lobby";
 import { sortTables, summarizeTable } from "@/lib/tableStatus";
 import { ME, SAMPLE_TABLES } from "../sampleTables";
 
@@ -13,7 +13,7 @@ const PROFILE = { id: ME, handle: "copper_heron", display_name: "Andreas", avata
  */
 export default function DevHomePage({ searchParams }: PageProps<"/dev/home">) {
   if (process.env.NODE_ENV === "production") notFound();
-  return <LobbyFrame><Suspense><Preview searchParams={searchParams} /></Suspense></LobbyFrame>;
+  return <Suspense><Preview searchParams={searchParams} /></Suspense>;
 }
 
 async function Preview({ searchParams }: { searchParams: PageProps<"/dev/home">["searchParams"] }) {

@@ -34,7 +34,7 @@ function HeldHand() {
   );
 }
 
-export function Welcome() {
+export function Welcome({ signIn = false }: { signIn?: boolean }) {
   return (
     <>
       <section className="flex min-h-0 shrink flex-col">
@@ -43,7 +43,7 @@ export function Welcome() {
           Pinochle with your friends. Deal a table, send the six-letter code, and play. No account, no downloads, no strangers.
         </p>
         <div className="-mx-2 mt-5 min-h-0 overflow-y-auto overscroll-contain px-2 pb-1">
-          <SignInToggle guest={<GuestStart />} signIn={<AuthPanel next="/" />} />
+          <SignInToggle guest={<GuestStart />} signIn={<AuthPanel next="/" />} initial={signIn} />
         </div>
       </section>
       <Foot>
