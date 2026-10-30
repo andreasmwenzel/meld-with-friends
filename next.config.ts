@@ -9,6 +9,12 @@ const nextConfig: NextConfig = {
     return [{ source: "/home", destination: "/", permanent: false }];
   },
   partialPrefetching: true,
+  experimental: {
+    // A production build once shipped an old copy of globals.css's own rules (the table cloth variables were missing)
+    // beside the new Tailwind utilities; a rebuild without Vercel's build cache fixed it. The suspect is the Turbopack
+    // cache Vercel restores into .next/cache, so builds compile from source as a precaution.
+    turbopackFileSystemCacheForBuild: false,
+  },
   turbopack: {
     rules: {
       "*.css": {
