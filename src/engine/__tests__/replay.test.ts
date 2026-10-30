@@ -124,3 +124,19 @@ it.each([0, 2])('keeps all actions and deals when complete, with %s completed ha
   });
   if (completed > 0) expect(replay.steps.some(step => step.state?.handNumber === state.handNumber)).toBe(true);
 });
+
+it("rebuilds an old log where the stuck dealer 'bid' the minimum, as the pass it is now", () => {
+  const rules: Partial<RulesConfig> = { dealerStuck: true };
+  let state = newGame('stuck-dealer', rules, 0);
+  const now: Action[] = [1, 2, 3, 0].map(seat => ({ type: 'pass_bid', seat: seat as SeatIndex }));
+  now.push({ type: 'declare_trump', seat: 0, suit: 'S' });
+  for (const action of now) state = applyAction(state, action);
+  expect(state.bidder).toBe(0);
+
+  const old: Action[] = [...now.slice(0, 3), { type: 'bid', seat: 0, amount: state.rules.minBid }, now[4]];
+  const rebuilt = rebuildFromLog(state, old);
+  expect(rebuilt).not.toBeNull();
+  expect(rebuilt!.actions[3]).toEqual({ type: 'pass_bid', seat: 0 });
+  // A stuck dealer's bid above the minimum never reached the same position, so the log still fails.
+  expect(rebuildFromLog(state, [...now.slice(0, 3), { type: 'bid', seat: 0, amount: state.rules.minBid + 10 }, now[4]])).toBeNull();
+});
