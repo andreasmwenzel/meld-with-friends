@@ -99,7 +99,7 @@ function PastHand({ h, cols, myTeam, nameOf, latestOpen }: { h: HandRecord; cols
     <li className="text-sm">
       <div className="grid grid-cols-[auto_1fr_auto_auto] items-baseline gap-x-3 text-right">
         <span className="text-ink-soft">{h.handNumber}</span>
-        <span className="text-left truncate">{h.shotMade !== undefined ? "Shoot" : h.bid} {SUIT_GLYPH[h.trump]} {nameOf(h.bidder)}{h.shotMade === false ? ", missed" : h.wentSet ? ", set" : ""}</span>
+        <span className="text-left truncate">{h.shotMade !== undefined ? "Shoot" : h.bid} {SUIT_GLYPH[h.trump]} {nameOf(h.bidder)}{h.shotMade === false ? ", missed" : h.conceded ? ", threw in" : h.wentSet ? ", set" : ""}</span>
         {cols.map((t) => <span key={t} className="tabular-nums" style={{ color: h.delta[t] < 0 ? "var(--pip-red)" : undefined }}>{signed(h.delta[t])}</span>)}
       </div>
       <button type="button" className="tap-link ml-5 text-xs text-ink-soft underline underline-offset-2 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2" aria-expanded={open} aria-controls={id} onClick={() => setToggled(!open)}>

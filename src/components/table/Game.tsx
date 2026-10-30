@@ -938,7 +938,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           {/* Whose turn it is lives here, by your hand, so the cloth holds only the cards. */}
           {view.phase === "playing" && (
             <PlayStatus view={view} trick={trickCards} nameOf={nameOf} peek={peek} stalled={stalled && !paused} nudge={nudge} compact={short}
-              busy={busy || updating} claim={() => void act({ type: "claim" })} armed={armedCard ? { card: armedCard, play: () => play(armedCard) } : null} />
+              busy={busy || updating} claim={() => void act({ type: "claim" })} concede={() => void act({ type: "concede" })} armed={armedCard ? { card: armedCard, play: () => play(armedCard) } : null} />
           )}
           {(view.phase === "bidding" || (view.phase === "melding" && view.trump)) && (
             <MeldLine key={view.phase} rules={view.rules} hand={view.hand} trump={view.phase === "melding" ? view.trump : null} lit={lit} setLit={setLit} />
@@ -1408,14 +1408,19 @@ function Name({ name }: { name: string }) {
  * the rule you must follow, and the way to see the last trick again. Fixed height, so the hand never moves:
  * a long name is cut short, and on an upright phone the second row keeps room for two lines.
  */
-function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact, busy, claim, armed }: {
+function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact, busy, claim, concede, armed }: {
   view: PlayerView; trick: PlayerView["currentTrick"]; nameOf: (s: SeatIndex) => string; peek: Peek;
   stalled: boolean; nudge: () => void; compact: boolean;
   busy: boolean; claim: () => void;
+  /** the declarer gives the hand up on the opening lead: set for the bid, the other side keeps its meld */
+  concede: () => void;
   /** a card of yours lifted by a first tap: its Play button takes the place of "Your play." */
   armed: { card: CardId; play: () => void } | null;
 }) {
   const mine = view.turn === view.seat;
+  // Throwing in cannot be taken back, so the first tap only asks.
+  const [asking, setAsking] = useState(false);
+  const throwIn = view.legal.canConcede && !peek.last && !peek.meld;
   const done = !peek.last && !peek.meld && !!trick && trick.winner !== null;
   const took = done && view.sittingOut == null ? countersIn(trick, view.rules) : 0;
   const shootStatus = view.sittingOut == null ? null : view.seat === view.sittingOut
@@ -1444,11 +1449,19 @@ function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact, busy, 
           : mine ? <p className={`display ${line}`} style={{ fontSize: compact ? 19 : 22, color: "var(--brass)" }}>Your play.</p>
           : <p className={`text-sm text-chalk ${line}`}><Name name={nameOf(view.turn!)} /> to play.</p>}
         {view.legal.canClaim && <ClaimButton busy={busy} onClaim={claim} />}
+        {throwIn && !asking && <button type="button" disabled={busy} onClick={() => setAsking(true)}
+          className="tap-link text-sm font-semibold text-chalk-faint underline underline-offset-4 hover:text-chalk">Throw in</button>}
       </div>
       <div className="flex h-11 max-w-full flex-wrap content-center items-center justify-center gap-x-3 text-xs leading-5 text-chalk-faint">
+        {throwIn && asking ? <>
+          <span className="text-chalk">Go set for {view.highBid?.amount}? They keep their meld.</span>
+          <button type="button" disabled={busy} onClick={concede} className="hit btn btn-brass btn-compact whitespace-nowrap" style={{ height: 28, minHeight: 28, padding: "0 12px" }}>Throw in</button>
+          <button type="button" onClick={() => setAsking(false)} className={link}>Keep playing</button>
+        </> : <>
         {detail && <span className={typeof detail === "string" ? "max-w-full truncate" : line}>{detail}</span>}
         {(peek.can || peek.last || peek.meld) && <button type="button" onClick={peek.toggle} className={link}>{peek.last || peek.meld ? "Back to the table" : peek.label}</button>}
         {stalled && <button type="button" onClick={nudge} className={link}>Nudge the computers</button>}
+        </>}
       </div>
     </div>
   );
