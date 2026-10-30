@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { canClaim, claimLine } from '../claim';
 import { buildDeck, seededShuffle } from '../deck';
 import { applyAction, newGame, viewFor } from '../game';
+import { trickWinner } from '../rules';
 import { chooseAction } from '../ai';
 import { leakedCards, verifyClaim } from '../fuzz';
 import { buildScenario, checkState } from '../scenario';
@@ -12,8 +13,8 @@ import type { Action, CardId, GameState, PlayerView, RulesConfig } from '../type
 
 const spec = PRESETS.find(p => p.id === 'claim-all')!.spec;
 const seats = [0, 1, 2, 3] as const;
-const position = (hand: CardId[], unseen: CardId[]): PlayerView => ({
-  ...viewFor(newGame('proof'), 0), phase: 'playing', seat: 0, turn: 0, trump: 'S', hand,
+const position = (hand: CardId[], unseen: CardId[], trump: PlayerView['trump'] = 'S'): PlayerView => ({
+  ...viewFor(newGame('proof'), 0), phase: 'playing', seat: 0, turn: 0, trump, hand,
   playedCards: buildDeck().filter(card => !hand.includes(card) && !unseen.includes(card)).map(card => ({ seat: 1, card })),
   currentTrick: { leader: 0, plays: [], winner: null },
 });
@@ -56,14 +57,48 @@ describe('claim proof from the leader’s own view', () => {
     expect(canClaim(position(['AS0', 'AS1', 'AC0'], ['TS0', 'TS1', 'KS0', 'AH0', 'AH1', 'TH0', 'TH1', 'KH0', 'KH1']))).toBe(false);
   });
 
-  it('draws lower unseen trumps before leading side winners', () => {
-    expect(claimLine(position(['AC0', 'AS1', 'AS0'], ['TS0', 'TS1', 'AH0', 'AH1', 'TH0', 'TH1', 'KH0', 'KH1', 'QH0'])))
-      .toEqual(['AS0', 'AS1', 'AC0']);
+  it('refuses a claim that only one order of leads wins', () => {
+    // A side card led before the last trump is drawn can be trumped, so trumps-first is not enough.
+    expect(canClaim(position(['AC0', 'AS1', 'AS0'], ['TS0', 'TS1', 'AH0', 'AH1', 'TH0', 'TH1', 'KH0', 'KH1', 'QH0']))).toBe(false);
+    // Leading the ten first lets the unseen ace win; the ace first would have drawn it.
+    expect(canClaim(position(['AS0', 'TS0'], ['AS1', 'QS0', 'AH0', 'TH0', 'KH0', 'QH0']))).toBe(false);
+    expect(canClaim(position(['AS0', 'TS0'], ['AS1', 'AH0', 'TH0', 'KH0', 'QH0', 'JH0']))).toBe(false);
+    // Production replay 89d20d60, move 289: diamonds trump, the jack of diamonds still out. South led
+    // the king of spades first, West was void in spades and trumped it.
+    const unseen: CardId[] = ['TH1', 'JD0', 'QH0', 'KS0', 'QC1', 'AC1', 'JC0', 'KC0', 'JC1'];
+    expect(canClaim(position(['TS0', 'KS1', 'TD1'], unseen, 'D'))).toBe(false);
+    // Once that jack has fallen every card wins wherever it is led.
+    expect(claimLine(position(['TS0', 'KS1', 'TD1'], unseen.filter(c => c !== 'JD0'), 'D'))).toEqual(['TD1', 'TS0', 'KS1']);
   });
 
-  it('keeps an unseen high duplicate until it must have followed', () => {
-    expect(canClaim(position(['AS0', 'TS0'], ['AS1', 'QS0', 'AH0', 'TH0', 'KH0', 'QH0']))).toBe(false);
-    expect(canClaim(position(['AS0', 'TS0'], ['AS1', 'AH0', 'TH0', 'KH0', 'QH0', 'JH0']))).toBe(true);
+  it('allows the claim when every card beats every unseen card', () => {
+    expect(claimLine(position(['AC0', 'AS1', 'AS0'], ['AH0', 'AH1', 'TH0', 'TH1', 'KH0', 'KH1', 'QH0', 'AC1', 'QD0'])))
+      .toEqual(['AS0', 'AS1', 'AC0']);
+    expect(canClaim(position(['AS0', 'TS0'], ['JS0', 'AH0', 'TH0', 'KH0', 'QH0', 'JH0']))).toBe(true);
+  });
+
+  it('every hand it approves wins however the claimer leads it', () => {
+    // Random endings from the claimer's view: whenever a claim is offered, try every order of
+    // leads with each unseen card as a possible reply, not just the proven line.
+    const deck = buildDeck();
+    const suits = ['S', 'H', 'D', 'C'] as const;
+    let approved = 0;
+    for (let n = 0; n < 4000; n++) {
+      const shuffled = seededShuffle(deck, `orders:${n}`);
+      const size = 1 + n % 5;
+      const hand = shuffled.slice(0, size);
+      const unseen = shuffled.slice(size, size * 4);
+      const view = position(hand, unseen, suits[n % 4]);
+      if (!canClaim(view)) continue;
+      approved++;
+      const orders = (cards: CardId[]): CardId[][] => cards.length < 2 ? [cards]
+        : cards.flatMap((c, i) => orders([...cards.slice(0, i), ...cards.slice(i + 1)]).map(rest => [c, ...rest]));
+      for (const order of orders(hand)) for (const lead of order) for (const reply of unseen) {
+        const trick = { leader: 0 as const, plays: [{ seat: 0 as const, card: lead }, { seat: 1 as const, card: reply }], winner: null };
+        expect(trickWinner(trick, view.trump!), `${order} against ${reply}`).toBe(0);
+      }
+    }
+    expect(approved).toBeGreaterThan(20);
   });
 
   it('only offers the claim on lead before anyone has played', () => {
@@ -141,7 +176,9 @@ describe('claim settlement', () => {
   });
 
   it('lets a shooter claim, and nobody else learns the cards it passed back', () => {
-    const { state } = buildScenario({ ...spec, rules: { ...spec.rules, shoot: 'on' }, shoot: true });
+    // The sitting-out partner's cards never reach the table, but the shooter cannot see them, so the
+    // nine of spades it would otherwise hold goes to an opponent who has to follow with it.
+    const { state } = buildScenario({ ...spec, hands: { ...spec.hands, 1: ['JS1', '9S0'], 2: [] }, rules: { ...spec.rules, shoot: 'on' }, shoot: true });
     expect(state.sittingOut).toBe(2);
     expect(viewFor(state, 0).legal.canClaim).toBe(true);
     expect(verifyClaim(state, 'solo-shoot')).toBe(32);

@@ -64,16 +64,16 @@ function fuzzAction(state: GameState, seat: SeatIndex): Action {
   return botAction(state, seat);
 }
 
-/** Exhaust every reply with up to three cards per seat; otherwise try 32 seeded opposing lines.
- * The claimer follows the proven line; every other seat is free to choose ANY legal reply.
+/** Exhaust every play with up to three cards per seat; otherwise try 32 seeded lines.
+ * A claim must survive careless play, so the claimer leads its cards in ANY order, not just the
+ * proven line, and every other seat is free to choose ANY legal reply.
  */
 export function verifyClaim(state: GameState, seed: string): number {
   if (state.turn === null) return 0;
   const seat = state.turn;
   const view = viewFor(state, seat);
-  if (!view.legal.canClaim) return 0;
-  const line = claimLineFor(state, seat);
-  if (!line) return 0;
+  if (!view.legal.canClaim || !claimLineFor(state, seat)) return 0;
+  const leads = state.players[seat].hand.length;
   const claimed = applyAction(state, { type: 'claim', seat });
   const before = viewFor(state, seat).recap.tricks.length;
   let playouts = 0;
@@ -90,10 +90,9 @@ export function verifyClaim(state: GameState, seed: string): number {
     if (at.phase !== 'playing') { assert(at); return; }
     const who = at.turn!;
     const view = viewFor(at, who);
-    const cards = who === seat ? [line[view.recap.tricks.length - before]] : view.legal.playableCards;
-    for (const card of cards) walk(applyAction(at, { type: 'play_card', seat: who, card }));
+    for (const card of view.legal.playableCards) walk(applyAction(at, { type: 'play_card', seat: who, card }));
   };
-  if (line.length <= 3) walk(state);
+  if (leads <= 3) walk(state);
   else {
     const rng = random(seed);
     for (let trial = 0; trial < 32; trial++) {
@@ -102,7 +101,7 @@ export function verifyClaim(state: GameState, seed: string): number {
         const who = at.turn!;
         const view = viewFor(at, who);
         const cards = view.legal.playableCards;
-        const card = who === seat ? line[view.recap.tricks.length - before] : cards[Math.floor(rng() * cards.length)];
+        const card = cards[Math.floor(rng() * cards.length)];
         at = applyAction(at, { type: 'play_card', seat: who, card });
       }
       assert(at);

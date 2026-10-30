@@ -161,10 +161,12 @@ describe('four tabs applying a whole game from the broadcast', () => {
     for (let i = 0; i < steps.length; i++) {
       server.state = steps[i].next;
       if (!steps[i].event.move) withoutMove++;
-      // Tab 1 misses every 17th event; tab 2 gets every 23rd pair out of order.
+      // Tab 1 misses every 17th event; tab 2 gets every 23rd pair out of order. Neither touches the
+      // last event, since nothing after it would let the tab catch up.
+      const missed = (seat: number) => seat === 1 && i % 17 === 5 && i + 1 < steps.length;
       for (const seat of SEATS) {
         const t = tabs[seat];
-        if (seat === 1 && i % 17 === 5) { dropped++; continue; }
+        if (missed(seat)) { dropped++; continue; }
         if (seat === 2 && i % 23 === 7 && i + 1 < steps.length) continue; // delivered after the next one
         if (seat === 2 && i % 23 === 8) {
           swapped++;
@@ -178,7 +180,7 @@ describe('four tabs applying a whole game from the broadcast', () => {
       for (const seat of SEATS) {
         const t = tabs[seat];
         // A tab that missed this event catches up on the next one, with a fetch.
-        if (seat === 1 && i % 17 === 5) continue;
+        if (missed(seat)) continue;
         if (seat === 2 && i % 23 === 7) continue;
         expect(t.shown, `seat ${seat} at rev ${server.state.rev}`).toMatchObject(viewFor(server.state, seat));
       }
