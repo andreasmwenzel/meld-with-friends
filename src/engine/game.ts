@@ -57,7 +57,7 @@ export function validateRules(rules: RulesConfig): void {
   requireAction(rules.counting === 'tens' || rules.counting === 'classic', 'counting must be tens or classic');
   requireAction(['off', 'on'].includes(rules.shoot), 'Invalid shoot mode');
   requireAction(typeof rules.dealerStuck === 'boolean' && typeof rules.mustTakeTrickToSaveMeld === 'boolean' && typeof rules.revealHands === 'boolean'
-    && typeof rules.ninesMisdeal === 'boolean', 'Rule flags must be booleans');
+    && typeof rules.ninesMisdeal === 'boolean' && typeof rules.throwIn === 'boolean', 'Rule flags must be booleans');
 }
 function emptyPlayers(): GameState['players'] {
   const player = (seat: SeatIndex): PlayerState => ({
@@ -147,7 +147,7 @@ export function legalActionsFor(state: GameState, seat: SeatIndex): LegalActions
     mustPassCount: onTurn && (state.phase === 'passing_to_bidder' || state.phase === 'passing_back') ? state.rules.passCount : null,
     canDeclareMeld: melding, canConfirmMeld: melding,
     canClaim: claimLineFor(state, seat) !== null,
-    canConcede: state.phase === 'playing' && onTurn && seat === state.bidder
+    canConcede: state.rules.throwIn && state.phase === 'playing' && onTurn && seat === state.bidder
       && !state.highBid?.shoot && state.sittingOut == null
       && state.tricksTaken.red.length + state.tricksTaken.blue.length === 0
       && state.currentTrick !== null && state.currentTrick.plays.length === 0,

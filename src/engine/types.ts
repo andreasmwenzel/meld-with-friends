@@ -56,6 +56,11 @@ export interface RulesConfig {
    * may throw the hand in before their first bid or pass. The same dealer redeals (default true).
    */
   ninesMisdeal: boolean;
+  /**
+   * The declarer may throw in on the opening lead: their side goes set for the bid, the defenders keep
+   * their meld, and no counters are played for (default true).
+   */
+  throwIn: boolean;
 }
 
 export const DEFAULT_RULES: RulesConfig = {
@@ -74,6 +79,7 @@ export const DEFAULT_RULES: RulesConfig = {
   shoot: "off",
   revealHands: true,
   ninesMisdeal: true,
+  throwIn: true,
 };
 
 export type MeldKind =
@@ -297,7 +303,7 @@ export interface LegalActions {
   playableCards: CardId[];
   /** on lead, with a proof from only your hand and public plays */
   canClaim: boolean;
-  /** The ordinary contract declarer may throw in on the opening lead. */
+  /** The ordinary contract declarer may throw in on the opening lead (rules.throwIn). */
   canConcede: boolean;
   playConstraint: PlayConstraint | null;
   canAdvanceHand: boolean;

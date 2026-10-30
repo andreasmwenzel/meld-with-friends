@@ -262,6 +262,7 @@ function Build({ snap }: { snap: LabSnapshot }) {
         </Field>
         <label className="col-span-3 flex items-center gap-2"><input type="checkbox" checked={rules.dealerStuck ?? true} onChange={e => setRules({ dealerStuck: e.target.checked })} /> Dealer stuck when everyone passes</label>
         <label className="col-span-3 flex items-center gap-2"><input type="checkbox" checked={rules.ninesMisdeal ?? true} onChange={e => setRules({ ninesMisdeal: e.target.checked })} /> Five nines and no meld may throw the hand in</label>
+        <label className="col-span-3 flex items-center gap-2"><input type="checkbox" checked={rules.throwIn ?? true} onChange={e => setRules({ throwIn: e.target.checked })} /> Declarer may throw in on the opening lead</label>
         <label className="col-span-3 flex items-center gap-2"><input type="checkbox" checked={rules.mustTakeTrickToSaveMeld ?? true} onChange={e => setRules({ mustTakeTrickToSaveMeld: e.target.checked })} /> Take a trick to save meld</label>
       </fieldset>
 

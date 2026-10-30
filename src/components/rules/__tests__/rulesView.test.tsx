@@ -29,7 +29,7 @@ describe("rules, read-only", () => {
     const view = render(<RulesForm value={{}} />).container;
     const edit = render(<RulesForm value={{}} onChange={() => {}} />).container;
     expect(labels(view)).toEqual(labels(edit));
-    expect(labels(view)).toHaveLength(13);
+    expect(labels(view)).toHaveLength(14);
     expect(helps(view)).toEqual(helps(edit));
   });
 
@@ -45,12 +45,13 @@ describe("rules, read-only", () => {
     ]));
   });
 
-  it("explains shooting and the nines throw-in only when they are on", () => {
-    const on = render(<RulesForm value={{ shoot: "on", ninesMisdeal: true, target: 200 }} />).container;
+  it("explains shooting and both throw-ins only when they are on", () => {
+    const on = render(<RulesForm value={{ shoot: "on", ninesMisdeal: true, throwIn: true, target: 200 }} />).container;
     expect(helps(on).join(" ")).toMatch(/partner sits out.*every trick for 200.*lose the game/);
     expect(helps(on).join(" ")).toMatch(/Five or more nines and no other meld, before your first bid or pass/);
+    expect(helps(on).join(" ")).toMatch(/declarer may concede.*goes set for the bid.*keeps its meld/);
     cleanup();
-    const off = render(<RulesForm value={{ shoot: "off", ninesMisdeal: false }} />).container;
+    const off = render(<RulesForm value={{ shoot: "off", ninesMisdeal: false, throwIn: false }} />).container;
     expect(helps(off)).toEqual([]);
   });
 });

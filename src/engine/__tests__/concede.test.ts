@@ -22,6 +22,16 @@ function lead(state: GameState) {
 }
 
 describe('throwing in', () => {
+  it('follows the throwIn rule, which is on by default and for games stored before it existed', () => {
+    expect(newGame('x').rules.throwIn).toBe(true);
+    expect(legalActionsFor(opening({ throwIn: false }), 0).canConcede).toBe(false);
+    expect(() => applyAction(opening({ throwIn: false }), concede)).toThrow();
+    const stored = opening();
+    const legacyRules = { ...stored.rules } as Partial<RulesConfig>;
+    delete legacyRules.throwIn;
+    expect(legalActionsFor({ ...stored, rules: legacyRules as RulesConfig }, 0).canConcede).toBe(true);
+  });
+
   it('is available only to the declarer on the opening lead of an ordinary contract', () => {
     const state = opening();
     for (const seat of seats) {

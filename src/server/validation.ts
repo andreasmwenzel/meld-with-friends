@@ -21,6 +21,7 @@ export const rulesSchema = z.object({
   dealerStuck: z.boolean().optional(),
   revealHands: z.boolean().optional(),
   ninesMisdeal: z.boolean().optional(),
+  throwIn: z.boolean().optional(),
 }).strict().superRefine((patch, ctx) => {
   const rules = resolveRules(patch);
   const modern = rules.scoring === "modern";
