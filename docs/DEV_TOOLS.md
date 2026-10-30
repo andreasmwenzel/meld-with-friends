@@ -92,14 +92,15 @@ marks the reader's seat, `?target=` shortens the game, and `?m=<frame>` opens at
 ## Screenshots: `scripts/shots.mjs`
 
 ```
-node scripts/shots.mjs                                  # every preset at 390x844
-node scripts/shots.mjs --only bid-stuck,hand-set --size 390x844,1440x900
+node scripts/shots.mjs                                  # every preset at every breakpoint
+node scripts/shots.mjs --only bid-stuck,hand-set --size 390x844,1440x900   # just these sizes
 node scripts/shots.mjs --url "/dev/lab?spec=...&chrome=0&run=0"
 ```
 
 Needs `pnpm dev` running (`--base` changes the server, default `http://localhost:3000`). It writes
-PNGs and an `index.html` contact sheet to `.dev/shots`. Use it for the 390x844 check on UI work:
-shoot before and after, and compare the two sheets.
+PNGs and an `index.html` contact sheet to `.dev/shots`. By default it shoots the breakpoints every PR that
+changes what a player sees includes: 390x844 phone, 360x640 small phone, 844x390 phone sideways, 768x1024 tablet and 1440x900 desktop. Shoot before and after, compare the two sheets, and put
+each breakpoint's pair in the PR, the desktop one full size rather than cropped.
 
 ## Nothing on a hand: `scripts/overlap.mjs`
 
