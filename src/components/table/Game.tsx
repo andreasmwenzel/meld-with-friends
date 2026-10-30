@@ -681,6 +681,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const isMyTurn = view.turn === view.seat;
   const picking = view.legal.mustPassCount !== null || view.legal.canDeclareMeld;
   const passingNow = view.phase === "passing_to_bidder" || view.phase === "passing_back";
+  // Looking at the meld you keep: the cards chosen to pass go back into the hand, and nothing passes until it closes.
+  const previewing = passingNow && lit !== null;
   // Picking your own meld: outline every card that scores, so nothing is missed.
   const meldable = new Set(view.phase === "melding" && !cardPrefs.autoMeld && view.trump && view.legal.canDeclareMeld ? autoMeldSelection(view.hand, view.trump) : []);
 
@@ -712,6 +714,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
       play(card);
       return;
     }
+    // A tap on the hand while the kept meld shows closes it and changes nothing; the chosen cards come back up.
+    if (previewing) { setLit(null); return; }
     if (!picking) return;
     setSelected((s) => (s.includes(card) ? s.filter((c) => c !== card) : [...s, card]));
   }
@@ -926,7 +930,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           {/* Your chair faces the partner's across the cloth, with what the table waits for in front of you. */}
           {!short && <MySeat view={view} me={me} score={scoreOf(view.seat)} profileHref={local ? undefined : "/#profile"} />}
           {!short && view.phase !== "playing" && <PhasePrompt view={view} trick={trickCards} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge} />}
-          <ActionBar key={view.rev} view={view} selected={selected} busy={busy || updating} act={act} nameOf={nameOf} autoMeld={cardPrefs.autoMeld} />
+          <ActionBar key={view.rev} view={view} selected={selected} busy={busy || updating} act={act} nameOf={nameOf} autoMeld={cardPrefs.autoMeld} previewing={previewing} />
           {/* Whose turn it is lives here, by your hand, so the cloth holds only the cards. */}
           {view.phase === "playing" && (
             <PlayStatus view={view} trick={trickCards} nameOf={nameOf} peek={peek} stalled={stalled && !paused} nudge={nudge} compact={short}
@@ -960,7 +964,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
             {hand.map((c) => {
               const playable = view.phase === "playing" ? view.legal.playableCards.includes(c) || c === unshown : picking;
               const isArmed = armedCard === c;
-              const sel = selected.includes(c) || isArmed || c === sending || c === unshown;
+              const sel = (selected.includes(c) && !previewing) || isArmed || c === sending || c === unshown;
               // The ring says a tap plays it; a lifted card without one goes back down when tapped.
               const ringed = (sel && !isArmed) || (isArmed && armed!.open);
               const blocked = view.phase === "playing" && isMyTurn && !playable && !!constraintText;
@@ -972,10 +976,10 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
                     onPointerCancel={() => { lastPress.current = null; }}
                     onClick={(e) => { const timed = isTimedActivation(lastPress.current, c, e.timeStamp, e.detail); lastPress.current = null; toggle(c, timed); }}
                     // Unplayable cards stay focusable, so the hand can be read with the keyboard and a press says why.
-                    aria-disabled={!playable || undefined} aria-pressed={sel} aria-describedby={blocked ? `${handId}-why` : undefined}
+                    aria-disabled={!playable || undefined} aria-pressed={sel || selected.includes(c)} aria-describedby={blocked ? `${handId}-why` : undefined}
                     tabIndex={c === tabStop ? 0 : -1} onFocus={() => setRove(c)}
                     className="group relative block touch-manipulation rounded-[10px] focus-visible:z-20 aria-disabled:cursor-default"
-                    style={{ transform: sel || (!passingNow && lit?.includes(c)) ? `translateY(-${LIFT_PX}px)` : undefined, transition: "transform .14s ease" }}>
+                    style={{ transform: sel || lit?.includes(c) ? `translateY(-${LIFT_PX}px)` : undefined, transition: "transform .14s ease" }}>
                     {suggested?.includes(c) && <SuggestedMark />}
                     <PlayingCard card={c} width={cardW} prefs={cardPrefs} trump={splitCard(c).suit === view.trump} selected={ringed || (lit?.includes(c) ?? false)} dimmed={(view.phase === "playing" && isMyTurn && !playable) || (lit !== null && !lit.includes(c))}
                       {...(meldable.has(c) && !sel ? { style: { boxShadow: "0 0 0 2px var(--brass), var(--shadow-card)" }, title: `${cardName(c)}, scores in your meld` } : {})} />
@@ -1297,7 +1301,7 @@ function MeldLine({ rules, hand, trump, kept = false, lit, setLit }: { rules: Pl
   const all = useMemo(() => meldBySuit(hand, rules), [hand, rules]);
   const same = (a: CardId[]) => lit !== null && lit.length === a.length && a.every((c) => lit.includes(c));
   const pick = (key: string, cards: CardId[]) => {
-    if (open === key) { setOpen(null); setLit(null); } else { setOpen(key); setLit(cards); }
+    if (open === key && same(cards)) { setOpen(null); setLit(null); } else { setOpen(key); setLit(cards); }
   };
   useEffect(() => () => setLit(null), [setLit]);
   const worth = all.filter((x) => x.total > 0);
@@ -1605,13 +1609,14 @@ function constraintSentence(view: PlayerView): string | null {
   return describeConstraint(c, SUIT_NAME);
 }
 
-function ActionBar({ view, selected, busy, act, nameOf, autoMeld }: {
-  view: PlayerView; selected: CardId[]; busy: boolean;
+function ActionBar({ view, selected, busy, act, nameOf, autoMeld, previewing }: {
+  view: PlayerView; selected: CardId[]; busy: boolean; previewing: boolean;
   act: (a: ClientAction) => Promise<unknown>; nameOf: (s: SeatIndex) => string; autoMeld: boolean;
 }) {
   const L = view.legal;
   const four = useCardPrefs().prefs.fourColour;
   const trumpLabel = useId();
+  const passHint = useId();
   const misdeal = L.canMisdeal ? () => void act({ type: "misdeal" }) : null;
   // Right after a throw-in, the other seats see the hand that scrapped the deal while the new one is bid.
   // The player who threw it in already knows it and does not need the reminder.
@@ -1681,8 +1686,8 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld }: {
     const n = L.mustPassCount;
     return (
       <Bar>
-        <span className="text-chalk-faint">{selected.length} of {n} chosen</span>
-        <button className="btn btn-brass" disabled={busy || selected.length !== n} onClick={() => act({ type: "pass_cards", cards: selected })}>
+        <span id={passHint} className="text-chalk-faint">{previewing ? "Close the meld to pass" : `${selected.length} of ${n} chosen`}</span>
+        <button className="btn btn-brass" aria-describedby={previewing ? passHint : undefined} disabled={busy || previewing || selected.length !== n} onClick={() => act({ type: "pass_cards", cards: selected })}>
           Pass {n} cards
         </button>
       </Bar>
