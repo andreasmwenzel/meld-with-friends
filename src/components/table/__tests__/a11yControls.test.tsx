@@ -34,7 +34,8 @@ describe("the bid grid", () => {
   it("picks an amount on the first tap and bids it on the second tap or the Bid button", () => {
     const onBid = vi.fn();
     render(<BidPicker min={25} step={1} busy={false} onBid={onBid} pass={null} />);
-    expect((screen.getByRole("button", { name: "Pick a bid" }) as HTMLButtonElement).disabled).toBe(true);
+    // Nothing to confirm until an amount is picked: the Bid button keeps its place but is hidden.
+    expect(screen.queryByRole("button", { name: /^Bid / })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "27" }));
     expect(onBid).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "27" }).getAttribute("aria-pressed")).toBe("true");
