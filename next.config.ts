@@ -10,9 +10,9 @@ const nextConfig: NextConfig = {
   },
   partialPrefetching: true,
   experimental: {
-    // Vercel restores .next/cache between builds, and a restored Turbopack cache once shipped an old globals.css
-    // (the table cloth rules were missing) under a new deploy's other changes. A clean rebuild fixed it; build from
-    // scratch every time rather than risk a stale stylesheet in production.
+    // A production build once shipped an old copy of globals.css's own rules (the table cloth variables were missing)
+    // beside the new Tailwind utilities; a rebuild without Vercel's build cache fixed it. The suspect is the Turbopack
+    // cache Vercel restores into .next/cache, so builds compile from source as a precaution.
     turbopackFileSystemCacheForBuild: false,
   },
   turbopack: {
