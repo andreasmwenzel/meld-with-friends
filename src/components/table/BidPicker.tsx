@@ -76,6 +76,10 @@ export function BidPicker({ min, step, busy, onBid, pass, misdeal = null, slot =
   const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
     setScrolled(el.scrollTop > 1);
+    // Back at the top the up chevron hides; if it had focus, hand it to the first amount rather than drop it.
+    if (el.scrollTop <= 1 && document.activeElement?.getAttribute("aria-label") === "Lower bids") {
+      grid.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
+    }
     if (count < legalCount && el.scrollTop + el.clientHeight > el.scrollHeight - 3 * (rowH + gap)) more();
   };
   // The up chevron keeps its place when there is nothing above, so the amounts never shift.

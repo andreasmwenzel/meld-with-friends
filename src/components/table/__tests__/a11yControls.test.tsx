@@ -73,7 +73,14 @@ describe("fitting the bid grid on the cloth", () => {
     const scroller = screen.getByRole("group", { name: "Bid amounts" });
     Object.defineProperty(scroller, "scrollTop", { value: 45, configurable: true });
     fireEvent.scroll(scroller);
-    expect(screen.getByRole("button", { name: "Lower bids" }).style.visibility).toBe("");
+    const shown = screen.getByRole("button", { name: "Lower bids" });
+    expect(shown.style.visibility).toBe("");
+    // Scrolled back to the top with the up chevron focused: focus moves to the first amount, not to the page.
+    act(() => { shown.focus(); });
+    Object.defineProperty(scroller, "scrollTop", { value: 0, configurable: true });
+    fireEvent.scroll(scroller);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "25" }));
+    expect(up.style.visibility).toBe("hidden");
   });
   it("on a cloth too small for full taps, still keeps the grid on it", () => {
     expect(onScreen(184, 246, 0.5).inside).toBe(true);
