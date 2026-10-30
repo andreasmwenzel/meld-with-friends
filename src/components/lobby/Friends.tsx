@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { api, type FriendsPayload, type Profile } from "@/lib/api";
 import { usePresence } from "@/lib/realtime/usePresence";
@@ -8,7 +8,14 @@ import { Avatar } from "@/components/site/Avatar";
 import { Groups } from "./Groups";
 import { reloadGroups } from "./groupsStore";
 
-export function Friends({ me }: { me: Profile }) {
+/** What the lobby's Friends button shows while its popover is shut. */
+export interface FriendsSummary { friends: Profile[]; online: number; incoming: number }
+
+/**
+ * Your friends, who is online or at a table, and requests to answer. With `groups` the groups editor follows the
+ * list; the lobby shows groups in their own popover instead, fed the friends through `onSummary`.
+ */
+export function Friends({ me, groups = true, onSummary }: { me: Profile; groups?: boolean; onSummary?: (s: FriendsSummary) => void }) {
   const [friends, setFriends] = useState<FriendsPayload | null>(null);
   const [handle, setHandle] = useState("");
   const [note, setNote] = useState<string | null>(null);
@@ -41,10 +48,21 @@ export function Friends({ me }: { me: Profile }) {
   const other = (f: { requester: string; requester_profile: Profile; addressee_profile: Profile }) =>
     f.requester === me.id ? f.addressee_profile : f.requester_profile;
 
+  const accepted = friends?.accepted.map(other);
+  const online = accepted?.filter((p) => presence[p.id]?.length).length ?? 0;
+  const incoming = friends?.incoming.length ?? 0;
+  const key = `${accepted?.map((p) => p.id + p.display_name).join() ?? ""}|${online}|${incoming}`;
+  const report = useRef(onSummary);
+  useEffect(() => { report.current = onSummary; });
+  useEffect(() => {
+    if (accepted) report.current?.({ friends: accepted, online, incoming });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` stands for the list, the count and the requests
+  }, [key]);
+
   return (
     <section>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4">
-        <h2 className="display" style={{ fontSize: 34 }}>Friends</h2>
+        <h2 className="display" style={{ fontSize: 28 }}>Friends</h2>
         <span className="text-chalk-faint text-sm">You are @{me.handle}</span>
       </div>
 
@@ -110,7 +128,7 @@ export function Friends({ me }: { me: Profile }) {
         ))}
       </ul>
 
-      {friends && <Groups friends={friends.accepted.map(other)} />}
+      {groups && accepted && <Groups friends={accepted} />}
     </section>
   );
 }

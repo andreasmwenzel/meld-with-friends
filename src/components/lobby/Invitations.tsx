@@ -114,8 +114,8 @@ export function Invitations({ invites: initial, userId = null }: { invites: Invi
   }
 
   return (
-    <section aria-label="Invitations" className="mt-8">
-      <ul className="flex max-w-xl flex-col gap-3">
+    <section aria-label="Invitations" className="py-3">
+      <ul className="flex flex-col gap-3">
         {shown.map((i) => (
           <li key={i.code} className="panel flex flex-wrap items-center gap-x-3 gap-y-3 p-3 pl-4">
             <Avatar name={i.hostName} seed={i.hostSeed} />

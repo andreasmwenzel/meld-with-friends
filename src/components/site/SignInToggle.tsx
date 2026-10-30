@@ -2,8 +2,9 @@
 
 import { useState, type ReactNode } from "react";
 
-export function SignInToggle({ guest, signIn }: { guest: ReactNode; signIn: ReactNode }) {
-  const [showSignIn, setShowSignIn] = useState(false);
+/** Guest start or email sign-in on the front door. `initial` opens on sign-in, as after leaving a guest account. */
+export function SignInToggle({ guest, signIn, initial = false }: { guest: ReactNode; signIn: ReactNode; initial?: boolean }) {
+  const [showSignIn, setShowSignIn] = useState(initial);
   return (
     <div>
       {showSignIn ? signIn : guest}

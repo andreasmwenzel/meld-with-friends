@@ -5,7 +5,8 @@ import Link from "next/link";
 import { api, ApiError, type Profile } from "@/lib/api";
 import { useTableChannel, useDisconnectedPolling, type TableEvent } from "@/lib/realtime/useTableChannel";
 import { usePresence } from "@/lib/realtime/usePresence";
-import { Wordmark } from "@/components/site/Wordmark";
+import { SiteHeader } from "@/components/site/SiteHeader";
+import { AccountMenu } from "@/components/site/AccountMenu";
 import { Seating } from "./Seating";
 import { Game } from "./Game";
 import { Chat, useTableChat } from "./Chat";
@@ -49,7 +50,7 @@ export function TableRoom({ code, me, guest = false }: { code: string; me: Profi
   if (error) {
     return (
       <main className="flex-1">
-        <Header code={code} />
+        <Header code={code} me={me} guest={guest} />
         <div className="mx-auto max-w-md px-6 py-16">
           <h1 className="display" style={{ fontSize: 44 }}>{error}</h1>
           <p className="mt-3 text-chalk-faint">Check the code with whoever dealt the table.</p>
@@ -58,7 +59,7 @@ export function TableRoom({ code, me, guest = false }: { code: string; me: Profi
       </main>
     );
   }
-  if (!snap) return <main className="flex-1"><Header code={code} /><p className="px-6 text-chalk-faint">Finding the table.</p></main>;
+  if (!snap) return <main className="flex-1"><Header code={code} me={me} guest={guest} /><p className="px-6 text-chalk-faint">Finding the table.</p></main>;
 
   const atBoard = snap.table.status === "playing" || snap.table.status === "finished";
   // At the board the table is the whole screen: the table code and the way out live in its menu, table talk in its corner button.
@@ -72,22 +73,21 @@ export function TableRoom({ code, me, guest = false }: { code: string; me: Profi
   }
   return (
     <main className={`flex-1 flex flex-col ${snap.mySeat !== null ? "pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:pb-0" : ""}`}>
-      <Header code={code} />
+      <Header code={code} me={me} guest={guest} />
       <Seating code={code} me={me} snap={snap} onChange={refresh} guest={guest} />
       {snap.mySeat !== null && <Chat chat={chat} />}
     </main>
   );
 }
 
-function Header({ code }: { code: string }) {
+function Header({ code, me, guest }: { code: string; me: Profile; guest: boolean }) {
   return (
-    <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-6 py-3 sm:py-4">
-      <Wordmark size={26} />
+    <SiteHeader account={<AccountMenu me={me} guest={guest} />}>
       <div className="flex items-center gap-2 text-sm sm:gap-3 text-chalk-faint">
         <span className="hidden min-[400px]:inline">Table</span>
         <span className="code text-chalk" style={{ fontSize: 22, letterSpacing: ".14em" }}>{code}</span>
         <Link href="/" className="tap hover:text-chalk">Leave</Link>
       </div>
-    </header>
+    </SiteHeader>
   );
 }
