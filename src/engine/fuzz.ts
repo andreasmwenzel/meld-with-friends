@@ -1,6 +1,6 @@
 // Dev tooling: play many full games with random rules and real bots, checking every invariant after every move.
 // A failure carries its base state and actions, so it opens in the dev lab exactly as it happened.
-import { applyAction, claimLineFor, newGame, viewFor } from './game';
+import { applyAction, newGame, viewFor } from './game';
 import { random } from './ai/shared';
 import { actors, botAction, checkState } from './scenario';
 import type { Action, CardId, GameState, RulesConfig, SeatIndex } from './types';
@@ -72,7 +72,7 @@ export function verifyClaim(state: GameState, seed: string): number {
   if (state.turn === null) return 0;
   const seat = state.turn;
   const view = viewFor(state, seat);
-  if (!view.legal.canClaim || !claimLineFor(state, seat)) return 0;
+  if (!view.legal.canClaim) return 0;
   const leads = state.players[seat].hand.length;
   const claimed = applyAction(state, { type: 'claim', seat });
   const before = viewFor(state, seat).recap.tricks.length;

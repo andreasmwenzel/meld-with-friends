@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { canClaim, claimLine } from '../claim';
 import { buildDeck, seededShuffle } from '../deck';
 import { applyAction, newGame, viewFor } from '../game';
-import { trickWinner } from '../rules';
+import { legalPlays, trickWinner } from '../rules';
 import { chooseAction } from '../ai';
 import { leakedCards, verifyClaim } from '../fuzz';
 import { buildScenario, checkState } from '../scenario';
 import { PRESETS } from '../scenarios';
 import { buildReplay, cardsOfStep, describeStep, expandReplay } from '../replay';
 import { applyPublicMove, publicMove } from '../publicMove';
-import type { Action, CardId, GameState, PlayerView, RulesConfig } from '../types';
+import type { Action, CardId, GameState, PlayerView, RulesConfig, Trick } from '../types';
 
 const spec = PRESETS.find(p => p.id === 'claim-all')!.spec;
 const seats = [0, 1, 2, 3] as const;
@@ -78,27 +78,39 @@ describe('claim proof from the leader’s own view', () => {
   });
 
   it('every hand it approves wins however the claimer leads it', () => {
-    // Random endings from the claimer's view: whenever a claim is offered, try every order of
-    // leads with each unseen card as a possible reply, not just the proven line.
+    // Random endings: deal the unseen cards to the three opponents and play real four-card tricks
+    // under follow, trump and head rules, trying every order of the claimer's leads and every legal
+    // reply, not just the proven line.
     const deck = buildDeck();
     const suits = ['S', 'H', 'D', 'C'] as const;
-    let approved = 0;
-    for (let n = 0; n < 4000; n++) {
+    let approved = 0, playouts = 0;
+    for (let n = 0; n < 3000; n++) {
       const shuffled = seededShuffle(deck, `orders:${n}`);
-      const size = 1 + n % 5;
+      const size = 1 + n % 4;
       const hand = shuffled.slice(0, size);
-      const unseen = shuffled.slice(size, size * 4);
-      const view = position(hand, unseen, suits[n % 4]);
-      if (!canClaim(view)) continue;
+      const others = [1, 2, 3].map(k => shuffled.slice(size * k, size * (k + 1)));
+      const trump = suits[n % 4];
+      if (!canClaim(position(hand, others.flat(), trump))) continue;
       approved++;
-      const orders = (cards: CardId[]): CardId[][] => cards.length < 2 ? [cards]
-        : cards.flatMap((c, i) => orders([...cards.slice(0, i), ...cards.slice(i + 1)]).map(rest => [c, ...rest]));
-      for (const order of orders(hand)) for (const lead of order) for (const reply of unseen) {
-        const trick = { leader: 0 as const, plays: [{ seat: 0 as const, card: lead }, { seat: 1 as const, card: reply }], winner: null };
-        expect(trickWinner(trick, view.trump!), `${order} against ${reply}`).toBe(0);
-      }
+      const walk = (mine: CardId[], rest: CardId[][]) => {
+        if (!mine.length) { playouts++; return; }
+        for (const lead of mine) {
+          const replies = (trick: Trick, k: number): void => {
+            if (k === 3) {
+              expect(trickWinner(trick, trump), `${hand} led ${lead} into ${trick.plays.map(p => p.card)}`).toBe(0);
+              walk(mine.filter(c => c !== lead), rest.map((h, i) => h.filter(c => c !== trick.plays[i + 1].card)));
+              return;
+            }
+            for (const card of legalPlays(rest[k], trick, trump))
+              replies({ ...trick, plays: [...trick.plays, { seat: (k + 1) as 1 | 2 | 3, card }] }, k + 1);
+          };
+          replies({ leader: 0, plays: [{ seat: 0, card: lead }], winner: null }, 0);
+        }
+      };
+      walk(hand, others);
     }
     expect(approved).toBeGreaterThan(20);
+    expect(playouts).toBeGreaterThan(approved);
   });
 
   it('only offers the claim on lead before anyone has played', () => {
