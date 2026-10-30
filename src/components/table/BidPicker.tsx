@@ -23,13 +23,17 @@ export function BidPicker({ min, step, busy, onBid, pass, misdeal = null, slot =
 }) {
   const [count, setCount] = useState(BATCH_SIZE);
   const [picked, setPicked] = useState<number | null>(null);
+  // One tab stop for the whole grid (arrow keys move inside it), so Tab reaches Pass and Bid however many amounts have loaded.
+  const [cursor, setCursor] = useState(0);
   const grid = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   // The engine accepts safe integers and has no game-rule maximum bid.
   const legalCount = Math.floor((Number.MAX_SAFE_INTEGER - min) / step) + 1;
   const amounts = Array.from({ length: Math.min(count, legalCount) }, (_, i) => min + i * step);
-  const rowH = compact ? 32 : 34;
-  const gap = 6;
+  // Each amount takes a full 44px tap; the pill drawn inside it is smaller, so the rows still read as a grid.
+  const rowH = 44;
+  const colW = compact ? 48 : 54;
+  const gap = 0;
   const rows = compact ? 2 : 3;
   const more = () => setCount((current) => Math.min(current + BATCH_SIZE, legalCount));
   // Near the end of what is loaded, load the next batch so the list never runs out under a finger.
@@ -53,29 +57,34 @@ export function BidPicker({ min, step, busy, onBid, pass, misdeal = null, slot =
     e.preventDefault();
     buttons[i + by].focus();
   };
-  const tap = (amount: number) => {
+  const tap = (amount: number, i: number) => {
+    setCursor(i);
     if (picked === amount) onBid(amount);
     else setPicked(amount);
   };
 
   const board = (
-    <div className="flex flex-col items-center gap-1">
+    <div className={`flex items-center ${compact ? "flex-row" : "flex-col"}`}>
       <div ref={scroller} onScroll={onScroll} role="group" aria-label="Bid amounts"
         className="overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         style={{ height: rows * rowH + (rows - 1) * gap, scrollSnapType: "y mandatory" }}>
-        <div ref={grid} className="grid" style={{ gridTemplateColumns: `repeat(${COLUMNS}, ${compact ? 46 : 50}px)`, gridAutoRows: rowH, gap }} onKeyDown={walk}>
-          {amounts.map((amount) => (
-            <button type="button" key={amount} aria-pressed={picked === amount} disabled={busy}
-              className="btn btn-chalk tabular-nums" onClick={() => tap(amount)}
-              style={{ minHeight: 0, height: rowH, padding: 0, fontSize: compact ? 16 : 18, scrollSnapAlign: "start",
-                ...(picked === amount ? { background: "var(--brass)", boxShadow: "inset 0 0 0 3px var(--chalk)" } : null) }}>
-              {amount}
+        <div ref={grid} className="grid" style={{ gridTemplateColumns: `repeat(${COLUMNS}, ${colW}px)`, gridAutoRows: rowH, gap }} onKeyDown={walk}
+          onFocus={(e) => { const i = amounts.indexOf(Number(e.target.textContent)); if (i >= 0) setCursor(i); }}>
+          {amounts.map((amount, i) => (
+            <button type="button" key={amount} aria-pressed={picked === amount} disabled={busy} tabIndex={i === cursor ? 0 : -1}
+              className="group flex items-center justify-center rounded-full disabled:cursor-not-allowed disabled:opacity-45" onClick={() => tap(amount, i)}
+              style={{ height: rowH, width: colW, scrollSnapAlign: "start" }}>
+              <span className="btn btn-chalk tabular-nums group-hover:bg-white"
+                style={{ height: compact ? 34 : 36, width: colW - 5, padding: 0, fontSize: compact ? 16 : 18,
+                  ...(picked === amount ? { background: "var(--brass)", boxShadow: "inset 0 0 0 3px var(--chalk)" } : null) }}>
+                {amount}
+              </span>
             </button>
           ))}
         </div>
       </div>
       <button type="button" aria-label="Higher bids" onClick={down} disabled={busy}
-        className="flex h-6 w-12 items-center justify-center rounded-full text-chalk-faint hover:text-chalk">
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-chalk-faint hover:text-chalk">
         <svg width="18" height="10" viewBox="0 0 18 10" aria-hidden fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M2 2l7 6 7-6" />
         </svg>

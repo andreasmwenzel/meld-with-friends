@@ -26,6 +26,9 @@ describe("the bid grid", () => {
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "270" }));
     fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "310" }));
+    // One tab stop for the grid, and it follows the arrows, so Tab leaves the grid for the buttons below it.
+    const stops = screen.getAllByRole("button").filter((b) => /^\d+$/.test(b.textContent ?? "") && b.tabIndex === 0);
+    expect(stops.map((b) => b.textContent)).toEqual(["310"]);
   });
 
   it("picks an amount on the first tap and bids it on the second tap or the Bid button", () => {
