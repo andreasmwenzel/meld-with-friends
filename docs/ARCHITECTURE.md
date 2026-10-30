@@ -142,8 +142,7 @@ for these entries; the client labels them "Unfinished" and excludes them from wi
 A table-status trigger captures cleanup and admin closes. Last-human departures capture seats before
 the human becomes a bot, and the trigger's duplicate insert does nothing. Migration 0022 backfills
 finished tables from surviving seats, but cannot recover humans already replaced by bots. Migration 0023
-dates those results by their last move and, where no human was left at all, puts the host back in the chair
-held by the latest stand-in name.
+dates those results by their last move.
 
 All `/api/admin/*` routes require `requireAdmin`, which checks a saved session against `ADMIN_EMAILS`. `GET /api/admin/tables?status=playing&limit=50` returns a bare array with `code`, `status`, `hostHandle`, `seats: [{ seat, name, bot }]`, `createdAt`, `lastActivity`, `rev`, and `phase`. Status can be `open`, `playing`, or `finished`; omit it for all statuses. Limit defaults to 50 and accepts 1 through 200. Seats use boolean bot flags and null names for empty chairs. `hostHandle` is null if unavailable; `rev` and `phase` are null before the first game. Activity is the active game's `updated_at`, falling back to the table creation time. Full game state stays on the server.
 
