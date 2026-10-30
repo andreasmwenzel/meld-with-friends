@@ -776,7 +776,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   // A hand past what the row holds at its tightest (the bidder's sixteen while passing back) shrinks a little, down to
   // three quarters of the chosen size, before it would scroll.
   const tightest = prefW + (handCount - 1) * Math.max(20, prefW * 0.34);
-  const cardW = handW > 0 && tightest > handW ? Math.round(prefW * Math.max(0.75, handW / tightest)) : prefW;
+  const cardW = handW > 0 && tightest > handW ? Math.floor(prefW * Math.max(0.75, handW / tightest)) : prefW;
   const baseStep = cardW * (cardW < 60 ? 0.42 : 0.5);
   const fitStep = handW > 0 && handCount > 1 ? (handW - cardW) / (handCount - 1) : baseStep;
   const step = Math.max(Math.max(20 * (cardW / prefW), cardW * 0.34), Math.min(baseStep, fitStep));
