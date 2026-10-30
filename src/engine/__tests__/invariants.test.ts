@@ -24,6 +24,7 @@ function candidates(state: GameState, rng: () => number): Action[] {
     if (legal.canDeclareMeld && !state.players[seat].meld.length) actions.push({ type: 'declare_meld', seat, cards: state.players[seat].hand.filter(() => rng() < 0.8) });
     if (legal.canConfirmMeld) actions.push({ type: 'confirm_meld', seat });
     for (const card of legal.playableCards) actions.push({ type: 'play_card', seat, card });
+    if (legal.canConcede) actions.push({ type: 'concede', seat });
     if (legal.canClaim) actions.push({ type: 'claim', seat });
     if (legal.canAdvanceHand) actions.push({ type: 'next_hand', seat });
     return actions;
@@ -47,6 +48,7 @@ function conserved(state: GameState) {
 
 it('plays 200 seeded random full games with conservation, legal actions, illegal attempts, and deterministic replay', () => {
   let earlyFailedShoots = 0;
+  let concessions = 0;
   const passCounts = new Set<number>();
   for (let seed = 0; seed < 200; seed++) {
     const rng = random(seed);
@@ -68,13 +70,18 @@ it('plays 200 seeded random full games with conservation, legal actions, illegal
       expect(legal).toEqual(legalActionsFor(state, action.seat));
       if (action.type === 'play_card') expect(legal.playableCards).toContain(action.card);
       else if (action.type === 'pass_cards') expect(action.cards).toHaveLength(legal.mustPassCount!);
-      else expect(legal[({ bid: 'canBid', pass_bid: 'canPassBid', shoot: 'canShoot', decline_shoot: 'canDeclineShoot', misdeal: 'canMisdeal', declare_trump: 'canDeclareTrump', declare_meld: 'canDeclareMeld', confirm_meld: 'canConfirmMeld', next_hand: 'canAdvanceHand', claim: 'canClaim' } as const)[action.type]]).toBe(true);
+      else expect(legal[({ bid: 'canBid', pass_bid: 'canPassBid', shoot: 'canShoot', decline_shoot: 'canDeclineShoot', misdeal: 'canMisdeal', declare_trump: 'canDeclareTrump', declare_meld: 'canDeclareMeld', confirm_meld: 'canConfirmMeld', next_hand: 'canAdvanceHand', claim: 'canClaim', concede: 'canConcede' } as const)[action.type]]).toBe(true);
       const seat = seats[Math.floor(rng() * 4)];
       const forbidden = buildDeck().filter(card => !legalActionsFor(state, seat).playableCards.includes(card));
       const illegal: Action = { type: 'play_card', seat, card: forbidden[Math.floor(rng() * forbidden.length)] as CardId };
       expect(() => applyAction(state, illegal)).toThrow(IllegalAction);
       state = applyAction(state, action);
       actions.push(action);
+      if (action.type === 'concede') {
+        concessions++;
+        expect(state.players.every(p => p.hand.length === 12)).toBe(true);
+        expect(state.history.at(-1)?.conceded).toBe(true);
+      }
       if (state.history.at(-1)?.shotMade === false && state.phase === 'game_over' && state.players.some(p => p.hand.length > 0)) earlyFailedShoots++;
     }
     expect(state.phase, `seed ${seed}`).toBe('game_over');
@@ -84,6 +91,7 @@ it('plays 200 seeded random full games with conservation, legal actions, illegal
   }
   expect(passCounts).toEqual(new Set([0, 4, 5]));
   expect(earlyFailedShoots).toBeGreaterThan(0);
+  expect(concessions).toBeGreaterThan(0);
 }, 120000);
 
 it('awards the bidder the game when both teams cross the target in the same hand', () => {
@@ -91,7 +99,7 @@ it('awards the bidder the game when both teams cross the target in the same hand
   let state = newGame('both-cross', { target: 1000, minBid: 10, passCount: 0 });
   // Generate a normal hand until both sides have tricks and a made contract.
   while (state.phase !== 'hand_over') {
-    const possible = candidates(state, rng).filter(a => a.type !== 'bid' || !state.highBid);
+    const possible = candidates(state, rng).filter(a => a.type !== 'concede' && (a.type !== 'bid' || !state.highBid));
     state = applyAction(state, possible[Math.floor(rng() * possible.length)]);
   }
   expect(state.history[0].delta.red).toBeGreaterThan(0);
@@ -101,7 +109,7 @@ it('awards the bidder the game when both teams cross the target in the same hand
   const replayRng = random(991);
   replay.score = { red: 999, blue: 999 };
   while (replay.phase !== 'game_over') {
-    const possible = candidates(replay, replayRng).filter(a => a.type !== 'bid' || !replay.highBid);
+    const possible = candidates(replay, replayRng).filter(a => a.type !== 'concede' && (a.type !== 'bid' || !replay.highBid));
     replay = applyAction(replay, possible[Math.floor(replayRng() * possible.length)]);
   }
   expect(replay.score.red).toBeGreaterThanOrEqual(1000);

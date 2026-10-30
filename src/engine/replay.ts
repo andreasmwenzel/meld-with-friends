@@ -141,6 +141,7 @@ export function describeStep(action: Action, before: GameState, after: GameState
   switch (action.type) {
     case 'bid': return `${who} bids ${action.amount}`;
     case 'shoot': return before.phase === 'deciding_shoot' ? `${who} shoots the moon after the pass${after.sittingOut != null ? `. ${nameOf(after.sittingOut)} sits out; no meld` : ''}` : `${who} shoots the moon`;
+    case 'concede': return `${who} throws in. ${handOutcome(after.history[after.history.length - 1], nameOf)}`;
     case 'decline_shoot': return `${who} plays it out`;
     case 'misdeal': return `${who} throws in ${before.players[action.seat].hand.filter(card => card[0] === '9').length} nines and no meld, so ${nameOf(after.dealer)} redeals`;
     case 'pass_bid': {
@@ -185,6 +186,7 @@ export function handOutcome(record: HandRecord, nameOf: (seat: SeatIndex) => str
   const who = nameOf(record.bidder);
   const change = (team: string, n: number) => n < 0 ? `${team} loses ${-n}` : `${team} scores ${n}`;
   const totals = `${change('Red', record.delta.red)}, ${change('Blue', record.delta.blue)}`;
+  if (record.conceded) return `${who} threw in on ${record.bid}. ${totals}`;
   if (record.shotMade !== undefined) return `${who} ${record.shotMade ? 'shot the moon' : record.sittingOut != null ? 'missed the moon; shooting side loses the game' : 'missed the moon'}. ${totals}`;
   return `${who} ${record.wentSet ? `went set on ${record.bid}` : `made ${record.bid}`} in ${SUIT_SIGN[record.trump]}. ${totals}`;
 }

@@ -61,6 +61,8 @@ export const PRESETS: Preset[] = [
   { id: 'meld-review', group: 'Meld', title: 'Meld on the table', note: 'Everyone has melded; trick play is about to start.',
     spec: { dealer: 3, bidder: 1, bid: 29, trump: 'C', to: 'playing', turn: 1 }, bots: [] },
 
+  { id: 'play-concede', group: 'Trick play', title: 'Throw in available', note: 'Your opening lead on a hopeless contract; defenders keep only their meld.',
+    spec: { dealer: 3, bidder: 0, bid: 100, trump: 'H', rules: { scoring: 'modern', passCount: 0 }, meld: { 0: 'none', 2: 'none' }, to: 'playing' }, bots: [] },
   { id: 'play-lead', group: 'Trick play', title: 'Your lead', note: 'You won the bid and lead the first trick.',
     spec: { dealer: 3, bidder: 0, bid: 30, trump: 'S', to: 'playing' } },
   { id: 'claim-all', group: 'Trick play', title: 'Claim all available', note: 'Hand 3: six remaining spades, two club aces and a diamond ace. Every other spade has been played.',
@@ -87,6 +89,8 @@ export const PRESETS: Preset[] = [
   { id: 'play-waiting', group: 'Trick play', title: 'Waiting on others', note: 'Bots are thinking; watch the pace.',
     spec: { dealer: 0, bidder: 1, bid: 25, trump: 'S', to: 'playing', tricks: 2, turn: 1 } },
 
+  { id: 'hand-conceded', group: 'Hand over', title: 'Hand thrown in', note: 'Red loses the bid; Blue saves meld without counters or a last trick.',
+    spec: { dealer: 3, bidder: 0, bid: 100, trump: 'H', rules: { scoring: 'modern', passCount: 0 }, meld: { 0: 'none', 2: 'none' }, concede: true, to: 'hand_over' } },
   { id: 'hand-made', group: 'Hand over', title: 'Bid made', note: 'Hand over with every hand revealed.',
     spec: { dealer: 3, bidder: 0, bid: 25, hands: { 0: BIG_MELD }, trump: 'S', to: 'hand_over' } },
   { id: 'hand-played-out', group: 'Hand over', title: 'Played to the last trick', note: 'No claim, so the hands show after passing or as dealt.',

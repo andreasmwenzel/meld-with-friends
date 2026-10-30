@@ -26,6 +26,13 @@ export function chooseAction(view: PlayerView, options: { budgetMs?: number; see
     if (full.total !== declared || (!full.total && !declaredZero)) return { type: 'declare_meld', seat, cards: [...view.hand] };
   }
   if (l.canConfirmMeld) return {type:'confirm_meld',seat};
+  if (l.canConcede && view.highBid?.amount != null) {
+    const meld = view.recap.melds[seat].points + view.recap.melds[((seat + 2) % 4) as typeof seat].points;
+    const counters = view.rules.counting === 'classic' ? 240 : 24 * view.rules.counterValue;
+    if (meld + counters + view.rules.lastTrickBonus < view.highBid.amount) {
+      return { type: 'concede', seat };
+    }
+  }
   if (l.canClaim) return {type:'claim',seat};
   if (l.playableCards.length) return {type:'play_card',seat,card:choosePlay(view,{ ...options, config })};
   throw new Error('No legal action for this seat');

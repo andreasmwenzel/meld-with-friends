@@ -50,6 +50,7 @@ export function describeAction(a: Action): string {
     case "bid": return `${who} bids ${a.amount}`;
     case "pass_bid": return `${who} passes`;
     case "shoot": return `${who} shoots the moon`;
+    case "concede": return `${who} throws in`;
     case "decline_shoot": return `${who} plays it out`;
     case "misdeal": return `${who} throws in for nines`;
     case "declare_trump": return `${who} names ${{ S: "spades", H: "hearts", D: "diamonds", C: "clubs" }[a.suit]}`;

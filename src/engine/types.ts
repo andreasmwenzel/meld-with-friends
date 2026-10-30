@@ -170,6 +170,8 @@ export interface HandRecord {
   delta: Record<Team, number>;
   breakdown: Record<Team, HandScoreBreakdown>;
   wentSet: boolean;
+  /** The declarer threw in before the opening lead. */
+  conceded?: true;
   /** present when the hand was a shoot; true if every trick was taken */
   shotMade?: boolean;
   /** Present for the solo rule; archived partnership shoots have no sit-out seat. */
@@ -230,6 +232,7 @@ export type Action =
   | { type: "confirm_meld"; seat: SeatIndex } // done melding (may be with zero cards)
   | { type: "play_card"; seat: SeatIndex; card: CardId }
   | { type: "claim"; seat: SeatIndex }
+  | { type: "concede"; seat: SeatIndex }
   | { type: "next_hand"; seat: SeatIndex }; // any seat may advance after hand_over
 
 /** What a single player is allowed to see. Other hands are hidden; only their counts are exposed. */
@@ -294,6 +297,8 @@ export interface LegalActions {
   playableCards: CardId[];
   /** on lead, with a proof from only your hand and public plays */
   canClaim: boolean;
+  /** The ordinary contract declarer may throw in on the opening lead. */
+  canConcede: boolean;
   playConstraint: PlayConstraint | null;
   canAdvanceHand: boolean;
 }

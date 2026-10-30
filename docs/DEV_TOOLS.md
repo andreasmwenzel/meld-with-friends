@@ -11,7 +11,8 @@ browser, so you can put the table in any position, play from any seat, and rewin
 - **Positions**: about 40 named edge cases (`src/engine/scenarios.ts`): dealer stuck, all-pass redeal,
   shoot available or already declared, every passing phase, double run, no meld, waiting on others,
   must trump / head / overtrump, last trick, went set, meld lost with no tricks, shoot made, missed or declared after passing,
-  a hand played to the last trick, game won or lost, negative scores, classic counting, leisurely pace, short games.
+  throw-in available (`play-concede`), a thrown-in hand (`hand-conceded`), a hand played to the last trick,
+  game won or lost, negative scores, classic counting, leisurely pace, short games.
 - **Build**: make your own position. Pick where to stop (any phase, so many tricks in, whose turn),
   the dealer, hand number and scores (earlier hands are synthesised so the scorepad adds up), the
   contract, rules, and the deal. In the 48-card grid, tap a card to give it to a seat; cards you
@@ -76,7 +77,8 @@ actually reach. Card names can be `AS0`, `AS` (first free copy), `10S` or `A♠`
 `rules`, `dealer`, `handNumber`, `score`, `hands`, `to`, `bids` (`[25, null]` from the
 dealer's left), `bidder`/`bid`, `shoot` or `shootAfterPass` (the bidder's decision after the pass; plays it out
 when omitted), `trump`, `passToBidder`/`passBack`, `meld` per seat
-(`"full"`, `"none"`, or cards), `confirmed`, `tricks`, `plays`, `turn`, `play` (scripted cards in order), `noClaims` (bots play every trick out).
+(`"full"`, `"none"`, or cards), `confirmed`, `tricks`, `plays`, `turn`, `play` (scripted cards in order),
+`noClaims` (bots play every trick out), `concede` (the declarer throws in on the opening lead).
 
 When you add a preset, `src/engine/__tests__/scenario.test.ts` builds it and checks that it reaches
 its target with no broken invariants. Forced-play and outcome presets also have assertions there.
