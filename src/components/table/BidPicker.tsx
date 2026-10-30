@@ -9,15 +9,17 @@ export type GridFit = { cols: number; rows: number; beside: boolean; cellW: numb
 /**
  * How the amounts lie on a cloth `w` by `h` (the table's own px, before it is scaled by `scale`). Each cell wants a
  * full 44px tap on screen, so `44 / scale` in the table's px. Four across where they fit, else three (a 360px phone);
- * three rows with the chevron under them, then two, then two with the chevron beside. On a cloth too small for any
- * of them at full size, whichever layout gives the biggest cells.
+ * three rows between an up and a down chevron, so the amounts sit in the middle of the cloth, then two rows, then two
+ * rows with both chevrons stacked beside them. On a cloth too small for any of them at full size, whichever layout
+ * gives the biggest cells.
  */
 export function fitGrid(w: number, h: number, scale: number, base: number): GridFit {
   const want = Math.ceil(44 / Math.min(1, scale)) + 1;
   const layouts = [4, 3].flatMap((cols) => [{ cols, rows: 3, beside: false }, { cols, rows: 2, beside: false }, { cols, rows: 2, beside: true }]);
   const sized = layouts.map((l) => {
     const roomW = (w * 0.96) / (l.cols + (l.beside ? 1 : 0));
-    const roomH = (h * 0.84) / (l.rows + (l.beside ? 0 : 1));
+    // The chevrons may lie on the oval's rim; the amounts stay inside it.
+    const roomH = (h * 0.92) / (l.rows + (l.beside ? 0 : 2));
     const tall = Math.floor(Math.min(want, roomH));
     const cellW = Math.floor(Math.min(roomW, Math.max(base, tall)));
     // A cell too narrow for a full tap is no use taller than it is wide.
@@ -73,8 +75,12 @@ export function BidPicker({ min, step, busy, onBid, pass, misdeal = null, slot =
   // Near the end of what is loaded, load the next batch so the list never runs out under a finger.
   const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
+    setScrolled(el.scrollTop > 1);
     if (count < legalCount && el.scrollTop + el.clientHeight > el.scrollHeight - 3 * (rowH + gap)) more();
   };
+  // The up chevron keeps its place when there is nothing above, so the amounts never shift.
+  const [scrolled, setScrolled] = useState(false);
+  const up = () => scroller.current?.scrollBy({ top: -(rowH + gap), behavior: "smooth" });
   const down = () => {
     const el = scroller.current;
     if (!el) return;
@@ -97,8 +103,12 @@ export function BidPicker({ min, step, busy, onBid, pass, misdeal = null, slot =
     else setPicked(amount);
   };
 
+  const upButton = <Chevron label="Lower bids" onClick={up} up size={tapPx} disabled={busy} hidden={!scrolled} />;
+  const downButton = <Chevron label="Higher bids" onClick={down} size={tapPx} disabled={busy} />;
+
   const board = (
     <div className={`flex items-center ${beside ? "flex-row" : "flex-col"}`}>
+      {!beside && upButton}
       <div ref={scroller} onScroll={onScroll} role="group" aria-label="Bid amounts"
         className="overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         style={{ height: rows * rowH + (rows - 1) * gap, scrollSnapType: "y mandatory" }}>
@@ -117,12 +127,7 @@ export function BidPicker({ min, step, busy, onBid, pass, misdeal = null, slot =
           ))}
         </div>
       </div>
-      <button type="button" aria-label="Higher bids" onClick={down} disabled={busy}
-        className="flex shrink-0 items-center justify-center rounded-full text-chalk-faint hover:text-chalk" style={{ width: tapPx, height: tapPx }}>
-        <svg width="18" height="10" viewBox="0 0 18 10" aria-hidden fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M2 2l7 6 7-6" />
-        </svg>
-      </button>
+      {beside ? <div className="flex flex-col">{upButton}{downButton}</div> : downButton}
     </div>
   );
 
@@ -136,6 +141,21 @@ export function BidPicker({ min, step, busy, onBid, pass, misdeal = null, slot =
       {misdeal && <MisdealButton busy={busy} run={misdeal} />}
     </div>
   </>);
+}
+
+/** Scrolls the bid grid a row. A hidden chevron keeps its place so the amounts never shift. */
+function Chevron({ label, onClick, up = false, size, disabled, hidden = false }: {
+  label: string; onClick: () => void; up?: boolean; size: number; disabled: boolean; hidden?: boolean;
+}) {
+  return (
+    <button type="button" aria-label={label} onClick={onClick} disabled={disabled || hidden} aria-hidden={hidden || undefined} tabIndex={hidden ? -1 : undefined}
+      className="flex shrink-0 items-center justify-center rounded-full text-chalk-faint hover:text-chalk"
+      style={{ width: size, height: size, visibility: hidden ? "hidden" : undefined }}>
+      <svg width="18" height="10" viewBox="0 0 18 10" aria-hidden fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <path d={up ? "M2 8l7-6 7 6" : "M2 2l7 6 7-6"} />
+      </svg>
+    </button>
+  );
 }
 
 /** Five nines and no meld: the player may scrap the deal before their first call. */
