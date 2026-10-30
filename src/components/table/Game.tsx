@@ -596,7 +596,12 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
       setFit((prev) => (prev.scale === scale && prev.w === w && prev.h === h && prev.top === top ? prev : { scale, w, h, top }));
     };
     measure();
-    const ro = new ResizeObserver(measure);
+    const ro = new ResizeObserver(() => {
+      measure();
+      // What hangs under the side fans sits in rows of no height, so the board's box does not change when it grows (the
+      // away offer appearing): watch it too, including blocks that mount later (turning a phone upright).
+      boardRef.current?.querySelectorAll("[data-seat-hang]").forEach((el) => ro.observe(el));
+    });
     if (stage.current) ro.observe(stage.current);
     if (boardRef.current) ro.observe(boardRef.current);
     return () => ro.disconnect();
@@ -1149,7 +1154,7 @@ function OpponentRow({ seat, view, name, person, actions, align, score, laid, st
   );
   const offer = standIn?.away && (
     <button type="button" onClick={standIn.run}
-      className={`max-w-[200px] pt-1 text-xs text-chalk-faint underline hover:text-chalk ${align === "center" ? "text-center" : align === "left" ? "text-left" : "text-right"}`}>
+      className={`${vertical ? "max-w-[7.5rem]" : "max-w-[200px]"} pt-1 text-xs text-chalk-faint underline hover:text-chalk ${align === "center" ? "text-center" : align === "left" ? "text-left" : "text-right"}`}>
       {name} seems to be away. Hand to a computer
     </button>
   );
@@ -1184,10 +1189,15 @@ function OpponentRow({ seat, view, name, person, actions, align, score, laid, st
         ) : null}
         {hand}
         <div className={`flex flex-col ${faceUp ? "" : "h-0"} ${items}`}>
-          <div data-seat-hang="" className="relative flex max-w-full flex-col items-center pt-1 sm:pt-1.5">
-            {!faceUp && plate}
-            {!faceUp && <div className="flex h-7 items-center"><ScoreTag score={score} name={name} align={align} /></div>}
-            {/* Handing a seat over and making a host live in the player's menu; a seat that seems away also says so here. */}
+          <div data-seat-hang="" className={`relative flex max-w-full flex-col pt-1 sm:pt-1.5 ${items}`}>
+            {!faceUp && (
+              <div className="flex flex-col items-center">
+                {plate}
+                <div className="flex h-7 items-center"><ScoreTag score={score} name={name} align={align} /></div>
+              </div>
+            )}
+            {/* Handing a seat over and making a host live in the player's menu; a seat that seems away also says so here,
+                in its own line, so the name above stays under the fan. */}
             {offer}
           </div>
         </div>
