@@ -46,15 +46,17 @@ export function Lobby({ userId, profile, guest, tables, invites, autoDeal, defau
         <JoinLink />
       </SiteHeader>
 
-      <div className="mx-auto flex min-h-0 w-full max-w-xl flex-1 lg:max-w-2xl flex-col justify-center px-5 py-4 sm:px-6">
-        <h1 className="display shrink-0" style={{ fontSize: "clamp(40px, 11vw, 68px)" }}>Evening, {first}.</h1>
+      {/* Centred while it fits ("safe", so an overflowing top is never cut off); on a screen too short for even a few
+          table rows (a phone held sideways) the middle scrolls as a whole instead of squeezing the list to nothing. */}
+      <div className="mx-auto flex min-h-0 w-full max-w-xl flex-1 flex-col justify-center-safe overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 lg:max-w-2xl">
+        <h1 className="display shrink-0 text-[clamp(40px,11vw,68px)] short:text-[36px]">Evening, {first}.</h1>
         <p className="mt-3 shrink-0 text-chalk-faint">
           {tables.length === 0
             ? "You are not sitting anywhere yet. Deal a table, or join one with the code a friend sent you."
             : waiting === 0 ? "Nothing is waiting on you." : waiting === 1 ? "One table is waiting on you." : `${waiting} tables are waiting on you.`}
         </p>
         {/* Always mounted, so an invitation arriving live has somewhere to land; hidden while it holds nothing. */}
-        <div className="-mx-2 mt-4 min-h-0 overflow-y-auto overscroll-contain border-y border-chalk-ghost px-2 empty:hidden">
+        <div className="-mx-2 mt-4 min-h-[7.5rem] overflow-y-auto overscroll-contain border-y border-chalk-ghost px-2 empty:hidden">
           <Invitations invites={invites} userId={guest ? null : userId} />
           {tables.length > 0 && <TableList tables={tables} />}
         </div>

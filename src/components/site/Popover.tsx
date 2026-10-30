@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 /** The dark cloth surface popovers and sheets are laid on, so chalk text inside reads as it does on the table. */
 export const CLOTH_SURFACE = { background: "var(--cloth-deep)", boxShadow: "inset 0 0 0 1.5px var(--cloth-edge), var(--shadow-card)" };
@@ -52,26 +53,40 @@ export function Popover({ button, label, children, place, buttonClassName, open:
 
 /**
  * A modal sheet: rises from the bottom edge on a phone, sits in the middle of a wider screen. Escape or a tap on the
- * shade closes it. Used for what is too big for a popover, like dealing a table.
+ * shade closes it. It is drawn straight into <body>, and everything else there is made inert while it is open, so
+ * Tab stays inside. Used for what is too big for a popover, like dealing a table.
  */
 export function Sheet({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
+  const shade = useRef<HTMLDivElement>(null);
   const latest = useRef(onClose);
   useEffect(() => { latest.current = onClose; });
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- <body> only exists once mounted
+  useEffect(() => { setHost(document.body); }, []);
   useEffect(() => {
+    if (!host) return;
     const back = document.activeElement as HTMLElement | null;
+    const others = [...host.children].filter((el): el is HTMLElement => el instanceof HTMLElement && el !== shade.current && !el.inert);
+    for (const el of others) el.inert = true;
     box.current?.focus();
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") latest.current(); };
     document.addEventListener("keydown", key);
-    return () => { document.removeEventListener("keydown", key); back?.focus?.(); };
-  }, []);
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-2 sm:items-center sm:p-6"
+    return () => {
+      document.removeEventListener("keydown", key);
+      for (const el of others) el.inert = false;
+      back?.focus?.();
+    };
+  }, [host]);
+  if (!host) return null;
+  return createPortal(
+    <div ref={shade} className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-2 sm:items-center sm:p-6"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div ref={box} role="dialog" aria-modal="true" aria-label={label} tabIndex={-1} style={{ outline: "none", paddingBottom: "env(safe-area-inset-bottom)" }}
-        className="max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-3rem)] w-full max-w-2xl overflow-y-auto overscroll-contain outline-none">
+        className="max-h-[calc(100dvh-1rem)] w-full max-w-2xl overflow-y-auto overscroll-contain outline-none sm:max-h-[calc(100dvh-3rem)]">
         {children}
       </div>
-    </div>
+    </div>,
+    host,
   );
 }
