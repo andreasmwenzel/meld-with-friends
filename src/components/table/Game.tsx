@@ -680,6 +680,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const seatAt = (r: number): SeatIndex => (((view.seat + r) % 4) as SeatIndex);
   const isMyTurn = view.turn === view.seat;
   const picking = view.legal.mustPassCount !== null || view.legal.canDeclareMeld;
+  const passingNow = view.phase === "passing_to_bidder" || view.phase === "passing_back";
   // Picking your own meld: outline every card that scores, so nothing is missed.
   const meldable = new Set(view.phase === "melding" && !cardPrefs.autoMeld && view.trump && view.legal.canDeclareMeld ? autoMeldSelection(view.hand, view.trump) : []);
 
@@ -934,6 +935,11 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           {(view.phase === "bidding" || (view.phase === "melding" && view.trump)) && (
             <MeldLine key={view.phase} rules={view.rules} hand={view.hand} trump={view.phase === "melding" ? view.trump : null} lit={lit} setLit={setLit} />
           )}
+          {/* Passing: the meld in trump that the cards you keep would make, redone as you choose. */}
+          {passingNow && view.trump && (
+            <MeldLine key={`${view.phase}:${selected.join()}`} rules={view.rules} hand={view.hand.filter((c) => !selected.includes(c))} trump={view.trump}
+              kept={selected.length > 0} lit={lit} setLit={setLit} />
+          )}
           {/* In the flow, not over the hand, so it never lands on the meld chips. */}
           {view.melds[view.seat]?.length > 0 && view.phase === "melding" && (
             <p className="mt-1 text-center text-xs text-brass">
@@ -969,7 +975,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
                     aria-disabled={!playable || undefined} aria-pressed={sel} aria-describedby={blocked ? `${handId}-why` : undefined}
                     tabIndex={c === tabStop ? 0 : -1} onFocus={() => setRove(c)}
                     className="group relative block touch-manipulation rounded-[10px] focus-visible:z-20 aria-disabled:cursor-default"
-                    style={{ transform: sel || lit?.includes(c) ? `translateY(-${LIFT_PX}px)` : undefined, transition: "transform .14s ease" }}>
+                    style={{ transform: sel || (!passingNow && lit?.includes(c)) ? `translateY(-${LIFT_PX}px)` : undefined, transition: "transform .14s ease" }}>
                     {suggested?.includes(c) && <SuggestedMark />}
                     <PlayingCard card={c} width={cardW} prefs={cardPrefs} trump={splitCard(c).suit === view.trump} selected={ringed || (lit?.includes(c) ?? false)} dimmed={(view.phase === "playing" && isMyTurn && !playable) || (lit !== null && !lit.includes(c))}
                       {...(meldable.has(c) && !sel ? { style: { boxShadow: "0 0 0 2px var(--brass), var(--shadow-card)" }, title: `${cardName(c)}, scores in your meld` } : {})} />
@@ -1284,8 +1290,9 @@ function SmallFan({ cards, perRow, label, width = MELD_W, lit, hand, fly }: { ca
   );
 }
 
-/** Meld by suit while bidding, or the trump suit's items once trump is named. Tapping lights the cards in your hand. */
-function MeldLine({ rules, hand, trump, lit, setLit }: { rules: PlayerView["rules"]; hand: CardId[]; trump: Suit | null; lit: CardId[] | null; setLit: (c: CardId[] | null) => void }) {
+/** Meld by suit while bidding, or the trump suit's items once trump is named. Tapping lights the cards in your hand.
+ *  `kept`: the hand given is what is left once the cards chosen to pass are gone. */
+function MeldLine({ rules, hand, trump, kept = false, lit, setLit }: { rules: PlayerView["rules"]; hand: CardId[]; trump: Suit | null; kept?: boolean; lit: CardId[] | null; setLit: (c: CardId[] | null) => void }) {
   const [open, setOpen] = useState<string | null>(null);
   const all = useMemo(() => meldBySuit(hand, rules), [hand, rules]);
   const same = (a: CardId[]) => lit !== null && lit.length === a.length && a.every((c) => lit.includes(c));
@@ -1297,15 +1304,15 @@ function MeldLine({ rules, hand, trump, lit, setLit }: { rules: PlayerView["rule
   const four = useCardPrefs().prefs.fourColour;
   if (trump) {
     const mine = all.find((x) => x.suit === trump);
-    if (!mine || mine.items.length === 0) return <p className="mt-2 text-center text-xs text-chalk-faint">No meld in {SUIT_NAME[trump]}.</p>;
+    if (!mine || mine.items.length === 0) return <p className="mt-2 text-center text-xs text-chalk-faint">{kept ? "No meld left" : "No meld"} in {SUIT_NAME[trump]}.</p>;
     return (
       <div className="mt-2 mb-1.5 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-3 text-xs text-chalk-faint">
-        <span>Your meld, tap to see it:</span>
+        <span>{kept ? `You keep ${mine.total} meld, tap to see it:` : "Your meld, tap to see it:"}</span>
         {mine.items.map((it, i) => {
           const key = `${i}`, on = open === key && same(it.cards);
           return (
             <button key={key} type="button" aria-pressed={on} onClick={() => pick(key, it.cards)}
-              className={`hit inline-flex h-8 min-w-11 items-center justify-center rounded-full px-2.5 text-chalk ${on ? "bg-chalk text-[color:var(--pip-black)]" : "bg-white/10 hover:bg-white/20"}`}>
+              className={`hit inline-flex h-8 min-w-11 items-center justify-center rounded-full px-2.5 ${on ? "bg-chalk text-[color:var(--pip-black)]" : "bg-white/10 text-chalk hover:bg-white/20"}`}>
               {itemLabel(it)} {it.points}
             </button>
           );
