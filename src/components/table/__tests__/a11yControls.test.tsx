@@ -52,7 +52,8 @@ describe("fitting the bid grid on the cloth", () => {
   const onScreen = (w: number, h: number, scale: number) => {
     const fit = fitGrid(w, h, scale, 54);
     const across = fit.cols * fit.cellW + (fit.beside ? Math.min(fit.cellW, fit.cellH) : 0);
-    const down = fit.rows * fit.cellH + (fit.beside ? 0 : Math.min(fit.cellW, fit.cellH));
+    // Up and down chevrons above and below the amounts, or stacked beside them.
+    const down = Math.max(fit.rows * fit.cellH + (fit.beside ? 0 : 2 * Math.min(fit.cellW, fit.cellH)), fit.beside ? 2 * fit.cellH : 0);
     return { ...fit, tap: Math.min(fit.cellW, fit.cellH) * scale, inside: across <= w && down <= h };
   };
   it("gives every amount a 44px tap on screen and keeps the grid on the cloth", () => {
@@ -63,6 +64,23 @@ describe("fitting the bid grid on the cloth", () => {
     for (const [w, h, s] of [[214, 246, 1], [300, 246, 1], [184, 246, 0.787], [172 / 0.81, 246, 0.81], [240, 132, 1]]) {
       expect(onScreen(w, h, s).tap).toBeGreaterThanOrEqual(44);
     }
+  });
+  it("shows the up chevron only once the amounts are scrolled down", () => {
+    render(<BidPicker min={25} step={1} busy={false} onBid={() => {}} pass={null} />);
+    const up = document.querySelector<HTMLButtonElement>('[aria-label="Lower bids"]')!;
+    expect(up.style.visibility).toBe("hidden");
+    expect(up.disabled).toBe(true);
+    const scroller = screen.getByRole("group", { name: "Bid amounts" });
+    Object.defineProperty(scroller, "scrollTop", { value: 45, configurable: true });
+    fireEvent.scroll(scroller);
+    const shown = screen.getByRole("button", { name: "Lower bids" });
+    expect(shown.style.visibility).toBe("");
+    // Scrolled back to the top with the up chevron focused: focus moves to the first amount, not to the page.
+    act(() => { shown.focus(); });
+    Object.defineProperty(scroller, "scrollTop", { value: 0, configurable: true });
+    fireEvent.scroll(scroller);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "25" }));
+    expect(up.style.visibility).toBe("hidden");
   });
   it("on a cloth too small for full taps, still keeps the grid on it", () => {
     expect(onScreen(184, 246, 0.5).inside).toBe(true);
