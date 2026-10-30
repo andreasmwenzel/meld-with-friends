@@ -578,8 +578,9 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
       const w = b.offsetWidth, h = b.offsetHeight, room = s.clientHeight - padY;
       const scale = flat ? 1 : Math.min(1, room / Math.max(1, h), (s.clientWidth - padX) / Math.max(1, w));
       // The partner across stays at the top of the room; the cloth's row drops by half what the board leaves free, so it
-      // sits midway between that seat and yours at the room's foot. In the board's own pixels, whole ones so cards stay crisp.
-      const top = flat ? 0 : Math.max(0, Math.floor((room - h * scale) / 2 / scale));
+      // sits midway between that seat and yours at the room's foot. Whole screen pixels, so cards stay crisp, given in the
+      // board's own pixels, since the row moves inside the board's scale.
+      const top = flat ? 0 : Math.max(0, Math.floor((room - h * scale) / 2) / scale);
       setFit((prev) => (prev.scale === scale && prev.w === w && prev.h === h && prev.top === top ? prev : { scale, w, h, top }));
     };
     measure();
@@ -867,11 +868,11 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           : reconnecting && <p role="status" className="board-note mb-1 shrink-0 text-center text-xs text-chalk-faint">Reconnecting to the table.</p>}
         <div aria-disabled={paused || updating ? true : undefined} inert={paused || updating ? true : undefined} className={`board-flat flex min-h-0 min-w-0 flex-1 flex-col px-3 pb-[max(.5rem,env(safe-area-inset-bottom))] sm:px-4 ${paused ? "pointer-events-none opacity-70" : ""}`}>
         {/* Table talk never lies on a hand (scripts/overlap.mjs checks every position and size). On an upright phone or
-            tablet it sits in the cloth's top-right corner, under Menu: the partner's row across is narrower than the
-            screen and the side seats start below it, so that corner is empty in every phase, while the bottom corner
+            tablet it sits in the top-right corner beside the partner's row, under Menu: that row is narrower than the
+            screen and the side seats start below it, so the corner is empty in every phase, while the bottom corner
             meets the right-hand seat's cards on shorter phones and in a hand shown face up. Sideways phones put it at
             the foot of the action column (globals.css). At hand end it moves onto the result sheet. */}
-        {/* The look's cog mirrors it in the cloth's top-left corner, which the left-hand seat also starts below; sideways
+        {/* The look's cog mirrors it in the top-left corner, which the left-hand seat also starts below; sideways
             it sits beside the talk, and wide screens put it in the other bottom corner. */}
         {!resultModal && !paused && (
           <div className="board-talk relative z-[25] h-0 shrink-0">
@@ -894,7 +895,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
                 <OpponentRow className="board-west" align="left" {...seatProps(1)} />
                 <Centre compact={short} view={view} trick={trickCards} rel={rel} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge} peek={peek}
                   laid={{ 0: clothMeld(seatAt(0)), 1: clothMeld(seatAt(1)), 2: clothMeld(seatAt(2)), 3: clothMeld(seatAt(3)) }} lit={lit}
-                  mySeat={<MySeat view={view} me={me} score={scoreOf(view.seat)} profileHref={local ? undefined : "/#profile"} />} />
+                  mySeat={short && <MySeat view={view} me={me} score={scoreOf(view.seat)} profileHref={local ? undefined : "/#profile"} />} />
                 <OpponentRow className="board-east" align="right" {...seatProps(3)} />
               </div>
             </div>
@@ -1173,9 +1174,9 @@ function OpponentRow({ seat, view, name, person, actions, align, score, laid, st
             style={vertical ? { marginTop: i ? -40 : 0, transform: align === "left" ? "rotate(90deg)" : "rotate(-90deg)" } : { marginLeft: i ? -24 : 0 }} />
         ))}
       </div>}
-      {/* Handing a seat over and making a host live in the player's menu; a seat that seems away also says so here,
-          under a side seat's fan in a row of no height, as its name hangs above. */}
-      {standIn?.away && (vertical ? <div className={`flex h-0 flex-col ${items}`}>{offer}</div> : offer)}
+      {/* Handing a seat over and making a host live in the player's menu; a seat that seems away also says so here.
+          It takes its own room, so the board's fit counts it; the fan sits a little off the cloth's middle meanwhile. */}
+      {offer}
     </div>
   );
 }
@@ -1306,7 +1307,8 @@ function MeldLine({ rules, hand, trump, lit, setLit }: { rules: PlayerView["rule
  */
 type Peek = { last: NonNullable<PlayerView["lastTrick"]> | null; meld: boolean; can: boolean; label: "Last trick" | "Review meld"; toggle: () => void };
 
-/** Your own chair below the cloth: the same name and score chip as the other three. */
+/** Your own chair, facing the partner across: the same name and score chip as the other three. Upright it sits by your
+ * hand (Game); sideways, under the cloth (Centre). */
 function MySeat({ view, me, score, profileHref }: { view: PlayerView; me: Profile; score: SeatScore; profileHref?: string }) {
   const name = me.display_name;
   const person: SeatPerson = { name, handle: me.handle, userId: me.id, bot: false, place: `You, ${SEAT_LABEL[view.seat]}` };
@@ -1389,7 +1391,7 @@ function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact, busy, 
 function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = false, laid, lit, mySeat }: {
   view: PlayerView; trick: PlayerView["currentTrick"]; rel: (s: SeatIndex) => 0 | 1 | 2 | 3; nameOf: (s: SeatIndex) => string;
   stalled: boolean; nudge: () => void; peek: Peek; compact?: boolean;
-  /** your own chair, below the cloth */
+  /** your own chair, drawn under the cloth on a phone held sideways */
   mySeat: React.ReactNode;
   /** each seat's meld lying on the cloth in front of them, by position round the table from you */
   laid: Record<0 | 1 | 2 | 3, CardId[]>;
@@ -1452,8 +1454,9 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
 }
 
 /**
- * What the table is waiting for outside trick play (in play, PlayStatus says it). The chips carry the contract once
- * bidding ends.
+ * What the table is waiting for outside trick play (in play, PlayStatus says it). Upright, room for two lines is kept, so
+ * the board above does not rescale as the bid line comes and goes (a third line comes only at hand end, or with a nudge).
+ * The chips carry the contract once bidding ends.
  */
 function PhasePrompt({ view, trick, nameOf, stalled, nudge, compact = false }: {
   view: PlayerView; trick: PlayerView["currentTrick"]; nameOf: (s: SeatIndex) => string; stalled: boolean; nudge: () => void; compact?: boolean;
@@ -1477,7 +1480,7 @@ function PhasePrompt({ view, trick, nameOf, stalled, nudge, compact = false }: {
   const dim = trick !== view.currentTrick && (view.phase === "hand_over" || view.phase === "game_over");
   const took = done && view.sittingOut == null ? countersIn(trick, view.rules) : 0;
   return (
-    <div className={`flex flex-col items-center gap-0.5 text-center ${compact ? "mt-0.5" : "mb-1"}`}>
+    <div className={`flex flex-col items-center gap-0.5 text-center ${compact ? "mt-0.5" : "mb-1 min-h-11"}`}>
       <p className={mine ? "display" : "text-sm text-chalk"} style={mine ? { fontSize: compact ? 19 : 22, color: "var(--brass)" } : undefined}>{prompt}</p>
       {view.phase === "deciding_shoot" && <p className="text-sm text-chalk-faint">{shootStake(view, nameOf)}</p>}
       {view.highBid && view.phase === "bidding" && (
