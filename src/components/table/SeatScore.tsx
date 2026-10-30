@@ -13,7 +13,7 @@ export interface SeatScore {
   main: string | null; suit: Suit | null;
   /** the taking side's points this hand so far, or its change once the hand is scored */
   total: number | null;
-  /** a defender's own meld while meld is being laid down; from the first trick their side's points, as `total` is for the taker */
+  /** a defender's own meld while meld is being laid down; from the first trick their side's points so far, then the side's change once the hand is scored, as `total` is for the taker */
   small: number | null;
   /** `small` is the side's points this hand rather than the seat's own meld */
   smallSide: boolean;
@@ -43,8 +43,8 @@ const EMPTY = (dealer: boolean): SeatScore => ({ dealer, main: null, suit: null,
 /**
  * Numbers only, no sentences: during bidding each chip shows its bid; afterwards the taker carries
  * the contract and the side's running total, each defender a small number for their own meld while
- * meld is laid down and their side's running total once play starts (so it agrees with the breakdown's
- * "So far"), the taker's partner nothing. `meldOut` lists zero melds too while meld lies on the table.
+ * meld is laid down, their side's running total once play starts (so it agrees with the breakdown's
+ * "So far"), and the side's change once the hand is scored; the taker's partner nothing. `meldOut` lists zero melds too while meld lies on the table.
  */
 export function seatScore(f: ScoreFacts, seat: SeatIndex, nameOf: (s: SeatIndex) => string, meldOut = false): SeatScore {
   const dealer = f.dealer === seat;
