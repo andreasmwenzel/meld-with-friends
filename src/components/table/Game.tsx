@@ -76,6 +76,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const [selected, setSelected] = useState<CardId[]>([]);
   /** Cards lit by tapping a suit or meld item in the meld readout; purely a visual aid. */
   const [lit, setLit] = useState<CardId[] | null>(null);
+  const [bidSlot, setBidSlot] = useState<HTMLDivElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   /** Card lifted awaiting a second tap; only valid for the view revision it was lifted in.
@@ -920,7 +921,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
               <div className="board-flat board-lift grid grid-cols-[minmax(64px,auto)_minmax(0,1fr)_minmax(64px,auto)] items-center gap-2"
                 style={{ transform: fit.top ? `translateY(${fit.top}px)` : undefined }}>
                 <OpponentRow className="board-west" align="left" {...seatProps(1)} />
-                <Centre compact={short} view={view} trick={trickCards} rel={rel} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge} peek={peek}
+                <Centre compact={short} bidSlot={setBidSlot} view={view} trick={trickCards} rel={rel} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge} peek={peek}
                   laid={{ 0: clothMeld(seatAt(0)), 1: clothMeld(seatAt(1)), 2: clothMeld(seatAt(2)), 3: clothMeld(seatAt(3)) }} lit={lit}
                   mySeat={short && <MySeat view={view} me={me} score={scoreOf(view.seat)} profileHref={local ? undefined : "/#profile"} />} />
                 <OpponentRow className="board-east" align="right" {...seatProps(3)} />
@@ -934,7 +935,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           {/* Your chair faces the partner's across the cloth, with what the table waits for in front of you. */}
           {!short && <MySeat view={view} me={me} score={scoreOf(view.seat)} profileHref={local ? undefined : "/#profile"} />}
           {!short && view.phase !== "playing" && <PhasePrompt view={view} trick={trickCards} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge} />}
-          <ActionBar key={view.rev} view={view} selected={selected} busy={busy || updating} act={act} nameOf={nameOf} autoMeld={cardPrefs.autoMeld} previewing={previewing} />
+          <ActionBar key={view.rev} view={view} bidSlot={bidSlot} compact={short} boardScale={fit.scale} selected={selected} busy={busy || updating} act={act} nameOf={nameOf} autoMeld={cardPrefs.autoMeld} previewing={previewing} />
           {/* Whose turn it is lives here, by your hand, so the cloth holds only the cards. */}
           {view.phase === "playing" && (
             <PlayStatus view={view} trick={trickCards} nameOf={nameOf} peek={peek} stalled={stalled && !paused} nudge={nudge} compact={short}
@@ -1467,7 +1468,9 @@ function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact, busy, 
   );
 }
 
-function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = false, laid, lit, mySeat }: {
+function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = false, laid, lit, mySeat, bidSlot }: {
+  /** while you bid, the amounts lie open on the cloth (BidPicker portals them here) */
+  bidSlot: (el: HTMLDivElement | null) => void;
   view: PlayerView; trick: PlayerView["currentTrick"]; rel: (s: SeatIndex) => 0 | 1 | 2 | 3; nameOf: (s: SeatIndex) => string;
   stalled: boolean; nudge: () => void; peek: Peek; compact?: boolean;
   /** your own chair, drawn under the cloth on a phone held sideways */
@@ -1511,6 +1514,9 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
             label={`${r === 0 ? "Your" : `${nameOf(seatFrom(r))}'s`} meld: ${laid[r].length} cards`} />
         </div>
       ))}
+      {view.phase === "bidding" && view.legal.canBid && (
+        <div ref={bidSlot} className="absolute inset-0 z-10 flex items-center justify-center" onClick={(e) => e.stopPropagation()} />
+      )}
       {shown?.plays.map((p) => {
         const r = rel(p.seat);
         const sweeping = done && !dim && !peeking;
@@ -1639,7 +1645,8 @@ function constraintSentence(view: PlayerView): string | null {
   return describeConstraint(c, SUIT_NAME);
 }
 
-function ActionBar({ view, selected, busy, act, nameOf, autoMeld, previewing }: {
+function ActionBar({ view, selected, busy, act, nameOf, autoMeld, previewing, bidSlot, compact, boardScale }: {
+  bidSlot: HTMLDivElement | null; compact: boolean; boardScale: number;
   view: PlayerView; selected: CardId[]; busy: boolean; previewing: boolean;
   act: (a: ClientAction) => Promise<unknown>; nameOf: (s: SeatIndex) => string; autoMeld: boolean;
 }) {
@@ -1679,7 +1686,7 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld, previewing }: 
         min={L.minBid ?? view.rules.minBid} step={view.rules.bidStep} busy={busy}
         onBid={(amount) => act({ type: "bid", amount })}
         pass={L.canPassBid ? { label: "Pass", run: () => act({ type: "pass_bid" }) } : null}
-        misdeal={misdeal}
+        misdeal={misdeal} slot={bidSlot} compact={compact} scale={boardScale}
       />
     </>);
   }

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BidPicker } from "../BidPicker";
+import { BidPicker, fitGrid } from "../BidPicker";
 import { NextHandCountdown } from "../NextHandCountdown";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -10,10 +10,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("the bid grid", () => {
   it("walks with plain arrows, and leaves Alt, Ctrl and Meta arrows and handled keys to the browser", () => {
-    // jsdom has no modal dialogs; opening one only needs it shown here.
-    HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) { this.open = true; };
     render(<BidPicker min={250} step={10} busy={false} onBid={() => {}} pass={null} />);
-    fireEvent.click(screen.getByRole("button", { name: "Choose bid" }));
     const at = screen.getByRole("button", { name: "260" });
     act(() => { at.focus(); });
     expect(document.activeElement).toBe(at);
@@ -27,6 +24,48 @@ describe("the bid grid", () => {
     expect(document.activeElement).toBe(at);
     fireEvent.keyDown(at, { key: "ArrowRight" });
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "270" }));
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "310" }));
+    // One tab stop for the grid, and it follows the arrows, so Tab leaves the grid for the buttons below it.
+    const stops = screen.getAllByRole("button").filter((b) => /^\d+$/.test(b.textContent ?? "") && b.tabIndex === 0);
+    expect(stops.map((b) => b.textContent)).toEqual(["310"]);
+  });
+
+  it("picks an amount on the first tap and bids it on the second tap or the Bid button", () => {
+    const onBid = vi.fn();
+    render(<BidPicker min={25} step={1} busy={false} onBid={onBid} pass={null} />);
+    expect((screen.getByRole("button", { name: "Pick a bid" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "27" }));
+    expect(onBid).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "27" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Bid 27" }));
+    expect(onBid).toHaveBeenLastCalledWith(27);
+    fireEvent.click(screen.getByRole("button", { name: "30" }));
+    fireEvent.click(screen.getByRole("button", { name: "30" }));
+    expect(onBid).toHaveBeenLastCalledWith(30);
+    expect(onBid).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("fitting the bid grid on the cloth", () => {
+  // Cloth sizes and table scales measured in Chrome at each screen size.
+  const onScreen = (w: number, h: number, scale: number) => {
+    const fit = fitGrid(w, h, scale, 54);
+    const across = fit.cols * fit.cellW + (fit.beside ? Math.min(fit.cellW, fit.cellH) : 0);
+    const down = fit.rows * fit.cellH + (fit.beside ? 0 : Math.min(fit.cellW, fit.cellH));
+    return { ...fit, tap: Math.min(fit.cellW, fit.cellH) * scale, inside: across <= w && down <= h };
+  };
+  it("gives every amount a 44px tap on screen and keeps the grid on the cloth", () => {
+    expect(onScreen(214, 246, 1)).toMatchObject({ cols: 4, rows: 3, beside: false, inside: true });
+    expect(onScreen(300, 246, 1)).toMatchObject({ cols: 4, rows: 3, inside: true });
+    expect(onScreen(184, 246, 0.787)).toMatchObject({ cols: 3, rows: 2, inside: true });
+    expect(onScreen(240, 132, 1)).toMatchObject({ cols: 4, rows: 2, beside: true, inside: true });
+    for (const [w, h, s] of [[214, 246, 1], [300, 246, 1], [184, 246, 0.787], [172 / 0.81, 246, 0.81], [240, 132, 1]]) {
+      expect(onScreen(w, h, s).tap).toBeGreaterThanOrEqual(44);
+    }
+  });
+  it("on a cloth too small for full taps, still keeps the grid on it", () => {
+    expect(onScreen(184, 246, 0.5).inside).toBe(true);
   });
 });
 

@@ -117,12 +117,13 @@ describe("accessible names and states at the table", () => {
     expect(document.activeElement).toBe(blocked[0]);
   });
 
-  it("bid-contested: the bid picker opens a dialog, and each chip says the bid in words", async () => {
+  it("bid-contested: the bid amounts lie open on the cloth, and each chip says the bid in words", async () => {
     await table("bid-contested");
-    const choose = screen.getByRole("button", { name: "Choose bid" });
-    expect(choose.getAttribute("aria-haspopup")).toBe("dialog");
+    const amounts = screen.getByRole("group", { name: "Bid amounts" });
+    expect(amounts.closest("[data-felt]")).toBeTruthy();
+    expect(within(amounts).getByRole("button", { name: "31" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "Pick a bid" })).toBeTruthy();
     expect(screen.getAllByRole("button", { name: "Pass" }).length).toBeGreaterThan(0);
-    expect(screen.getByRole("group", { name: "Bid amounts", hidden: true })).toBeTruthy();
     const chips = [...document.querySelectorAll(".sr-only")].map((n) => n.textContent).filter((t) => t?.includes(": "));
     expect(chips.length).toBeGreaterThan(0);
     for (const chip of chips) expect(chip).toMatch(/^.+: (bid \d+|passed|shooting the moon)$/);
