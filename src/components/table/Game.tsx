@@ -576,17 +576,32 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
       const padY = parseFloat(cs.paddingTop || "0") + parseFloat(cs.paddingBottom || "0");
       const padX = parseFloat(cs.paddingLeft || "0") + parseFloat(cs.paddingRight || "0");
       const w = b.offsetWidth, h = b.offsetHeight, room = s.clientHeight - padY;
-      const scale = flat ? 1 : Math.min(1, room / Math.max(1, h), (s.clientWidth - padX) / Math.max(1, w));
-      // The felt goes in the middle of the room between the score strip and your actions, as far as the whole board
-      // still fits: the felt holds still while lines come and go under it. Whole pixels, so the cards stay crisp.
-      const felt = b.querySelector<HTMLElement>("[data-felt]");
-      const box = b.getBoundingClientRect(), shown = box.height / Math.max(1, h);
-      const mid = felt ? (felt.getBoundingClientRect().top + felt.getBoundingClientRect().height / 2 - box.top) / Math.max(0.01, shown) : h / 2;
-      const top = flat ? 0 : Math.max(0, Math.min(room - h * scale, Math.floor(room / 2 - mid * scale)));
+      // The side seats' names hang below the cloth's row, past the board's own box: count how far, in the board's pixels.
+      const row = b.querySelector<HTMLElement>(".board-lift");
+      const shown = b.getBoundingClientRect().height / Math.max(1, h);
+      let below = 0;
+      if (row && !flat) {
+        const rowBottom = row.getBoundingClientRect().bottom;
+        for (const el of b.querySelectorAll<HTMLElement>("[data-seat-hang]")) below = Math.max(below, (el.getBoundingClientRect().bottom - rowBottom) / Math.max(0.01, shown));
+      }
+      // They may reach a little way past the room, over the corners of your own area (SPILL); only past that does the
+      // board shrink for them.
+      const ext = h + below;
+      const scale = flat ? 1 : Math.min(1, room / Math.max(1, h), (room + SPILL) / Math.max(1, ext), (s.clientWidth - padX) / Math.max(1, w));
+      // The partner across stays at the top of the room; the cloth's row drops by half what the board leaves free, so it
+      // sits midway between that seat and yours at the room's foot. Whole screen pixels, so cards stay crisp, given in the
+      // board's own pixels, since the row moves inside the board's scale.
+      // Never so low that the names hanging below go further.
+      const top = flat ? 0 : Math.max(0, Math.floor(Math.min((room - h * scale) / 2, room + SPILL - ext * scale)) / scale);
       setFit((prev) => (prev.scale === scale && prev.w === w && prev.h === h && prev.top === top ? prev : { scale, w, h, top }));
     };
     measure();
-    const ro = new ResizeObserver(measure);
+    const ro = new ResizeObserver(() => {
+      measure();
+      // What hangs under the side fans sits in rows of no height, so the board's box does not change when it grows (the
+      // away offer appearing): watch it too, including blocks that mount later (turning a phone upright).
+      boardRef.current?.querySelectorAll("[data-seat-hang]").forEach((el) => ro.observe(el));
+    });
     if (stage.current) ro.observe(stage.current);
     if (boardRef.current) ro.observe(boardRef.current);
     return () => ro.disconnect();
@@ -870,11 +885,11 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           : reconnecting && <p role="status" className="board-note mb-1 shrink-0 text-center text-xs text-chalk-faint">Reconnecting to the table.</p>}
         <div aria-disabled={paused || updating ? true : undefined} inert={paused || updating ? true : undefined} className={`board-flat flex min-h-0 min-w-0 flex-1 flex-col px-3 pb-[max(.5rem,env(safe-area-inset-bottom))] sm:px-4 ${paused ? "pointer-events-none opacity-70" : ""}`}>
         {/* Table talk never lies on a hand (scripts/overlap.mjs checks every position and size). On an upright phone or
-            tablet it sits in the cloth's top-right corner, under Menu: the partner's row across is narrower than the
-            screen and the side seats start below it, so that corner is empty in every phase, while the bottom corner
+            tablet it sits in the top-right corner beside the partner's row, under Menu: that row is narrower than the
+            screen and the side seats start below it, so the corner is empty in every phase, while the bottom corner
             meets the right-hand seat's cards on shorter phones and in a hand shown face up. Sideways phones put it at
             the foot of the action column (globals.css). At hand end it moves onto the result sheet. */}
-        {/* The look's cog mirrors it in the cloth's top-left corner, which the left-hand seat also starts below; sideways
+        {/* The look's cog mirrors it in the top-left corner, which the left-hand seat also starts below; sideways
             it sits beside the talk, and wide screens put it in the other bottom corner. */}
         {!resultModal && !paused && (
           <div className="board-talk relative z-[25] h-0 shrink-0">
@@ -883,19 +898,22 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
             <div className={`absolute left-0 top-1 short:left-auto short:top-auto short:bottom-1 lg:fixed lg:top-auto lg:bottom-[max(1.25rem,env(safe-area-inset-bottom))] lg:left-5 ${talk ? "short:right-14" : "short:right-0"}`}>{look}</div>
           </div>
         )}
-        {/* Centred between the score strip and your actions. When the action bar grows or shrinks the board glides to the
-            new middle (globals.css, .board-lift) rather than jumping. The stage's padding keeps the side seats' turn rings,
-            which stand 2px outside their plates, inside the stage's clip. */}
-        <div ref={stage} className="board-flat flex min-h-0 flex-1 items-start justify-center overflow-hidden p-1">
-          <div className="board-flat board-lift" style={{ ...(fit.scale < 1 ? { width: fit.w * fit.scale, height: fit.h * fit.scale } : null), transform: fit.top ? `translateY(${fit.top}px)` : undefined }}>
+        {/* The partner across sits at the top of the room and you at its foot, by your hand; the cloth and the side seats
+            go midway between. When the action bar grows or shrinks they glide to the new middle (globals.css, .board-lift)
+            rather than jumping. The stage's padding keeps the side seats' turn rings, which stand 2px outside their plates,
+            inside the stage's clip. */}
+        <div ref={stage} className="board-flat flex min-h-0 flex-1 items-start justify-center overflow-hidden p-1"
+          style={short ? undefined : { paddingBottom: 4 + SPILL, marginBottom: -SPILL }}>
+          <div className="board-flat" style={fit.scale < 1 ? { width: fit.w * fit.scale, height: fit.h * fit.scale } : undefined}>
             <div ref={boardRef} className="board-flat w-[min(100vw-2rem,760px)] origin-top-left" style={{ transform: fit.scale < 1 ? `scale(${fit.scale})` : undefined, "--board-scale": fit.scale } as React.CSSProperties}>
               {/* partner across */}
               <OpponentRow className="board-north" align="center" {...seatProps(2)} />
-              <div className="board-flat grid grid-cols-[minmax(64px,auto)_minmax(0,1fr)_minmax(64px,auto)] items-center gap-2">
+              <div className="board-flat board-lift grid grid-cols-[minmax(64px,auto)_minmax(0,1fr)_minmax(64px,auto)] items-center gap-2"
+                style={{ transform: fit.top ? `translateY(${fit.top}px)` : undefined }}>
                 <OpponentRow className="board-west" align="left" {...seatProps(1)} />
                 <Centre compact={short} view={view} trick={trickCards} rel={rel} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge} peek={peek}
                   laid={{ 0: clothMeld(seatAt(0)), 1: clothMeld(seatAt(1)), 2: clothMeld(seatAt(2)), 3: clothMeld(seatAt(3)) }} lit={lit}
-                  mySeat={<MySeat view={view} me={me} score={scoreOf(view.seat)} profileHref={local ? undefined : "/#profile"} />} />
+                  mySeat={short && <MySeat view={view} me={me} score={scoreOf(view.seat)} profileHref={local ? undefined : "/#profile"} />} />
                 <OpponentRow className="board-east" align="right" {...seatProps(3)} />
               </div>
             </div>
@@ -904,6 +922,9 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
 
         {/* action bar: as tall as what it holds, so a waiting player's board has the whole room to centre in. */}
         <div ref={actionRef} {...keepFocus} data-overlay-zone="action" className="board-action mt-1 shrink-0 sm:mt-2">
+          {/* Your chair faces the partner's across the cloth, with what the table waits for in front of you. */}
+          {!short && <MySeat view={view} me={me} score={scoreOf(view.seat)} profileHref={local ? undefined : "/#profile"} />}
+          {!short && view.phase !== "playing" && <PhasePrompt view={view} trick={trickCards} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge} />}
           <ActionBar key={view.rev} view={view} selected={selected} busy={busy || updating} act={act} nameOf={nameOf} autoMeld={cardPrefs.autoMeld} />
           {/* Whose turn it is lives here, by your hand, so the cloth holds only the cards. */}
           {view.phase === "playing" && (
@@ -1081,6 +1102,11 @@ function shootLine(who: string): string {
 }
 
 const REV_W = 36;
+/** How far the side seats' names, hanging under their fans, may reach below the board's room: over the corners of your
+ * own area, which holds only your centred chip at its top. The stage's clip is that much taller (Game). */
+const SPILL = 32;
+/** A side seat's fan of twelve backs (34 wide, standing 40 apart less a card): the room both side fans keep. */
+const SIDE_FAN_H = (34 * 7) / 5 + 11 * ((34 * 7) / 5 - 40);
 /** Where a seat sits from your chair, for `data-hand` (scripts/overlap.mjs finds the hands by it). */
 const SIDE = { left: "west", center: "north", right: "east" } as const;
 const MELD_W = 28;
@@ -1119,43 +1145,76 @@ function OpponentRow({ seat, view, name, person, actions, align, score, laid, st
   if (compact) {
     return <CompactSeat {...{ seat, className, team, active, name, person, actions, chip, score, n, faceUp, standIn, align }} setAside={sittingOut && !faceUp} />;
   }
+  const plate = (
+    <PlayerMenu person={person} team={team} actions={actions} align={align} plate={side}
+      className={`flex ${vertical ? "flex-col" : "flex-row"} items-center gap-1 sm:gap-2 rounded-2xl px-2 py-1 max-w-full`}
+      style={active ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
+      {chip}
+    </PlayerMenu>
+  );
+  const offer = standIn?.away && (
+    <button type="button" onClick={standIn.run}
+      className={`${vertical ? "max-w-[7.5rem]" : "max-w-[200px]"} pt-1 text-xs text-chalk-faint underline hover:text-chalk ${align === "center" ? "text-center" : align === "left" ? "text-left" : "text-right"}`}>
+      {name} seems to be away. Hand to a computer
+    </button>
+  );
+  // A shoot sets this hand aside: a small stack where the fan was, until the hand is shown at the end.
+  const hand = sittingOut && !faceUp ? (
+    <SitOutStack n={n} team={team} cardW={34} step={vertical ? (34 * 7) / 5 - 40 : 10} pad={7} orient={vertical ? align as "left" | "right" : "row"}
+      fold={fold} label={`${name} sits this hand out; cards set aside`} hand={side} handCards={n} />
+  ) : <div data-hand={side} data-hand-cards={n} className={`flex ${vertical ? "flex-col justify-center" : "flex-row"}`} style={vertical ? { padding: "0 7px", minHeight: faceUp ? undefined : SIDE_FAN_H } : undefined} role={faceUp ? "group" : "img"} aria-label={`${n} cards`}>
+    {faceUp ? faceUp.map((c, i) => vertical ? (
+      <div key={c} data-claim-card={view.claim ? c : undefined} className="relative shrink-0" style={{ width: (REV_W * 7) / 5, height: i === faceUp.length - 1 ? REV_W : 17, zIndex: align === "right" ? faceUp.length - i : i }}>
+        <PlayingCard card={c} width={REV_W} fourColour={four} style={{ position: "absolute", left: "50%", top: REV_W / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg)` }} />
+      </div>
+    ) : <span key={c} data-claim-card={view.claim ? c : undefined} style={{ marginLeft: i ? -REV_W * 0.45 : 0 }}><PlayingCard card={c} width={REV_W} fourColour={four} /></span>)
+    : Array.from({ length: n }).map((_, i) => (
+      <CardBack key={i} width={34} team={team}
+        style={vertical ? { marginTop: i ? -40 : 0, transform: align === "left" ? "rotate(90deg)" : "rotate(-90deg)" } : { marginLeft: i ? -24 : 0 }} />
+    ))}
+  </div>;
+  if (vertical) {
+    return (
+      // A side seat is laid out round its fan alone, so the fan's middle is the cloth's middle. The fan keeps the room of a
+      // full twelve, so it and the name hold still while cards are played (a longer fan, while passing, grows both ways).
+      // The name hangs straight under it, the score under the name, out of a row of no height; the board's fit counts what
+      // hangs below (data-seat-hang). A hand shown face up at the end is taller than the cloth, so there the name sits
+      // above it in its own room, and the column starts below the table's corner buttons.
+      <div data-claim-seat={seat} className={`group flex min-w-0 flex-col ${items} ${className}`}>
+        {faceUp ? (
+          <div className="relative flex max-w-full flex-col items-center pb-1 sm:pb-1.5">
+            {plate}
+            <div className="flex h-7 items-center"><ScoreTag score={score} name={name} align={align} /></div>
+          </div>
+        ) : null}
+        {hand}
+        <div className={`flex flex-col ${faceUp ? "" : "h-0"} ${items}`}>
+          <div data-seat-hang="" className={`relative flex max-w-full flex-col pt-1 sm:pt-1.5 ${items}`}>
+            {!faceUp && (
+              <div className="flex flex-col items-center">
+                {plate}
+                <div className="flex h-7 items-center"><ScoreTag score={score} name={name} align={align} /></div>
+              </div>
+            )}
+            {/* Handing a seat over and making a host live in the player's menu; a seat that seems away also says so here,
+                in its own line, so the name above stays under the fan. */}
+            {offer}
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
-    // Side seats hang from the same line at the top of their row, so a longer fan (sixteen cards while passing, a bid under
-    // the name) grows downwards on its own side and never pushes its plate out of line with the other side's.
-    <div data-claim-seat={seat} className={`group flex flex-col ${items} gap-1 py-1 sm:gap-1.5 sm:py-2 min-w-0 ${vertical ? "self-start pt-6 sm:pt-8" : ""} ${className}`}>
-      <div className={`relative flex max-w-full items-center ${vertical ? "flex-col" : "flex-row"}`}>
-        <PlayerMenu person={person} team={team} actions={actions} align={align} plate={side}
-          className={`flex ${vertical ? "flex-col" : "flex-row"} items-center gap-1 sm:gap-2 rounded-2xl px-2 py-1 max-w-full`}
-          style={active ? { boxShadow: "0 0 0 2px var(--brass)" } : undefined}>
-          {chip}
-        </PlayerMenu>
+    <div data-claim-seat={seat} className={`group flex min-w-0 flex-col gap-1 py-1 sm:gap-1.5 sm:py-2 ${items} ${className}`}>
+      <div className="relative flex max-w-full flex-row items-center">
+        {plate}
         {/* Out of the layout flow, so nothing moves when a number appears. */}
-        <div className={vertical ? "flex h-7 items-center" : "absolute left-full top-1/2 ml-1 -translate-y-1/2 whitespace-nowrap"}>
+        <div className="absolute left-full top-1/2 ml-1 -translate-y-1/2 whitespace-nowrap">
           <ScoreTag score={score} name={name} align={align} />
         </div>
       </div>
-      {/* A shoot sets this hand aside: a small stack where the fan was, until the hand is shown at the end. */}
-      {sittingOut && !faceUp ? (
-        <SitOutStack n={n} team={team} cardW={34} step={vertical ? (34 * 7) / 5 - 40 : 10} pad={7} orient={vertical ? align as "left" | "right" : "row"}
-          fold={fold} label={`${name} sits this hand out; cards set aside`} hand={side} handCards={n} />
-      ) : <div data-hand={side} data-hand-cards={n} className={`flex ${vertical ? "flex-col" : "flex-row"}`} style={vertical ? { padding: "0 7px" } : undefined} role={faceUp ? "group" : "img"} aria-label={`${n} cards`}>
-        {faceUp ? faceUp.map((c, i) => vertical ? (
-          <div key={c} data-claim-card={view.claim ? c : undefined} className="relative shrink-0" style={{ width: (REV_W * 7) / 5, height: i === faceUp.length - 1 ? REV_W : 17, zIndex: align === "right" ? faceUp.length - i : i }}>
-            <PlayingCard card={c} width={REV_W} fourColour={four} style={{ position: "absolute", left: "50%", top: REV_W / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg)` }} />
-          </div>
-        ) : <span key={c} data-claim-card={view.claim ? c : undefined} style={{ marginLeft: i ? -REV_W * 0.45 : 0 }}><PlayingCard card={c} width={REV_W} fourColour={four} /></span>)
-        : Array.from({ length: n }).map((_, i) => (
-          <CardBack key={i} width={34} team={team}
-            style={vertical ? { marginTop: i ? -40 : 0, transform: align === "left" ? "rotate(90deg)" : "rotate(-90deg)" } : { marginLeft: i ? -24 : 0 }} />
-        ))}
-      </div>}
-      {/* Handing a seat over and making a host live in the player's menu; a seat that seems away also says so here. */}
-      {standIn?.away && (
-        <button type="button" onClick={standIn.run}
-          className={`max-w-[200px] text-xs text-chalk-faint underline hover:text-chalk ${align === "center" ? "text-center" : align === "left" ? "text-left" : "text-right"}`}>
-          {name} seems to be away. Hand to a computer
-        </button>
-      )}
+      {hand}
+      {offer}
     </div>
   );
 }
@@ -1286,7 +1345,8 @@ function MeldLine({ rules, hand, trump, lit, setLit }: { rules: PlayerView["rule
  */
 type Peek = { last: NonNullable<PlayerView["lastTrick"]> | null; meld: boolean; can: boolean; label: "Last trick" | "Review meld"; toggle: () => void };
 
-/** Your own chair below the cloth: the same name and score chip as the other three. */
+/** Your own chair, facing the partner across: the same name and score chip as the other three. Upright it sits by your
+ * hand (Game); sideways, under the cloth (Centre). */
 function MySeat({ view, me, score, profileHref }: { view: PlayerView; me: Profile; score: SeatScore; profileHref?: string }) {
   const name = me.display_name;
   const person: SeatPerson = { name, handle: me.handle, userId: me.id, bot: false, place: `You, ${SEAT_LABEL[view.seat]}` };
@@ -1301,8 +1361,8 @@ function MySeat({ view, me, score, profileHref }: { view: PlayerView; me: Profil
           </span>
           <span className="text-xs font-semibold sm:text-sm">You{view.sittingOut === view.seat && <span className="ml-1 text-chalk-faint">sitting out</span>}{score.dealer && <span className="sr-only">, dealer</span>}{view.turn === view.seat && <span className="sr-only">, your turn</span>}</span>
         </PlayerMenu>
-        {/* Above the side seats' cards, and opening up and over the cloth: below this seat the board ends. */}
-        <div className="absolute left-full top-1/2 z-30 ml-1 -translate-y-1/2 whitespace-nowrap">
+        {/* Opening up and over the cloth. Under table talk's popover (z-25), which can reach down this far on a short phone. */}
+        <div className="absolute left-full top-1/2 z-20 ml-1 -translate-y-1/2 whitespace-nowrap">
           <ScoreTag score={score} name="You" align="right" placement="above" />
         </div>
       </div>
@@ -1369,7 +1429,7 @@ function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact, busy, 
 function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = false, laid, lit, mySeat }: {
   view: PlayerView; trick: PlayerView["currentTrick"]; rel: (s: SeatIndex) => 0 | 1 | 2 | 3; nameOf: (s: SeatIndex) => string;
   stalled: boolean; nudge: () => void; peek: Peek; compact?: boolean;
-  /** your own chair, below the cloth */
+  /** your own chair, drawn under the cloth on a phone held sideways */
   mySeat: React.ReactNode;
   /** each seat's meld lying on the cloth in front of them, by position round the table from you */
   laid: Record<0 | 1 | 2 | 3, CardId[]>;
@@ -1381,7 +1441,6 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
   const trickW = compact ? 42 : 56;
   const done = !!trick && trick.winner !== null;
   const dim = trick !== view.currentTrick && (view.phase === "hand_over" || view.phase === "game_over");
-  const took = done && view.sittingOut == null ? countersIn(trick, view.rules) : 0;
   const spots: Record<0 | 1 | 2 | 3, string> = {
     0: "bottom-0 left-1/2 -translate-x-1/2", 1: "left-0 top-1/2 -translate-y-1/2", 2: "top-0 left-1/2 -translate-x-1/2", 3: "right-0 top-1/2 -translate-y-1/2",
   };
@@ -1389,21 +1448,6 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
     0: "bottom-[4%] left-1/2 -translate-x-1/2", 1: "left-[5%] top-1/2 -translate-y-1/2", 2: "top-[4%] left-1/2 -translate-x-1/2", 3: "right-[5%] top-1/2 -translate-y-1/2",
   };
   const seatFrom = (r: number) => (((view.seat + r) % 4) as SeatIndex);
-  const prompt = (() => {
-    const who = view.turn !== null ? nameOf(view.turn) : null;
-    switch (view.phase) {
-      case "bidding": return who === "You" ? "Your bid." : `${who} is bidding.`;
-      case "declaring_trump": return who === "You" ? "Name trump." : `${who} is naming trump.`;
-      case "passing_to_bidder": return who === "You" ? `Pass ${view.legal.mustPassCount ?? ""} cards to your partner.` : `${who} is passing to the bidder.`;
-      case "passing_back": return who === "You" ? `Pass ${view.legal.mustPassCount ?? ""} cards back.` : `${who} is passing back.`;
-      case "deciding_shoot": return who === "You" ? "Shoot the moon?" : `Waiting on ${who}.`;
-      case "melding": return view.meldConfirmed[view.seat] ? "Meld is in." : "Lay down your meld.";
-      case "hand_over": return view.claim ? `${nameOf(view.claim.seat)} ${nameOf(view.claim.seat) === "You" ? "claim" : "claims"} the rest.` : "Hand over.";
-      case "game_over": return view.claim ? `${nameOf(view.claim.seat)} ${nameOf(view.claim.seat) === "You" ? "claim" : "claims"} the rest.` : view.winner ? `${view.winner === "red" ? "Red" : "Blue"} team wins.` : "Game over.";
-      default: return "";
-    }
-  })();
-  const mine = view.turn === view.seat && view.phase !== "hand_over" && view.phase !== "game_over";
   const inPlay = view.phase === "playing";
   const peeking = !!peek.last;
   // The meld shown again takes the cloth to itself; the trick comes back with the next move.
@@ -1439,26 +1483,55 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
         );
       })}
     </div>
-    {mySeat}
-    {/* During trick play the status sits above your hand. Otherwise room for three lines is kept here, so the
-        board does not grow and shrink (and rescale) as lines come and go. The chips carry the contract once bidding ends. */}
-    {!inPlay && (
-      <div className={`flex flex-col items-center gap-0.5 text-center ${compact ? "mt-0.5" : "mt-1 min-h-[4.75rem]"}`}>
-        <p className={mine ? "display" : "text-sm text-chalk"} style={mine ? { fontSize: compact ? 19 : 22, color: "var(--brass)" } : undefined}>{prompt}</p>
-        {view.phase === "deciding_shoot" && <p className="text-sm text-chalk-faint">{shootStake(view, nameOf)}</p>}
-        {view.highBid && view.phase === "bidding" && (
-          <p className="text-sm text-chalk-faint">
-            {view.highBid.shoot ? shootLine(nameOf(view.highBid.seat)) : <>{nameOf(view.highBid.seat)} holds {view.highBid.amount}</>}
-          </p>
-        )}
-        {done && (
-          <p className="text-xs text-chalk-faint" style={{ opacity: dim ? 0.7 : 1 }}>
-            {nameOf(trick.winner!)} took it{took > 0 ? `, ${took} ${took === 1 ? "counter" : "counters"}` : view.sittingOut == null ? ", no counters" : ""}.
-          </p>
-        )}
-        {stalled && <button type="button" onClick={nudge} className="text-xs text-chalk-faint underline hover:text-chalk">Nudge the computers</button>}
-      </div>
-    )}
+    {/* Upright, your chair and the prompt sit by your hand (Game), so the cloth is in the middle of the table;
+        sideways they stay under it. */}
+    {compact && mySeat}
+    {compact && !inPlay && <PhasePrompt view={view} trick={trick} nameOf={nameOf} stalled={stalled} nudge={nudge} compact />}
+    </div>
+  );
+}
+
+/**
+ * What the table is waiting for outside trick play (in play, PlayStatus says it). Upright, room for two lines is kept, so
+ * the board above does not rescale as the bid line comes and goes (a third line comes only at hand end, or with a nudge).
+ * The chips carry the contract once bidding ends.
+ */
+function PhasePrompt({ view, trick, nameOf, stalled, nudge, compact = false }: {
+  view: PlayerView; trick: PlayerView["currentTrick"]; nameOf: (s: SeatIndex) => string; stalled: boolean; nudge: () => void; compact?: boolean;
+}) {
+  const prompt = (() => {
+    const who = view.turn !== null ? nameOf(view.turn) : null;
+    switch (view.phase) {
+      case "bidding": return who === "You" ? "Your bid." : `${who} is bidding.`;
+      case "declaring_trump": return who === "You" ? "Name trump." : `${who} is naming trump.`;
+      case "passing_to_bidder": return who === "You" ? `Pass ${view.legal.mustPassCount ?? ""} cards to your partner.` : `${who} is passing to the bidder.`;
+      case "passing_back": return who === "You" ? `Pass ${view.legal.mustPassCount ?? ""} cards back.` : `${who} is passing back.`;
+      case "deciding_shoot": return who === "You" ? "Shoot the moon?" : `Waiting on ${who}.`;
+      case "melding": return view.meldConfirmed[view.seat] ? "Meld is in." : "Lay down your meld.";
+      case "hand_over": return view.claim ? `${nameOf(view.claim.seat)} ${nameOf(view.claim.seat) === "You" ? "claim" : "claims"} the rest.` : "Hand over.";
+      case "game_over": return view.claim ? `${nameOf(view.claim.seat)} ${nameOf(view.claim.seat) === "You" ? "claim" : "claims"} the rest.` : view.winner ? `${view.winner === "red" ? "Red" : "Blue"} team wins.` : "Game over.";
+      default: return "";
+    }
+  })();
+  const mine = view.turn === view.seat && view.phase !== "hand_over" && view.phase !== "game_over";
+  const done = !!trick && trick.winner !== null;
+  const dim = trick !== view.currentTrick && (view.phase === "hand_over" || view.phase === "game_over");
+  const took = done && view.sittingOut == null ? countersIn(trick, view.rules) : 0;
+  return (
+    <div className={`flex flex-col items-center gap-0.5 text-center ${compact ? "mt-0.5" : "mb-1 min-h-11"}`}>
+      <p className={mine ? "display" : "text-sm text-chalk"} style={mine ? { fontSize: compact ? 19 : 22, color: "var(--brass)" } : undefined}>{prompt}</p>
+      {view.phase === "deciding_shoot" && <p className="text-sm text-chalk-faint">{shootStake(view, nameOf)}</p>}
+      {view.highBid && view.phase === "bidding" && (
+        <p className="text-sm text-chalk-faint">
+        {view.highBid.shoot ? shootLine(nameOf(view.highBid.seat)) : <>{nameOf(view.highBid.seat)} holds {view.highBid.amount}</>}
+        </p>
+      )}
+      {done && (
+        <p className="text-xs text-chalk-faint" style={{ opacity: dim ? 0.7 : 1 }}>
+        {nameOf(trick.winner!)} took it{took > 0 ? `, ${took} ${took === 1 ? "counter" : "counters"}` : view.sittingOut == null ? ", no counters" : ""}.
+        </p>
+      )}
+      {stalled && <button type="button" onClick={nudge} className="text-xs text-chalk-faint underline hover:text-chalk">Nudge the computers</button>}
     </div>
   );
 }
