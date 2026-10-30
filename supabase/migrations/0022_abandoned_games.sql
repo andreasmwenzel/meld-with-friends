@@ -55,8 +55,9 @@ begin
  end if;
 end $$;
 
--- Existing all-bot tables retain only the seats still available; departed humans cannot be recovered.
-select public.record_abandoned_game(t.current_game_id)
-from public.tables t join public.games g on g.id=t.current_game_id
-where t.status='finished' and g.state->>'phase'<>'game_over';
+-- Backfill every game that can no longer continue: the current game of a closed table, or an earlier game a
+-- rematch replaced. Seats come from the table as it is now, so departed humans cannot be recovered.
+select public.record_abandoned_game(g.id)
+from public.games g join public.tables t on t.id=g.table_id
+where g.state->>'phase'<>'game_over' and (t.status='finished' or t.current_game_id is distinct from g.id);
 commit;

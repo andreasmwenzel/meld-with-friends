@@ -59,7 +59,18 @@ psql -c "insert into auth.users(id,email) select ('00000000-0000-0000-0000-'||lp
 # Closed before the migration: the backfill records it, with the humans still seated.
 OLD=$(table BCDFGB playing 2 30 0 2)
 psql -c "update public.tables set status='finished' where code='BCDFGB'"
+# Closed, then rematched before the migration: the table plays a new game and the old one is no longer current.
+OLDER=$(table BCDFGH playing 1 12 0 2)
+psql <<SQL
+update public.tables set status='finished' where code='BCDFGH';
+insert into public.games(table_id,game_kind,state,rev) select id,'pinochle','{"phase":"bidding","score":{"red":0,"blue":0},"history":[]}',0
+ from public.tables where code='BCDFGH';
+update public.tables t set status='playing',current_game_id=g.id from public.games g
+ where g.table_id=t.id and t.code='BCDFGH' and g.id<>'$OLDER';
+SQL
 psql < supabase/migrations/0022_abandoned_games.sql
+expect "the backfill records a game a rematch replaced" "$(result "$OLDER")" "t|-|1|120|80"
+expect "the rematch in progress is not recorded" "$(psql -c "select count(*) from public.game_results r join public.tables t on t.current_game_id=r.game_id where t.code='BCDFGH'")" "0"
 expect "the backfill records a game closed before the migration" "$(result "$OLD")" "t|-|2|120|80"
 expect "its players are on it, neither won nor lost" "$(players "$OLD")" "$(u 1):red:-,$(u 3):red:-"
 
