@@ -996,7 +996,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           {/* Always mounted, so screen readers hear each change; empty when there is nothing to say. */}
           <p role="status" className="pointer-events-none absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-chalk-faint whitespace-nowrap">
             {(armedCard || cardHint) && view.phase === "playing" && isMyTurn
-              ? armedCard ? `${cardName(armedCard)}, ${!armed!.open ? "tap to put it back" : armed!.timed ? "tap again to play" : "press again to play"}` : cardHint
+              ? armedCard ? (armed!.open ? `${cardName(armedCard)}, ${armed!.timed ? "tap again to play" : "press again to play"}` : "") : cardHint
               : ""}
           </p>
           {constraintText && <span id={`${handId}-why`} hidden>Not playable. {constraintText}</span>}

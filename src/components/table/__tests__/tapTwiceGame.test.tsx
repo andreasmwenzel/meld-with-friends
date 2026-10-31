@@ -90,7 +90,7 @@ describe("tap twice to play, through the table", () => {
     const button = await table();
     await tap(button);
     await wait(DOUBLE_TAP_MS + 200);
-    expect(status()).toMatch(/tap to put it back$/);
+    expect(status()).toBe("");
     await tap(button);
     expect(played()).toEqual([]);
     expect(status()).toBe("");
