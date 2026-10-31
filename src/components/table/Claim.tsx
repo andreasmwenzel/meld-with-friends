@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { PlayerView } from "@/engine/types";
+import { parseCard, RANK_ORDER } from "@/engine/deck";
+import type { CardId, PlayerView, Suit } from "@/engine/types";
 import type { MotionPref } from "@/lib/cardPrefs";
 import { CLAIM_STEP_PX, claimSweep, claimTimings } from "./motion";
 
@@ -40,13 +41,15 @@ export function useClaimReveal(view: PlayerView | null, motion: MotionPref, root
     const still = motion === "off";
     const { revealMs, stepMs, sweepAt, outMs } = claimTimings(motion, claim.hands[claim.seat].length);
     const animations: Animation[] = [];
-    let step = 0;
-    root.current.querySelectorAll<HTMLElement>("[data-claim-card]").forEach(card => {
+    const cards = [...root.current.querySelectorAll<HTMLElement>("[data-claim-card]")];
+    // Your own cards sit in your hand, outside your seat's plate.
+    const ownerOf = (card: HTMLElement) => Number(card.closest("[data-claim-seat]")?.getAttribute("data-claim-seat") ?? view.seat);
+    const turn = revealOrder(cards.filter(card => ownerOf(card) === claim.seat), view.trump);
+    cards.forEach(card => {
       if (!card.animate) return;
       const from = card.getBoundingClientRect();
       const scale = from.width / card.offsetWidth || 1;
-      // Your own cards sit in your hand, outside your seat's plate.
-      const owner = Number(card.closest("[data-claim-seat]")?.getAttribute("data-claim-seat") ?? view.seat);
+      const owner = ownerOf(card);
       const claimed = owner === claim.seat;
       // The claimer's cards step toward the cloth along the seat's own axis, as a card lifted to be played does.
       const fan = (card.closest("[data-hand]") ?? card).getBoundingClientRect();
@@ -55,7 +58,7 @@ export function useClaimReveal(view: PlayerView | null, motion: MotionPref, root
       const lx = claimed && !still ? (px * CLAIM_STEP_PX) / scale : 0, ly = claimed && !still ? (py * CLAIM_STEP_PX) / scale : 0;
       const pose = (out: number, turn: number) => `translate(${lx * out}px, ${ly * out}px) rotateY(${turn}deg)`;
       const mine = owner === view.seat;
-      const at = claimed ? step++ * stepMs : 0;
+      const at = claimed ? (turn.get(card) ?? 0) * stepMs : 0;
       // Someone else's claim lies face down (Game.tsx lays a back over each card), and each card turns over halfway
       // through its step out. Your own cards are already face up, so as the claimer you see them only step out. They stay
       // out until the sweep. The other hands turn up together at the start; yours, already face up, stays as it is.
@@ -86,4 +89,18 @@ export function useClaimReveal(view: PlayerView | null, motion: MotionPref, root
     return () => clearTimeout(timer);
   }, [revealing, claimedCount, motion]);
   return revealing;
+}
+
+/**
+ * The order a claim's cards turn up: from the high end, whichever way the hand is sorted. Trumps first, highest down,
+ * then each other suit, ace down, taking the suits in the order the fan shows them.
+ */
+function revealOrder(cards: HTMLElement[], trump: Suit | null): Map<HTMLElement, number> {
+  const card = (el: HTMLElement) => parseCard(el.dataset.claimCard as CardId);
+  const suitAt = new Map<Suit, number>();
+  cards.forEach((el, i) => { if (!suitAt.has(card(el).suit)) suitAt.set(card(el).suit, i); });
+  const ordered = cards.map((el, i) => ({ el, i, ...card(el) })).sort((a, b) =>
+    Number(b.suit === trump) - Number(a.suit === trump) || suitAt.get(a.suit)! - suitAt.get(b.suit)!
+    || RANK_ORDER.indexOf(a.rank) - RANK_ORDER.indexOf(b.rank) || a.i - b.i);
+  return new Map(ordered.map(({ el }, n) => [el, n]));
 }

@@ -19,12 +19,12 @@ const spec = PRESETS.find(p => p.id === 'claim-all')!.spec;
 /** Each animation and the element it runs on. */
 const animate = vi.fn(function (this: HTMLElement) { return { cancel: vi.fn() }; });
 
-async function table({ seat = 0 as SeatIndex, motion = 'normal', reduced = false, available = true } = {}) {
+async function table({ seat = 0 as SeatIndex, motion = 'normal', reduced = false, available = true, sort = undefined as object | undefined } = {}) {
   let server = buildScenario(available ? spec : PRESETS.find(p => p.id === 'play-lead')!.spec).state;
   const sent: Action[] = [];
   animate.mockClear();
   HTMLElement.prototype.animate = animate as unknown as typeof HTMLElement.prototype.animate;
-  localStorage.setItem('meld.cards', JSON.stringify({ motion }));
+  localStorage.setItem('meld.cards', JSON.stringify(sort ? { v: 2, motion, sort } : { motion }));
   window.matchMedia = ((query: string) => ({ matches: query.includes('prefers-reduced-motion') ? reduced : query.includes('max-width'), media: query, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia;
   const me = { id: `u${seat}`, handle: 'reader', display_name: 'Reader', avatar_seed: 'reader' };
   const snap = {
@@ -119,6 +119,18 @@ it.each([
   await act(() => { fireEvent.click(screen.getByRole('tab', { name: 'This hand' })); });
   expect(screen.getByText('South claimed the rest from trick 4. Remaining hands:')).toBeTruthy();
 }, 10000);
+
+it('turns the claim up from the high end however the hand is sorted', async () => {
+  const t = await table({ seat: 1, sort: { suits: 'fixed', trump: 'right', ranks: 'low-first' } });
+  await t.claim();
+  await vi.waitFor(() => expect(document.querySelectorAll('[data-claim-back]')).toHaveLength(9));
+  const calls = animate.mock.calls as unknown as [Keyframe[], KeyframeAnimationOptions][];
+  const delayOf = (back: Element) => calls[animate.mock.contexts.indexOf(back)][1].delay;
+  const order = [...document.querySelectorAll<HTMLElement>('[data-claim-back]')]
+    .sort((a, b) => delayOf(a)! - delayOf(b)!).map(back => back.closest<HTMLElement>('[data-claim-card]')!.dataset.claimCard!.slice(0, 2));
+  // Low cards and trump on the right put the fan's high end last; the reveal still starts with the top trump.
+  expect(order).toEqual(['TS', 'KS', 'KS', 'QS', 'QS', 'JS', 'AC', 'AC', 'AD']);
+});
 
 it('keeps the reveal on its first deadline when the same view arrives again', async () => {
   const { renderHook } = await import('@testing-library/react');
