@@ -60,12 +60,15 @@ export function useClaimReveal(view: PlayerView | null, motion: MotionPref, root
       // through its step out. Your own cards are already face up, so as the claimer you see them only step out. They stay
       // out until the sweep. The other hands turn up together at the start; yours, already face up, stays as it is.
       const back = claimed ? card.querySelector<HTMLElement>("[data-claim-back]") : null;
-      if (back) animations.push(back.animate([{ opacity: 1 }, { opacity: 1, offset: 0.5 }, { opacity: 0, offset: 0.5 }, { opacity: 0 }],
+      // The back goes the moment the card stands edge-on, halfway; without motion it fades instead.
+      if (back) animations.push(back.animate(still ? [{ opacity: 1 }, { opacity: 0 }] : [{ opacity: 1 }, { opacity: 1, offset: 0.5 }, { opacity: 0, offset: 0.5 }, { opacity: 0 }],
         { delay: at, duration: revealMs, fill: "both" }));
       const hidden = !mine && !back;
       if (!still && (claimed || !mine)) {
-        animations.push(card.animate([{ transform: pose(0, 0), opacity: hidden ? 0 : 1 }, ...(mine ? [] : [{ transform: pose(0.5, 90), offset: 0.5 }]), { transform: pose(1, 0), opacity: 1 }],
-          { delay: at, duration: revealMs, easing: "ease-out", fill: claimed ? "both" : "backwards" }));
+        // Linear overall, eased per half, so the card is edge-on exactly halfway, when its back goes.
+        animations.push(card.animate(mine ? [{ transform: pose(0, 0), easing: "ease-out" }, { transform: pose(1, 0) }]
+          : [{ transform: pose(0, 0), opacity: hidden ? 0 : 1, easing: "ease-in" }, { transform: pose(0.5, 90), offset: 0.5, easing: "ease-out" }, { transform: pose(1, 0), opacity: 1 }],
+        { delay: at, duration: revealMs, easing: "linear", fill: claimed ? "both" : "backwards" }));
       } else if (still && hidden) {
         animations.push(card.animate([{ opacity: 0 }, { opacity: 1 }], { delay: at, duration: revealMs, fill: "backwards" }));
       }

@@ -110,7 +110,8 @@ const MEASURE = `(() => {
     scrolls: !!h.closest(".hand-scroll"),
     clip: clipOf(h),
     declared: h.dataset.handCards == null ? null : Number(h.dataset.handCards),
-    cards: [...h.querySelectorAll("[data-card]")].filter(vis).map((c) => ({ ...box(c), label: c.dataset.card })),
+    // A claim being shown lays a back over each card still to turn up (Claim.tsx): one card, counted once.
+    cards: [...h.querySelectorAll("[data-card]")].filter((c) => vis(c) && !c.closest("[data-claim-back]")).map((c) => ({ ...box(c), label: c.dataset.card })),
   }));
   // The trick and the meld on the cloth: not a hand, but no hand may lie under or over them either.
   const table = [...document.querySelectorAll(".board-centre [data-card]")].filter((c) => vis(c) && !c.closest("[data-hand]"));

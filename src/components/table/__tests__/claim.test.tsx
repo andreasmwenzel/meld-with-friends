@@ -89,6 +89,10 @@ it.each([
   expect(backs).toHaveLength(9);
   expect(backs.every(back => seatOf(back) === '0')).toBe(true);
   expect(backs.map(back => runs.find(run => run.on === back)?.options.delay)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8].map(n => n * stepMs));
+  // With motion, each back goes the moment its card stands edge-on: halfway, on a linear clock eased per half.
+  // Without it, the backs fade.
+  const backRuns = backs.map(back => runs.find(run => run.on === back)!);
+  expect(backRuns.every(run => run.frames.length === (transforms ? 4 : 2))).toBe(true);
   // Every card sweeps to South together after the hold.
   const sweeping = runs.filter(run => run.options.delay === delay);
   expect(sweeping).toHaveLength(36);
@@ -98,7 +102,9 @@ it.each([
   // With motion, South's cards step toward the cloth and stay there until the sweep.
   const steps = runs.filter(run => seatOf(run.on) === '0' && run.on.hasAttribute('data-claim-card') && run.options.delay !== delay);
   expect(steps.length).toBe(transforms ? 9 : 0);
-  if (transforms) expect(steps.every(run => run.options.fill === 'both' && String(run.frames.at(-1)!.transform).startsWith('translate('))).toBe(true);
+  if (transforms) expect(steps.every(run => run.options.fill === 'both' && run.options.easing === 'linear'
+    && run.frames[1].offset === 0.5 && String(run.frames[1].transform).includes('rotateY(90deg)')
+    && String(run.frames.at(-1)!.transform).startsWith('translate('))).toBe(true);
   expect(runs.some(({ frames }) => frames.some(frame => frame.transform !== undefined))).toBe(transforms);
   expect(screen.queryByRole('dialog')).toBeNull();
   await act(() => new Promise(r => setTimeout(r, delay + duration + 50)));
