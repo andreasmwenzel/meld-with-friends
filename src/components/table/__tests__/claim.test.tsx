@@ -125,7 +125,7 @@ it('turns the claim up from the high end however the hand is sorted', async () =
   await t.claim();
   await vi.waitFor(() => expect(document.querySelectorAll('[data-claim-back]')).toHaveLength(9));
   const calls = animate.mock.calls as unknown as [Keyframe[], KeyframeAnimationOptions][];
-  const delayOf = (back: Element) => calls[animate.mock.contexts.indexOf(back)][1].delay;
+  const delayOf = (back: HTMLElement) => calls[animate.mock.contexts.indexOf(back)][1].delay;
   const order = [...document.querySelectorAll<HTMLElement>('[data-claim-back]')]
     .sort((a, b) => delayOf(a)! - delayOf(b)!).map(back => back.closest<HTMLElement>('[data-claim-card]')!.dataset.claimCard!.slice(0, 2));
   // Low cards and trump on the right put the fan's high end last; the reveal still starts with the top trump.
