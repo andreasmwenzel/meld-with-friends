@@ -857,8 +857,9 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
 
   return (
     // Looking at the table after a hand, the result's buttons run along the bottom (Result.tsx), so the board keeps
-    // clear of them; sideways phones put them in the action column instead.
-    <div ref={claimRoot} aria-busy={updating || undefined} className={`board relative flex min-h-0 w-full flex-1 flex-col overflow-hidden ${peekingResult ? "pb-[4.5rem] short:pb-0" : ""}`}
+    // clear of them; sideways phones put them in the action column instead. The room is kept while the result is up
+    // too, so the table holds still going between the result and the look at it.
+    <div ref={claimRoot} aria-busy={updating || undefined} className={`board relative flex min-h-0 w-full flex-1 flex-col overflow-hidden ${over && !revealingClaim ? "pb-[4.5rem] short:pb-0" : ""}`}
       data-motion={motion} {...layoutFacts} style={{ "--pm": `${slideMs}ms`, "--sd": `${holdMs}ms`, "--sm": `${sweepMs}ms` } as React.CSSProperties}>
       <div className={`board-flat flex min-h-0 flex-1 flex-col ${menu ? "lg:pr-[380px]" : ""}`} inert={(menu && !wide) || resultModal ? true : undefined}>
         {/* One slim strip: the hand, the score, and the way to everything else. */}
