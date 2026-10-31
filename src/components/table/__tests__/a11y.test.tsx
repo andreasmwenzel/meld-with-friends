@@ -143,9 +143,9 @@ describe("accessible names and states at the table", () => {
     expect(screen.queryByText(/^Go set for/)).toBeNull();
   });
 
-  it("meld-waiting: says who the table is waiting for, with no meld buttons to press", async () => {
+  it("meld-waiting: no meld buttons to press", async () => {
     await table("meld-waiting");
-    expect(screen.getByText(/^Waiting for .+ to finish melding\.$/)).toBeTruthy();
+    expect(screen.queryByText(/to finish melding/)).toBeNull();
     expect(screen.queryByRole("button", { name: "Lay down" })).toBeNull();
     expect(screen.getByRole("group", { name: "Your hand" })).toBeTruthy();
   });
