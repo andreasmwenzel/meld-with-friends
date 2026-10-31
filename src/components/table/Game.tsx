@@ -1348,7 +1348,6 @@ function MeldLine({ rules, hand, trump, passing = false, lit, setLit }: { rules:
   return (
     <div className="mt-2 text-center text-xs text-chalk-faint">
       <div className="mb-1.5 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-3">
-        <span>Your meld, tap a suit:</span>
         {worth.map((x) => {
           const on = open === x.suit;
           return (
@@ -1569,11 +1568,8 @@ function PhasePrompt({ view, trick, nameOf, stalled, nudge, compact = false }: {
     <div className={`flex flex-col items-center gap-0.5 text-center ${compact ? "mt-0.5" : "mb-1 min-h-11"}`}>
       <p className={mine ? "display" : "text-sm text-chalk"} style={mine ? { fontSize: compact ? 19 : 22, color: "var(--brass)" } : undefined}>{prompt}</p>
       {view.phase === "deciding_shoot" && <p className="text-sm text-chalk-faint">{shootStake(view, nameOf)}</p>}
-      {view.highBid && view.phase === "bidding" && (
-        <p className="text-sm text-chalk-faint">
-        {view.highBid.shoot ? shootLine(nameOf(view.highBid.seat)) : <>{nameOf(view.highBid.seat)} holds {view.highBid.amount}</>}
-        </p>
-      )}
+      {/* The high bid itself is marked on its seat's chip; only a shot moon needs saying. */}
+      {view.highBid?.shoot && view.phase === "bidding" && <p className="text-sm text-chalk-faint">{shootLine(nameOf(view.highBid.seat))}</p>}
       {done && (
         <p className="text-xs text-chalk-faint" style={{ opacity: dim ? 0.7 : 1 }}>
         {nameOf(trick.winner!)} took it{took > 0 ? `, ${took} ${took === 1 ? "counter" : "counters"}` : view.sittingOut == null ? ", no counters" : ""}.

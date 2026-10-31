@@ -127,7 +127,8 @@ describe("accessible names and states at the table", () => {
     expect(screen.queryByRole("button", { name: /^(Pick a bid|Bid \d+)$/ })).toBeNull();
     const chips = [...document.querySelectorAll(".sr-only")].map((n) => n.textContent).filter((t) => t?.includes(": "));
     expect(chips.length).toBeGreaterThan(0);
-    for (const chip of chips) expect(chip).toMatch(/^.+: (bid \d+|passed|shooting the moon)$/);
+    for (const chip of chips) expect(chip).toMatch(/^.+: (bid \d+|passed|shooting the moon)(, the high bid)?$/);
+    expect(chips.filter((c) => c.endsWith(", the high bid"))).toHaveLength(1);
     // Every card is there to read, none can be pressed during the auction.
     expect(cards().every((c) => c.getAttribute("aria-disabled") === "true")).toBe(true);
   });
