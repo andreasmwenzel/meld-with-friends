@@ -52,19 +52,24 @@ export function useClaimReveal(view: PlayerView | null, motion: MotionPref, root
       const fan = (card.closest("[data-hand]") ?? card).getBoundingClientRect();
       const dx = box.left + box.width / 2 - fan.left - fan.width / 2, dy = box.top + box.height / 2 - fan.top - fan.height / 2;
       const [px, py] = Math.abs(dx) > Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy) || -1];
-      const lift = claimed && !still ? `translate(${(px * CLAIM_STEP_PX) / scale}px, ${(py * CLAIM_STEP_PX) / scale}px)` : "none";
-      // The claimer already sees its own cards, so they only step out; everyone else sees each one turn up. Each stands
-      // out while the next turns up, then settles back into the fan.
-      const mine = claimed && owner === view.seat;
-      const first = still ? { opacity: mine ? 1 : 0 } : mine ? { transform: "none", opacity: 1 } : { transform: "rotateY(90deg)", opacity: 0 };
-      const out = still ? { opacity: 1 } : { transform: lift, opacity: 1 };
-      const settled = still ? { opacity: 1 } : { transform: "none", opacity: 1 };
-      const span = revealMs * 2 + stepMs;
-      animations.push(claimed
-        ? card.animate([{ ...first, offset: 0 }, { ...out, offset: revealMs / span }, { ...out, offset: (revealMs + stepMs) / span }, { ...settled, offset: 1 }],
-          { delay: step++ * stepMs, duration: span, easing: "ease-out", fill: "both" })
-        : card.animate([first, settled], { duration: revealMs, easing: "ease-out", fill: "backwards" }));
-      animations.push(card.animate([settled, still ? { opacity: 0 } : claimSweep(from, to, scale)],
+      const lx = claimed && !still ? (px * CLAIM_STEP_PX) / scale : 0, ly = claimed && !still ? (py * CLAIM_STEP_PX) / scale : 0;
+      const pose = (out: number, turn: number) => `translate(${lx * out}px, ${ly * out}px) rotateY(${turn}deg)`;
+      const mine = owner === view.seat;
+      const at = claimed ? step++ * stepMs : 0;
+      // Someone else's claim lies face down (Game.tsx lays a back over each card), and each card turns over halfway
+      // through its step out. Your own cards are already face up, so as the claimer you see them only step out. They stay
+      // out until the sweep. The other hands turn up together at the start; yours, already face up, stays as it is.
+      const back = claimed ? card.querySelector<HTMLElement>("[data-claim-back]") : null;
+      if (back) animations.push(back.animate([{ opacity: 1 }, { opacity: 1, offset: 0.5 }, { opacity: 0, offset: 0.5 }, { opacity: 0 }],
+        { delay: at, duration: revealMs, fill: "both" }));
+      const hidden = !mine && !back;
+      if (!still && (claimed || !mine)) {
+        animations.push(card.animate([{ transform: pose(0, 0), opacity: hidden ? 0 : 1 }, ...(mine ? [] : [{ transform: pose(0.5, 90), offset: 0.5 }]), { transform: pose(1, 0), opacity: 1 }],
+          { delay: at, duration: revealMs, easing: "ease-out", fill: claimed ? "both" : "backwards" }));
+      } else if (still && hidden) {
+        animations.push(card.animate([{ opacity: 0 }, { opacity: 1 }], { delay: at, duration: revealMs, fill: "backwards" }));
+      }
+      animations.push(card.animate([still ? { opacity: 1 } : { transform: pose(1, 0), opacity: 1 }, still ? { opacity: 0 } : claimSweep(from, to, scale)],
         { delay: sweepAt, duration: outMs, easing: "ease-in-out", fill: "forwards" }));
     });
     const elapsed = performance.now() - startedAt.current;

@@ -41,16 +41,17 @@ export function claimSweep(from: Pick<DOMRect, 'left' | 'top' | 'width' | 'heigh
 }
 
 /**
- * A claim shows its cards one at a time: each of the claimer's cards turns up and steps toward the cloth, the way a
- * card is lifted to be played, `stepMs` after the one before, and settles back as the next one comes. The other hands turn up together at the start. Once the
- * last claimed card has stood `holdMs`, every card sweeps to the claimer (off: fades), and then the result shows.
+ * A claim shows its cards one at a time: each of the claimer's cards turns face up and steps toward the cloth, the way a
+ * card is lifted to be played, `stepMs` after the one before, and stays there. The other hands turn up together at the
+ * start. Once the last claimed card is up, the table holds `holdMs` (longer than a trick's, to read the whole claim),
+ * then every card sweeps to the claimer (off: fades), and then the result shows.
  */
 export function claimTimings(pref: MotionPref, claimed: number) {
-  const { slideMs, holdMs, sweepMs } = motionTimings(pref);
+  const { slideMs, sweepMs } = motionTimings(pref);
   const stepMs = pref === "quick" ? 150 : pref === "off" ? 200 : 300;
+  const holdMs = pref === "quick" ? 750 : pref === "off" ? 600 : 1500;
   const outMs = pref === "off" ? slideMs : sweepMs;
-  // The last card turns up, stands out a step and settles back before the hold.
-  const sweepAt = Math.max(0, claimed - 1) * stepMs + slideMs * 2 + stepMs + holdMs;
+  const sweepAt = Math.max(0, claimed - 1) * stepMs + slideMs + holdMs;
   return { revealMs: slideMs, stepMs, sweepAt, outMs, totalMs: sweepAt + outMs };
 }
 
