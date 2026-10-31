@@ -149,7 +149,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const motion = reducedMotion ? "off" : cardPrefs.motion;
   const { slideMs, holdMs, sweepMs } = motionTimings(motion);
   const claimRoot = useRef<HTMLDivElement>(null);
-  const revealingClaim = useClaimReveal(view, motion, claimRoot);
+  const revealingClaim = useClaimReveal(view, motion, claimRoot, cardPrefs.sort.ranks === "high-first");
   // The claim shows the hands as they stood when it was made, and only while it plays out; looking at the table after
   // it, the hands are as they were played (or as dealt), as at any hand's end. Without face-up hands the claim stays.
   const claimShown = view?.claim && (revealingClaim || !view.revealed) ? view.claim : null;

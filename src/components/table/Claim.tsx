@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { parseCard, RANK_ORDER } from "@/engine/deck";
-import type { CardId, PlayerView, Suit } from "@/engine/types";
+import type { PlayerView } from "@/engine/types";
 import type { MotionPref } from "@/lib/cardPrefs";
 import { CLAIM_STEP_PX, claimSweep, claimTimings } from "./motion";
 
@@ -15,7 +14,8 @@ export function ClaimButton({ busy, onClaim }: { busy: boolean; onClaim: () => v
  * Only a live transition animates. Reloads show the saved reveal without making the reader wait. While it is true the
  * table shows the hands as they stood at the claim; afterwards, the hands as played (Game.tsx).
  */
-export function useClaimReveal(view: PlayerView | null, motion: MotionPref, root: React.RefObject<HTMLElement | null>) {
+/** `highFirst`: the hand is sorted high cards first; otherwise the claim turns up from the other end of the fan. */
+export function useClaimReveal(view: PlayerView | null, motion: MotionPref, root: React.RefObject<HTMLElement | null>, highFirst = true) {
   const previous = useRef<PlayerView | null>(null);
   const [active, setActive] = useState<string | null>(null);
   const key = view?.claim ? `${view.handNumber}:${view.claim.fromTrick}:${view.rev}` : null;
@@ -44,7 +44,9 @@ export function useClaimReveal(view: PlayerView | null, motion: MotionPref, root
     const cards = [...root.current.querySelectorAll<HTMLElement>("[data-claim-card]")];
     // Your own cards sit in your hand, outside your seat's plate.
     const ownerOf = (card: HTMLElement) => Number(card.closest("[data-claim-seat]")?.getAttribute("data-claim-seat") ?? view.seat);
-    const turn = revealOrder(cards.filter(card => ownerOf(card) === claim.seat), view.trump);
+    // Card by card along the fan, from its high end, whichever way the hand is sorted.
+    const fan = cards.filter(card => ownerOf(card) === claim.seat);
+    const turn = new Map((highFirst ? fan : [...fan].reverse()).map((card, n) => [card, n]));
     cards.forEach(card => {
       if (!card.animate) return;
       const from = card.getBoundingClientRect();
@@ -81,7 +83,7 @@ export function useClaimReveal(view: PlayerView | null, motion: MotionPref, root
     const elapsed = performance.now() - startedAt.current;
     animations.forEach(animation => { animation.currentTime = elapsed; });
     return () => animations.forEach(animation => animation.cancel());
-  }, [revealing, view, motion, root]);
+  }, [revealing, view, motion, root, highFirst]);
   useEffect(() => {
     if (!revealing) return;
     const left = claimTimings(motion, claimedCount).totalMs - (performance.now() - startedAt.current);
@@ -91,16 +93,3 @@ export function useClaimReveal(view: PlayerView | null, motion: MotionPref, root
   return revealing;
 }
 
-/**
- * The order a claim's cards turn up: from the high end, whichever way the hand is sorted. Trumps first, highest down,
- * then each other suit, ace down, taking the suits in the order the fan shows them.
- */
-function revealOrder(cards: HTMLElement[], trump: Suit | null): Map<HTMLElement, number> {
-  const card = (el: HTMLElement) => parseCard(el.dataset.claimCard as CardId);
-  const suitAt = new Map<Suit, number>();
-  cards.forEach((el, i) => { if (!suitAt.has(card(el).suit)) suitAt.set(card(el).suit, i); });
-  const ordered = cards.map((el, i) => ({ el, i, ...card(el) })).sort((a, b) =>
-    Number(b.suit === trump) - Number(a.suit === trump) || suitAt.get(a.suit)! - suitAt.get(b.suit)!
-    || RANK_ORDER.indexOf(a.rank) - RANK_ORDER.indexOf(b.rank) || a.i - b.i);
-  return new Map(ordered.map(({ el }, n) => [el, n]));
-}

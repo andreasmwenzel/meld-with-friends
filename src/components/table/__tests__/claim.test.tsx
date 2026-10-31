@@ -120,7 +120,7 @@ it.each([
   expect(screen.getByText('South claimed the rest from trick 4. Remaining hands:')).toBeTruthy();
 }, 10000);
 
-it('turns the claim up from the high end however the hand is sorted', async () => {
+it('walks the fan from its high end when the hand is sorted low cards first', async () => {
   const t = await table({ seat: 1, sort: { suits: 'fixed', trump: 'right', ranks: 'low-first' } });
   await t.claim();
   await vi.waitFor(() => expect(document.querySelectorAll('[data-claim-back]')).toHaveLength(9));
@@ -128,8 +128,10 @@ it('turns the claim up from the high end however the hand is sorted', async () =
   const delayOf = (back: HTMLElement) => calls[animate.mock.contexts.indexOf(back)][1].delay;
   const order = [...document.querySelectorAll<HTMLElement>('[data-claim-back]')]
     .sort((a, b) => delayOf(a)! - delayOf(b)!).map(back => back.closest<HTMLElement>('[data-claim-card]')!.dataset.claimCard!.slice(0, 2));
-  // Low cards and trump on the right put the fan's high end last; the reveal still starts with the top trump.
-  expect(order).toEqual(['TS', 'KS', 'KS', 'QS', 'QS', 'JS', 'AC', 'AC', 'AD']);
+  // Sorted low cards first, the fan's high end is its last card: the claim walks the fan from there, card by card.
+  const fan = [...document.querySelectorAll<HTMLElement>('[data-claim-back]')].map(back => back.closest<HTMLElement>('[data-claim-card]')!.dataset.claimCard!.slice(0, 2));
+  expect(order).toEqual([...fan].reverse());
+  expect(fan.at(-1)).not.toBe(fan[0]);
 });
 
 it('keeps the reveal on its first deadline when the same view arrives again', async () => {
