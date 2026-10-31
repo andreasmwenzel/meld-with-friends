@@ -19,11 +19,17 @@ export function useClaimReveal(view: PlayerView | null, motion: MotionPref, root
   const [active, setActive] = useState<string | null>(null);
   const key = view?.claim ? `${view.handNumber}:${view.claim.fromTrick}:${view.rev}` : null;
   const revealing = active !== null && active === key;
+  /** When the claim landed: a fresh copy of the same view mid-reveal picks the cards up where they were, not from the top. */
+  const startedAt = useRef(0);
   useLayoutEffect(() => {
     const before = previous.current;
     previous.current = view;
-    if (view?.claim && before?.phase === "playing" && before.handNumber === view.handNumber) setActive(key);
+    if (view?.claim && before?.phase === "playing" && before.handNumber === view.handNumber) {
+      startedAt.current = performance.now();
+      setActive(key);
+    }
   }, [view, key]);
+  const claimedCount = view?.claim ? view.claim.hands[view.claim.seat].length : 0;
   useLayoutEffect(() => {
     if (!revealing || !view?.claim || !root.current) return;
     const claim = view.claim;
@@ -61,12 +67,15 @@ export function useClaimReveal(view: PlayerView | null, motion: MotionPref, root
       animations.push(card.animate([settled, still ? { opacity: 0 } : claimSweep(from, to, scale)],
         { delay: sweepAt, duration: outMs, easing: "ease-in-out", fill: "forwards" }));
     });
+    const elapsed = performance.now() - startedAt.current;
+    animations.forEach(animation => { animation.currentTime = elapsed; });
     return () => animations.forEach(animation => animation.cancel());
   }, [revealing, view, motion, root]);
   useEffect(() => {
-    if (!revealing || !view?.claim) return;
-    const timer = setTimeout(() => setActive(null), claimTimings(motion, view.claim.hands[view.claim.seat].length).totalMs);
+    if (!revealing) return;
+    const left = claimTimings(motion, claimedCount).totalMs - (performance.now() - startedAt.current);
+    const timer = setTimeout(() => setActive(null), Math.max(0, left));
     return () => clearTimeout(timer);
-  }, [revealing, view, motion]);
+  }, [revealing, claimedCount, motion]);
   return revealing;
 }

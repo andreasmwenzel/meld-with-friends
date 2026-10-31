@@ -102,3 +102,27 @@ it.each([
   await act(() => { fireEvent.click(screen.getByRole('tab', { name: 'This hand' })); });
   expect(screen.getByText('South claimed the rest from trick 4. Remaining hands:')).toBeTruthy();
 }, 10000);
+
+it('keeps the reveal on its first deadline when the same view arrives again', async () => {
+  const { renderHook } = await import('@testing-library/react');
+  const { useClaimReveal } = await import('../Claim');
+  const before = buildScenario(spec).state;
+  const after = applyAction(before, { type: 'claim', seat: 0 });
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+  try {
+    const root = { current: null };
+    const hook = renderHook(({ view }) => useClaimReveal(view, 'normal', root), { initialProps: { view: viewFor(before, 1) } });
+    hook.rerender({ view: viewFor(after, 1) });
+    expect(hook.result.current).toBe(true);
+    const { totalMs } = claimTimings('normal', 9);
+    act(() => { vi.advanceTimersByTime(totalMs - 500); });
+    // A ready ping or a reconnect fetches the same claim again, as a new object.
+    hook.rerender({ view: viewFor(after, 1) });
+    act(() => { vi.advanceTimersByTime(499); });
+    expect(hook.result.current).toBe(true);
+    act(() => { vi.advanceTimersByTime(2); });
+    expect(hook.result.current).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
