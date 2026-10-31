@@ -39,3 +39,20 @@ export function claimSweep(from: Pick<DOMRect, 'left' | 'top' | 'width' | 'heigh
   const y = (to.top + to.height / 2 - from.top - from.height / 2) / scale;
   return { transform: `translate(${x}px, ${y}px) scale(.8)`, opacity: 0 };
 }
+
+/**
+ * A claim shows its cards one at a time: each of the claimer's cards turns up and steps toward the cloth, the way a
+ * card is lifted to be played, `stepMs` after the one before, and settles back as the next one comes. The other hands turn up together at the start. Once the
+ * last claimed card has stood `holdMs`, every card sweeps to the claimer (off: fades), and then the result shows.
+ */
+export function claimTimings(pref: MotionPref, claimed: number) {
+  const { slideMs, holdMs, sweepMs } = motionTimings(pref);
+  const stepMs = pref === "quick" ? 150 : pref === "off" ? 200 : 300;
+  const outMs = pref === "off" ? slideMs : sweepMs;
+  // The last card turns up, stands out a step and settles back before the hold.
+  const sweepAt = Math.max(0, claimed - 1) * stepMs + slideMs * 2 + stepMs + holdMs;
+  return { revealMs: slideMs, stepMs, sweepAt, outMs, totalMs: sweepAt + outMs };
+}
+
+/** How far a claimed card steps toward the cloth, as far as a card lifted to be played. */
+export const CLAIM_STEP_PX = 14;
