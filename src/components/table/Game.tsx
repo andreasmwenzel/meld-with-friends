@@ -1683,7 +1683,7 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld, previewing, bi
     return (
       <Bar>
         <span id={trumpLabel} className="sr-only">Trump is</span>
-        {/* The four suits stay on one row; on narrow phones the label wraps above them instead. */}
+        {/* The four suits stay on one row; their name is for screen readers, as "Name trump." says it on screen. */}
         <span role="group" aria-labelledby={trumpLabel} className="flex gap-2">
           {(["S", "H", "C", "D"] as Suit[]).map((s) => (
             <button key={s} className="btn btn-chalk" style={{ width: 48, padding: 0 }} onClick={() => act({ type: "declare_trump", suit: s })} disabled={busy} aria-label={SUIT_NAME[s]}>
@@ -1722,7 +1722,11 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld, previewing, bi
     const mine = view.melds[view.seat] ?? [];
     const pts = mine.reduce((s, m) => s + m.points, 0);
     const autoCards = view.trump ? autoMeldSelection(view.hand, view.trump) : [];
-    if (!L.canConfirmMeld && !L.canDeclareMeld) return null;
+    if (!L.canConfirmMeld && !L.canDeclareMeld) {
+      // Who is still melding shows nowhere else, so screen readers keep the line; on screen the table says enough.
+      const waiting = ([0, 1, 2, 3] as SeatIndex[]).filter((s) => !view.meldConfirmed[s]).map(nameOf);
+      return <p className="sr-only">Waiting for {waiting.join(", ")} to finish melding.</p>;
+    }
     if (autoMeld) return <Bar><span className="text-chalk-faint">{autoCards.length ? "Laying down your meld." : "No meld this hand."}</span></Bar>;
     // Picking your own: outlined cards in the hand are the ones that score.
     return (
