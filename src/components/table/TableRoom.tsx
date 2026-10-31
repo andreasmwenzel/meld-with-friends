@@ -6,6 +6,7 @@ import { api, ApiError, type Profile } from "@/lib/api";
 import { useTableChannel, useDisconnectedPolling, type TableEvent } from "@/lib/realtime/useTableChannel";
 import { usePresence } from "@/lib/realtime/usePresence";
 import { SiteHeader } from "@/components/site/SiteHeader";
+import { CodeHand, Dealing, DeadEnd } from "@/components/site/TableScene";
 import { AccountMenu } from "@/components/site/AccountMenu";
 import { Seating } from "./Seating";
 import { Game } from "./Game";
@@ -51,15 +52,13 @@ export function TableRoom({ code, me, guest = false }: { code: string; me: Profi
     return (
       <main className="flex-1">
         <Header code={code} me={me} guest={guest} />
-        <div className="mx-auto max-w-md px-6 py-16">
-          <h1 className="display" style={{ fontSize: 44 }}>{error}</h1>
-          <p className="mt-3 text-chalk-faint">Check the code with whoever dealt the table.</p>
-          <Link href="/join" className="btn btn-chalk mt-6">Try another code</Link>
-        </div>
+        <DeadEnd art={<CodeHand code={code} />} title={error} actions={<Link href="/join" className="btn btn-chalk">Try another code</Link>}>
+          Check the code with whoever dealt the table.
+        </DeadEnd>
       </main>
     );
   }
-  if (!snap) return <main className="flex-1"><Header code={code} me={me} guest={guest} /><p className="px-6 text-chalk-faint">Finding the table.</p></main>;
+  if (!snap) return <main className="flex flex-1 flex-col"><Header code={code} me={me} guest={guest} /><Dealing label="Finding the table." /></main>;
 
   const atBoard = snap.table.status === "playing" || snap.table.status === "finished";
   // At the board the table is the whole screen: the table code and the way out live in its menu, table talk in its corner button.

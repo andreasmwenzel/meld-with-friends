@@ -284,3 +284,18 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .sit-out-fold .sit-out-card, .sit-out-fold .sit-out-stack { animation: none; }
 }
+
+/* Waiting on the table (TableScene's DealingDeck): eight cards go out from the deck a beat apart, a round to each seat,
+   rest a moment, and are gathered up for the next deal. Each card has its own keyframes so the deal stays in time.
+   Reduced motion leaves the cards where they land. */
+.deal-card { --to: translate(var(--dx), var(--dy)) rotate(var(--dr)); transform: var(--to); animation-duration: 4s;
+  animation-iteration-count: infinite; animation-timing-function: cubic-bezier(.2,.8,.25,1); animation-fill-mode: both; }
+@keyframes deal-0 { 0%, 6% { transform: none; opacity: 0; } 7% { opacity: 1; } 12%, 86% { transform: var(--to); opacity: 1; } 94%, 100% { transform: var(--to); opacity: 0; } }
+@keyframes deal-1 { 0%, 13% { transform: none; opacity: 0; } 14% { opacity: 1; } 19%, 86% { transform: var(--to); opacity: 1; } 94%, 100% { transform: var(--to); opacity: 0; } }
+@keyframes deal-2 { 0%, 20% { transform: none; opacity: 0; } 21% { opacity: 1; } 26%, 86% { transform: var(--to); opacity: 1; } 94%, 100% { transform: var(--to); opacity: 0; } }
+@keyframes deal-3 { 0%, 27% { transform: none; opacity: 0; } 28% { opacity: 1; } 33%, 86% { transform: var(--to); opacity: 1; } 94%, 100% { transform: var(--to); opacity: 0; } }
+@keyframes deal-4 { 0%, 34% { transform: none; opacity: 0; } 35% { opacity: 1; } 40%, 86% { transform: var(--to); opacity: 1; } 94%, 100% { transform: var(--to); opacity: 0; } }
+@keyframes deal-5 { 0%, 41% { transform: none; opacity: 0; } 42% { opacity: 1; } 47%, 86% { transform: var(--to); opacity: 1; } 94%, 100% { transform: var(--to); opacity: 0; } }
+@keyframes deal-6 { 0%, 48% { transform: none; opacity: 0; } 49% { opacity: 1; } 54%, 86% { transform: var(--to); opacity: 1; } 94%, 100% { transform: var(--to); opacity: 0; } }
+@keyframes deal-7 { 0%, 55% { transform: none; opacity: 0; } 56% { opacity: 1; } 61%, 86% { transform: var(--to); opacity: 1; } 94%, 100% { transform: var(--to); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .deal-card { animation: none !important; } }
