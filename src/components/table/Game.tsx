@@ -150,6 +150,9 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const { slideMs, holdMs, sweepMs } = motionTimings(motion);
   const claimRoot = useRef<HTMLDivElement>(null);
   const revealingClaim = useClaimReveal(view, motion, claimRoot);
+  // The claim shows the hands as they stood when it was made, and only while it plays out; looking at the table after
+  // it, the hands are as they were played (or as dealt), as at any hand's end. Without face-up hands the claim stays.
+  const claimShown = view?.claim && (revealingClaim || !view.revealed) ? view.claim : null;
   const router = useRouter();
 
   const load = useCallback(() => sync.load(), [sync]);
@@ -642,10 +645,10 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     if (!view) return [];
     // Once play starts your meld is back in your hand to be played, even while it still shows on the table.
     const laid = new Set(view.phase === "melding" ? laidOf(view.seat) : []);
-    const cards = (view.claim ? view.claim.hands[view.seat] : view.revealed ? view.revealed[which][view.seat] ?? [] : view.hand).filter((c) => !laid.has(c));
+    const cards = (claimShown ? claimShown.hands[view.seat] : view.revealed ? view.revealed[which][view.seat] ?? [] : view.hand).filter((c) => !laid.has(c));
     if (unshown) cards.push(unshown);
     return sortHand(cards, view.trump, cardPrefs.sort);
-  }, [view, cardPrefs.sort, which, laidOf, unshown]);
+  }, [view, claimShown, cardPrefs.sort, which, laidOf, unshown]);
   // After each move, and when a played card leaves the hand (the trick shows it later than the move lands).
   useEffect(() => {
     const row = handRef.current;
@@ -663,7 +666,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     if (action && (view?.phase === "melding" || !card)) action.focus({ preventScroll: true });
     else focusHand();
   }, [view, hand, focusHand]);
-  const revealedFor = (seat: SeatIndex): CardId[] | undefined => view?.claim ? sortHand(view.claim.hands[seat], view.trump, cardPrefs.sort)
+  const revealedFor = (seat: SeatIndex): CardId[] | undefined => claimShown && view ? sortHand(claimShown.hands[seat], view.trump, cardPrefs.sort)
     : view?.revealed ? sortHand(view.revealed[which][seat] ?? [], view.trump, cardPrefs.sort) : undefined;
 
   // The table has no header, so until the board loads (or if it cannot, say for someone without a seat) keep a way out.
@@ -846,7 +849,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const outSeat = view.sittingOut ?? (over ? view.history.at(-1)?.sittingOut ?? null : null);
   const outSide = outSeat == null || outSeat === view.seat ? undefined : SIDE[rel(outSeat) === 1 ? "left" : rel(outSeat) === 2 ? "center" : "right"];
   const layoutFacts = { "data-phase": view.phase, "data-hands": drawnHands.join(" "), "data-sitting-out": outSide,
-    "data-can-play": view.phase === "playing" && isMyTurn && view.legal.playableCards.length > 0 ? "" : undefined, "data-claim": view.claim ? "" : undefined };
+    "data-can-play": view.phase === "playing" && isMyTurn && view.legal.playableCards.length > 0 ? "" : undefined, "data-claim": claimShown ? "" : undefined };
   const talk = chat && <ChatDock chat={chat} open={talkOpen} setOpen={setTalkOpen} text={talkDraft} setText={setTalkDraft} />;
   const look = <LookDock team={myTeam} trump={view.trump} open={lookOpen} setOpen={setLookOpen} />;
   const linkCls = "tap-link text-left text-sm text-chalk-faint underline underline-offset-4 hover:text-chalk disabled:opacity-60";
@@ -968,7 +971,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
               const ringed = (sel && !isArmed) || (isArmed && armed!.open);
               const blocked = view.phase === "playing" && isMyTurn && !playable && !!constraintText;
               return (
-                <span key={c} data-claim-card={view.claim ? c : undefined} data-keep-armed={isArmed || armedCard ? "" : undefined} className="shrink-0" style={{ marginLeft: -overlap }} onClick={() => { if (view.phase === "playing" && isMyTurn && !playable) showHint(); }}>
+                <span key={c} data-claim-card={claimShown ? c : undefined} data-keep-armed={isArmed || armedCard ? "" : undefined} className="shrink-0" style={{ marginLeft: -overlap }} onClick={() => { if (view.phase === "playing" && isMyTurn && !playable) showHint(); }}>
                   <button data-hand-card={c}
                     onPointerDown={(e) => { lastPress.current = { card: c, pointerId: e.pointerId, real: isRealPress(e.pointerType, window.matchMedia("(any-pointer: fine)").matches), upAt: null }; }}
                     onPointerUp={(e) => { lastPress.current = releasePress(lastPress.current, c, e.pointerId, e.timeStamp); }}
@@ -1174,10 +1177,10 @@ function OpponentRow({ seat, view, name, person, actions, align, score, laid, st
       fold={fold} label={`${name} sits this hand out; cards set aside`} hand={side} handCards={n} />
   ) : <div data-hand={side} data-hand-cards={n} className={`flex ${vertical ? "flex-col justify-center" : "flex-row"}`} style={vertical ? { padding: "0 7px", minHeight: faceUp ? undefined : SIDE_FAN_H } : undefined} role={faceUp ? "group" : "img"} aria-label={`${n} cards`}>
     {faceUp ? faceUp.map((c, i) => vertical ? (
-      <div key={c} data-claim-card={view.claim ? c : undefined} className="relative shrink-0" style={{ width: (REV_W * 7) / 5, height: i === faceUp.length - 1 ? REV_W : 17, zIndex: align === "right" ? faceUp.length - i : i }}>
+      <div key={c} data-claim-card={c} className="relative shrink-0" style={{ width: (REV_W * 7) / 5, height: i === faceUp.length - 1 ? REV_W : 17, zIndex: align === "right" ? faceUp.length - i : i }}>
         <PlayingCard card={c} width={REV_W} fourColour={four} style={{ position: "absolute", left: "50%", top: REV_W / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg)` }} />
       </div>
-    ) : <span key={c} data-claim-card={view.claim ? c : undefined} style={{ marginLeft: i ? -REV_W * 0.45 : 0 }}><PlayingCard card={c} width={REV_W} fourColour={four} /></span>)
+    ) : <span key={c} data-claim-card={c} style={{ marginLeft: i ? -REV_W * 0.45 : 0 }}><PlayingCard card={c} width={REV_W} fourColour={four} /></span>)
     : Array.from({ length: n }).map((_, i) => (
       <CardBack key={i} width={34} team={team}
         style={vertical ? { marginTop: i ? -40 : 0, transform: align === "left" ? "rotate(90deg)" : "rotate(-90deg)" } : { marginLeft: i ? -24 : 0 }} />

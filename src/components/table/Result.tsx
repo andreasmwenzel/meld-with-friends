@@ -109,7 +109,7 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
   const cols: Team[] = [myTeam, them];
   const h = view.history.at(-1);
   const rows = h ? BREAKDOWN_ROWS.filter(([k]) => cols.some((t) => (h.breakdown?.[t]?.[k] ?? 0) !== 0)) : [];
-  const passing = view.rules.passCount > 0 && !!view.revealed && !view.claim;
+  const passing = view.rules.passCount > 0 && !!view.revealed;
   const won = view.winner === myTeam;
   const title = over ? (won ? "You and your partner win." : `${view.winner === "red" ? "Red" : "Blue"} team wins.`) : headline(view, nameOf);
 

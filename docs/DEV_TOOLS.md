@@ -120,7 +120,7 @@ reduced, and waits for the layout to stop moving. The screens:
 - **armed**: on your turn in trick play, a playable card lifted by a first tap, with its Play button;
 - **peek** / **peek+talk**: at hand end, "Look at the table" (every hand face up, the result's buttons along the
   bottom), without and with the popover. The result sheet itself is skipped, since the board is behind its scrim;
-- **peek-dealt**: the face-up hands switched to "As dealt", where passing was played and the hand was not claimed.
+- **peek-dealt**: the face-up hands switched to "As dealt", where passing was played.
 
 The presets come from the app's own exported list, served by the dev-only `/dev/presets` (404 in production); the run
 stops if that list is empty or shorter than the entries in `src/engine/scenarios.ts`. Each preset's spec says what
