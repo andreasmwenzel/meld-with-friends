@@ -80,7 +80,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const [lit, setLit] = useState<CardId[] | null>(null);
   const [bidSlot, setBidSlot] = useState<HTMLDivElement | null>(null);
   const [error, setError] = useState<string | null>(null);
-  /** The board would not load because you have no seat at this game. */
+  /** The board would not load because you have no seat at this game (the view's "not_seated" refusal). */
   const [unseated, setUnseated] = useState(false);
   const [busy, setBusy] = useState(false);
   /** Card lifted awaiting a second tap; only valid for the view revision it was lifted in.
@@ -135,7 +135,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     onError: (e) => {
       if (isTransientError(e)) setDegraded(true);
       else {
-        setUnseated(e instanceof ApiError && e.status === 403);
+        setUnseated(e instanceof ApiError && (e.data as { code?: string } | undefined)?.code === "not_seated");
         setError(e instanceof ApiError && e.status === 404 ? "No table has this code." : (e as Error).message);
       }
     },
