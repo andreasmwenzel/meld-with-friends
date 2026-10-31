@@ -949,12 +949,6 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
             <MeldLine key={`${view.phase}:${selected.join()}`} rules={view.rules} hand={view.hand.filter((c) => !selected.includes(c))} trump={view.trump}
               passing lit={lit} setLit={setLit} />
           )}
-          {/* In the flow, not over the hand, so it never lands on the meld chips. */}
-          {view.melds[view.seat]?.length > 0 && view.phase === "melding" && (
-            <p className="mt-1 text-center text-xs text-brass">
-              Laid down for {view.melds[view.seat].reduce((n, m) => n + m.points, 0)}
-            </p>
-          )}
           {error && <p className="mt-2 text-sm text-deck-red-soft">{error}</p>}
         </div>
 
@@ -1330,7 +1324,6 @@ function MeldLine({ rules, hand, trump, passing = false, lit, setLit }: { rules:
     if (!mine || mine.items.length === 0) return <p className="mt-2 text-center text-xs text-chalk-faint">No meld in {SUIT_NAME[trump]}.</p>;
     return (
       <div className="mt-2 mb-1.5 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-3 text-xs text-chalk-faint">
-        <span>Your meld, tap to see it:</span>
         {mine.items.map((it, i) => {
           const key = `${i}`, on = open === key && same(it.cards);
           return (
@@ -1348,7 +1341,6 @@ function MeldLine({ rules, hand, trump, passing = false, lit, setLit }: { rules:
   return (
     <div className="mt-2 text-center text-xs text-chalk-faint">
       <div className="mb-1.5 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-3">
-        <span>Your meld, tap a suit:</span>
         {worth.map((x) => {
           const on = open === x.suit;
           return (
@@ -1431,7 +1423,7 @@ function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact, busy, 
     : `${nameOf(view.bidder!)} is shooting alone; win one trick to win the game.`;
   const detail = peek.last || peek.meld ? null
     : done ? <><Name name={nameOf(trick.winner!)} />{` took it${took > 0 ? `, ${took} ${took === 1 ? "counter" : "counters"}` : view.sittingOut == null ? ", no counters" : ""}.`}</>
-    : mine ? shootStatus ?? constraintSentence(view) ?? "Tap a card to play it."
+    : mine ? shootStatus ?? constraintSentence(view)
     : shootStatus;
   const link = "hit whitespace-nowrap text-xs text-chalk-faint underline underline-offset-4 hover:text-chalk";
   // Each line is a single row of text, so a name can shrink inside it while the words round it stay whole.
@@ -1569,11 +1561,8 @@ function PhasePrompt({ view, trick, nameOf, stalled, nudge, compact = false }: {
     <div className={`flex flex-col items-center gap-0.5 text-center ${compact ? "mt-0.5" : "mb-1 min-h-11"}`}>
       <p className={mine ? "display" : "text-sm text-chalk"} style={mine ? { fontSize: compact ? 19 : 22, color: "var(--brass)" } : undefined}>{prompt}</p>
       {view.phase === "deciding_shoot" && <p className="text-sm text-chalk-faint">{shootStake(view, nameOf)}</p>}
-      {view.highBid && view.phase === "bidding" && (
-        <p className="text-sm text-chalk-faint">
-        {view.highBid.shoot ? shootLine(nameOf(view.highBid.seat)) : <>{nameOf(view.highBid.seat)} holds {view.highBid.amount}</>}
-        </p>
-      )}
+      {/* The high bid itself is marked on its seat's chip; only a shot moon needs saying. */}
+      {view.highBid?.shoot && view.phase === "bidding" && <p className="text-sm text-chalk-faint">{shootLine(nameOf(view.highBid.seat))}</p>}
       {done && (
         <p className="text-xs text-chalk-faint" style={{ opacity: dim ? 0.7 : 1 }}>
         {nameOf(trick.winner!)} took it{took > 0 ? `, ${took} ${took === 1 ? "counter" : "counters"}` : view.sittingOut == null ? ", no counters" : ""}.
@@ -1666,12 +1655,10 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld, previewing, bi
   ) : null;
 
   if (view.phase === "bidding" && !L.canBid && L.canPassBid) {
-    const shooter = view.highBid?.shoot ? nameOf(view.highBid.seat) : null;
     const stuck = view.rules.dealerStuck && view.dealer === view.seat && !view.highBid;
     return (<>
       {thrown}
       <Bar>
-        {!stuck && <span className="text-chalk-faint">{shooter ? `${shootLine(shooter)}.` : "If everyone passes, redeal."}</span>}
         <button className="btn btn-ghost btn-compact" style={{ color: "var(--chalk-faint)" }} onClick={() => act({ type: "pass_bid" })} disabled={busy}>
           {stuck ? `Take it at ${view.rules.minBid}` : "Pass"}
         </button>
@@ -1695,8 +1682,8 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld, previewing, bi
   if (view.phase === "declaring_trump" && L.canDeclareTrump) {
     return (
       <Bar>
-        <span id={trumpLabel} className="text-chalk-faint mr-2">Trump is</span>
-        {/* The four suits stay on one row; on narrow phones the label wraps above them instead. */}
+        <span id={trumpLabel} className="sr-only">Trump is</span>
+        {/* The four suits stay on one row; their name is for screen readers, as "Name trump." says it on screen. */}
         <span role="group" aria-labelledby={trumpLabel} className="flex gap-2">
           {(["S", "H", "C", "D"] as Suit[]).map((s) => (
             <button key={s} className="btn btn-chalk" style={{ width: 48, padding: 0 }} onClick={() => act({ type: "declare_trump", suit: s })} disabled={busy} aria-label={SUIT_NAME[s]}>
@@ -1724,7 +1711,7 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld, previewing, bi
     const n = L.mustPassCount;
     return (
       <Bar>
-        <span id={passHint} className="text-chalk-faint">{previewing ? "Close the meld to pass" : `${selected.length} of ${n} chosen`}</span>
+        {previewing && <span id={passHint} className="text-chalk-faint">Close the meld to pass</span>}
         <button className="btn btn-brass" aria-describedby={previewing ? passHint : undefined} disabled={busy || previewing || selected.length !== n} onClick={() => act({ type: "pass_cards", cards: selected })}>
           Pass {n} cards
         </button>
@@ -1736,8 +1723,9 @@ function ActionBar({ view, selected, busy, act, nameOf, autoMeld, previewing, bi
     const pts = mine.reduce((s, m) => s + m.points, 0);
     const autoCards = view.trump ? autoMeldSelection(view.hand, view.trump) : [];
     if (!L.canConfirmMeld && !L.canDeclareMeld) {
+      // Who is still melding shows nowhere else, so screen readers keep the line; on screen the table says enough.
       const waiting = ([0, 1, 2, 3] as SeatIndex[]).filter((s) => !view.meldConfirmed[s]).map(nameOf);
-      return <Bar><span className="text-chalk-faint">Waiting for {waiting.join(", ")} to finish melding.</span></Bar>;
+      return <p className="sr-only">Waiting for {waiting.join(", ")} to finish melding.</p>;
     }
     if (autoMeld) return <Bar><span className="text-chalk-faint">{autoCards.length ? "Laying down your meld." : "No meld this hand."}</span></Bar>;
     // Picking your own: outlined cards in the hand are the ones that score.

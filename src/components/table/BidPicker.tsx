@@ -110,8 +110,8 @@ export function BidPicker({ min, step, busy, onBid, pass, misdeal = null, slot =
   const upButton = <Chevron label="Lower bids" onClick={up} up size={tapPx} disabled={busy} hidden={!scrolled} />;
   const downButton = <Chevron label="Higher bids" onClick={down} size={tapPx} disabled={busy} />;
 
-  // Pass and the picked bid ride beside the down chevron on the cloth, drawn like the amounts and lined up with the
-  // grid's outer edges; sideways the cloth is too shallow, so they sit by your seat instead. The bid only shows once
+  // Pass (left) and the picked bid (right) ride beside the down chevron on the cloth, drawn like the amounts and lined up
+  // with the grid's outer edges; sideways the cloth is too shallow, so they sit by your seat instead. The bid only shows once
   // an amount is picked (tapping the amount again bids it too).
   const sideW = Math.floor((COLUMNS * colW - tapPx) / 2);
   const pillH = Math.min(rowH - 6, (compact ? 34 : 36) / shrink);
@@ -125,17 +125,17 @@ export function BidPicker({ min, step, busy, onBid, pass, misdeal = null, slot =
     </span>
   );
   const bidButton = (
-    <button type="button" className={beside ? "btn btn-brass tabular-nums" : "flex items-center justify-start disabled:cursor-not-allowed"}
+    <button type="button" className={beside ? "btn btn-brass tabular-nums" : "flex items-center justify-end disabled:cursor-not-allowed"}
       style={{ ...(beside ? null : { height: tapPx, width: sideW }), visibility: picked === null ? "hidden" : undefined }}
       onClick={() => { if (picked !== null) onBid(picked); }} disabled={busy || picked === null} aria-hidden={picked === null || undefined} tabIndex={picked === null ? -1 : undefined}>
-      {beside ? `Bid ${picked ?? min}` : onCloth("left", `Bid ${picked ?? min}`, "bid")}
+      {beside ? `Bid ${picked ?? min}` : onCloth("right", `Bid ${picked ?? min}`, "bid")}
     </button>
   );
   const passButton = pass && (
-    <button type="button" className={beside ? "btn btn-ghost" : "flex items-center justify-end disabled:cursor-not-allowed disabled:opacity-45"}
+    <button type="button" className={beside ? "btn btn-ghost" : "flex items-center justify-start disabled:cursor-not-allowed disabled:opacity-45"}
       style={beside ? { color: "var(--chalk)", boxShadow: "inset 0 0 0 1.5px var(--chalk-faint)" } : { height: tapPx, width: sideW }}
       onClick={pass.run} disabled={busy} aria-label={beside ? undefined : pass.label}>
-      {beside ? pass.label : onCloth("right", pass.label, "pass")}
+      {beside ? pass.label : onCloth("left", pass.label, "pass")}
     </button>
   );
 
@@ -161,11 +161,11 @@ export function BidPicker({ min, step, busy, onBid, pass, misdeal = null, slot =
         </div>
       </div>
       {beside ? <div className="flex flex-col">{upButton}{downButton}</div> : (
-        // Under the amounts: the picked bid to its left, the chevron in the middle, Pass to its right.
+        // Under the amounts: Pass to its left, the chevron in the middle, the picked bid to its right.
         <div className="flex items-center justify-between" style={{ width: COLUMNS * colW }}>
-          {bidButton}
-          {downButton}
           {passButton ?? <span style={{ width: sideW }} />}
+          {downButton}
+          {bidButton}
         </div>
       )}
     </div>
@@ -175,8 +175,8 @@ export function BidPicker({ min, step, busy, onBid, pass, misdeal = null, slot =
     {slot ? createPortal(board, slot) : <div className="flex justify-center pt-1">{board}</div>}
     {(beside || misdeal) && (
       <div className="flex flex-wrap items-center justify-center gap-2 px-2 py-1 sm:gap-3 sm:px-3">
-        {beside && bidButton}
         {beside && passButton}
+        {beside && bidButton}
         {misdeal && <MisdealButton busy={busy} run={misdeal} />}
       </div>
     )}

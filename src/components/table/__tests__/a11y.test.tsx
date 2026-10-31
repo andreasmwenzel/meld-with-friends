@@ -127,7 +127,8 @@ describe("accessible names and states at the table", () => {
     expect(screen.queryByRole("button", { name: /^(Pick a bid|Bid \d+)$/ })).toBeNull();
     const chips = [...document.querySelectorAll(".sr-only")].map((n) => n.textContent).filter((t) => t?.includes(": "));
     expect(chips.length).toBeGreaterThan(0);
-    for (const chip of chips) expect(chip).toMatch(/^.+: (bid \d+|passed|shooting the moon)$/);
+    for (const chip of chips) expect(chip).toMatch(/^.+: (bid \d+|passed|shooting the moon)(, the high bid)?$/);
+    expect(chips.filter((c) => c.endsWith(", the high bid"))).toHaveLength(1);
     // Every card is there to read, none can be pressed during the auction.
     expect(cards().every((c) => c.getAttribute("aria-disabled") === "true")).toBe(true);
   });
@@ -142,9 +143,9 @@ describe("accessible names and states at the table", () => {
     expect(screen.queryByText(/^Go set for/)).toBeNull();
   });
 
-  it("meld-waiting: says who the table is waiting for, with no meld buttons to press", async () => {
+  it("meld-waiting: says who the table is waiting for to screen readers only, with no meld buttons to press", async () => {
     await table("meld-waiting");
-    expect(screen.getByText(/^Waiting for .+ to finish melding\.$/)).toBeTruthy();
+    expect(screen.getByText(/^Waiting for .+ to finish melding\.$/).className).toContain("sr-only");
     expect(screen.queryByRole("button", { name: "Lay down" })).toBeNull();
     expect(screen.getByRole("group", { name: "Your hand" })).toBeTruthy();
   });

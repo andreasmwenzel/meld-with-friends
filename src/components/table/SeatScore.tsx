@@ -9,6 +9,8 @@ import { usePopover } from "./popover";
 /** What a chip shows beside a player's name: the taker's contract and total, or a defender's own meld and counters. */
 export interface SeatScore {
   dealer: boolean;
+  /** while bidding: this seat holds the high bid */
+  high?: boolean;
   /** the bid, "moon", or "–" for a pass */
   main: string | null; suit: Suit | null;
   /** the taking side's points this hand so far, or its change once the hand is scored */
@@ -51,7 +53,7 @@ export function seatScore(f: ScoreFacts, seat: SeatIndex, nameOf: (s: SeatIndex)
   const dealer = f.dealer === seat;
   if (f.phase === "bidding") {
     const bid = f.bids.filter(b => b.seat === seat).at(-1);
-    return { ...EMPTY(dealer), main: bid ? (bid.amount === null ? "–" : bid.shoot ? "moon" : String(bid.amount)) : null };
+    return { ...EMPTY(dealer), main: bid ? (bid.amount === null ? "–" : bid.shoot ? "moon" : String(bid.amount)) : null, high: f.highBid?.seat === seat };
   }
   const team = teamOf(seat);
   const record = f.history.find(h => h.handNumber === f.handNumber) ?? null;
@@ -160,7 +162,7 @@ export function ScoreTag({ score, name, align, placement = "below" }: { score: S
   const detail = score.top.length + score.meld.length + score.rows.length > 0;
   const body = score.main !== null ? (
     <>
-      <span className="font-semibold">{score.main}</span>
+      <span className="font-semibold" style={score.high ? { color: "var(--brass)" } : undefined}>{score.main}</span>
       {score.suit && <span style={{ color: suitInkOnCloth(score.suit, four) }}>{SUIT_GLYPH[score.suit]}</span>}
       {score.total !== null && <span className="ml-1 rounded-full bg-chalk/15 px-1.5 font-semibold tabular-nums">{score.total}</span>}
     </>
@@ -168,7 +170,7 @@ export function ScoreTag({ score, name, align, placement = "below" }: { score: S
   // "–" and "moon" read badly aloud: say what they mean.
   const call = score.main === "–" ? "passed" : score.main === "moon" ? "shooting the moon" : `bid ${score.main}`;
   const label = score.main !== null
-    ? `${name}: ${call}${score.suit ? ` in ${{ S: "spades", H: "hearts", D: "diamonds", C: "clubs" }[score.suit]}` : ""}${score.total !== null ? `, ${score.total} this hand` : ""}`
+    ? `${name}: ${call}${score.high ? ", the high bid" : ""}${score.suit ? ` in ${{ S: "spades", H: "hearts", D: "diamonds", C: "clubs" }[score.suit]}` : ""}${score.total !== null ? `, ${score.total} this hand` : ""}`
     : score.smallCounters ? `${name}: ${score.small}, meld and counters taken` : `${name}: meld ${score.small}`;
   const side = align === "left" ? "left-0" : align === "right" ? "right-0" : "left-1/2 -translate-x-1/2";
   const cls = "flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs leading-5";

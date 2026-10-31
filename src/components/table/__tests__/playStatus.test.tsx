@@ -60,10 +60,10 @@ const block = () => document.querySelector<HTMLElement>("[data-play-status]")!;
 const text = () => block().textContent ?? "";
 
 describe("trick play status above the hand", () => {
-  it("says it is your play and how to play", async () => {
+  it("says it is your play, and nothing more when any card will do", async () => {
     await table("play-lead");
     expect(text()).toContain("Your play.");
-    expect(text()).toContain("Tap a card to play it.");
+    expect(text()).not.toContain("Tap a card");
   });
 
   it("says the rule you must follow", async () => {
