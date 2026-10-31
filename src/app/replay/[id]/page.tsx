@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { ReplayLoader } from "@/components/replay/Replay";
+import { Dealing } from "@/components/site/TableScene";
 
 export const metadata: Metadata = {
   title: "Game replay · Meld",
@@ -11,7 +12,7 @@ export const metadata: Metadata = {
 export default function ReplayPage({ params }: PageProps<"/replay/[id]">) {
   return (
     <main className="flex flex-1 flex-col">
-      <Suspense fallback={<p className="px-6 py-10 text-chalk-faint">Dealing the hands back out.</p>}>
+      <Suspense fallback={<Dealing label="Dealing the hands back out." />}>
         <Viewer params={params} />
       </Suspense>
     </main>

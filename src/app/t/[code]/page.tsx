@@ -4,10 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 import { TableRoom } from "@/components/table/TableRoom";
 import { GuestStart } from "@/components/site/GuestStart";
 import { Wordmark } from "@/components/site/Wordmark";
+import { Dealing } from "@/components/site/TableScene";
 
 export default function TablePage({ params }: PageProps<"/t/[code]">) {
   return (
-    <Suspense fallback={<main className="flex-1 p-6 text-chalk-faint">Finding the table.</main>}>
+    <Suspense fallback={<main className="flex flex-1 flex-col"><Dealing label="Finding the table." /></main>}>
       <Room params={params} />
     </Suspense>
   );
