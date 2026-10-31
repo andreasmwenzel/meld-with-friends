@@ -16,14 +16,15 @@ vi.mock('@/lib/push', () => ({ usePushNotifications: () => ({ supported: false, 
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
 
 const spec = PRESETS.find(p => p.id === 'claim-all')!.spec;
-const animate = vi.fn(() => ({ cancel: vi.fn() }));
+/** Each animation and the element it runs on. */
+const animate = vi.fn(function (this: HTMLElement) { return { cancel: vi.fn() }; });
 
-async function table({ seat = 0 as SeatIndex, motion = 'normal', reduced = false, available = true } = {}) {
+async function table({ seat = 0 as SeatIndex, motion = 'normal', reduced = false, available = true, sort = undefined as object | undefined } = {}) {
   let server = buildScenario(available ? spec : PRESETS.find(p => p.id === 'play-lead')!.spec).state;
   const sent: Action[] = [];
   animate.mockClear();
   HTMLElement.prototype.animate = animate as unknown as typeof HTMLElement.prototype.animate;
-  localStorage.setItem('meld.cards', JSON.stringify({ motion }));
+  localStorage.setItem('meld.cards', JSON.stringify(sort ? { v: 2, motion, sort } : { motion }));
   window.matchMedia = ((query: string) => ({ matches: query.includes('prefers-reduced-motion') ? reduced : query.includes('max-width'), media: query, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia;
   const me = { id: `u${seat}`, handle: 'reader', display_name: 'Reader', avatar_seed: 'reader' };
   const snap = {
@@ -80,15 +81,31 @@ it.each([
   await t.claim();
   await vi.waitFor(() => expect(document.querySelector('[data-announcer]')?.textContent).toContain('South claims the rest.'));
   expect(document.querySelectorAll('[data-claim-card]')).toHaveLength(36);
-  expect(animate).toHaveBeenCalledTimes(72);
-  const sweeps = animate.mock.calls as unknown as [Keyframe[], KeyframeAnimationOptions][];
-  expect(sweeps[1][1]).toMatchObject({ delay, duration });
-  // South's nine claimed cards turn up one after another; the other hands all at once.
-  const owners = [...document.querySelectorAll('[data-claim-card]')].map(card => card.closest('[data-claim-seat]')?.getAttribute('data-claim-seat'));
-  const reveals = sweeps.filter((_, i) => i % 2 === 0).map(([, options]) => options.delay);
-  expect(reveals.filter((_, i) => owners[i] === '0')).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8].map(n => n * stepMs));
-  expect(reveals.filter((_, i) => owners[i] !== '0').every(d => !d)).toBe(true);
-  expect(sweeps.some(([frames]) => frames.some(frame => frame.transform !== undefined))).toBe(transforms);
+  const calls = animate.mock.calls as unknown as [Keyframe[], KeyframeAnimationOptions][];
+  const runs = calls.map(([frames, options], i) => ({ frames, options, on: animate.mock.contexts[i] as HTMLElement }));
+  const seatOf = (el: HTMLElement) => el.closest('[data-hand="mine"]') ? '1' : el.closest('[data-claim-seat]')?.getAttribute('data-claim-seat');
+  // South's nine cards stay on the table, face down, until each turns up in turn: never fewer cards than South holds.
+  const backs = [...document.querySelectorAll<HTMLElement>('[data-claim-back]')];
+  expect(backs).toHaveLength(9);
+  expect(backs.every(back => seatOf(back) === '0')).toBe(true);
+  expect(backs.map(back => runs.find(run => run.on === back)?.options.delay)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8].map(n => n * stepMs));
+  // With motion, each back goes the moment its card stands edge-on: halfway, on a linear clock eased per half.
+  // Without it, the backs fade.
+  const backRuns = backs.map(back => runs.find(run => run.on === back)!);
+  expect(backRuns.every(run => run.frames.length === (transforms ? 4 : 2))).toBe(true);
+  // Every card sweeps to South together after the hold.
+  const sweeping = runs.filter(run => run.options.delay === delay);
+  expect(sweeping).toHaveLength(36);
+  expect(sweeping[0].options).toMatchObject({ duration });
+  // Your own hand is already face up: it does not turn over again.
+  expect(runs.filter(run => seatOf(run.on) === '1' && run.options.delay !== delay)).toHaveLength(0);
+  // With motion, South's cards step toward the cloth and stay there until the sweep.
+  const steps = runs.filter(run => seatOf(run.on) === '0' && run.on.hasAttribute('data-claim-card') && run.options.delay !== delay);
+  expect(steps.length).toBe(transforms ? 9 : 0);
+  if (transforms) expect(steps.every(run => run.options.fill === 'both' && run.options.easing === 'linear'
+    && run.frames[1].offset === 0.5 && String(run.frames[1].transform).includes('rotateY(90deg)')
+    && String(run.frames.at(-1)!.transform).startsWith('translate('))).toBe(true);
+  expect(runs.some(({ frames }) => frames.some(frame => frame.transform !== undefined))).toBe(transforms);
   expect(screen.queryByRole('dialog')).toBeNull();
   await act(() => new Promise(r => setTimeout(r, delay + duration + 50)));
   expect(screen.getByRole('dialog')).toBeTruthy();
@@ -102,6 +119,20 @@ it.each([
   await act(() => { fireEvent.click(screen.getByRole('tab', { name: 'This hand' })); });
   expect(screen.getByText('South claimed the rest from trick 4. Remaining hands:')).toBeTruthy();
 }, 10000);
+
+it('walks the fan from its high end when the hand is sorted low cards first', async () => {
+  const t = await table({ seat: 1, sort: { suits: 'fixed', trump: 'right', ranks: 'low-first' } });
+  await t.claim();
+  await vi.waitFor(() => expect(document.querySelectorAll('[data-claim-back]')).toHaveLength(9));
+  const calls = animate.mock.calls as unknown as [Keyframe[], KeyframeAnimationOptions][];
+  const delayOf = (back: HTMLElement) => calls[animate.mock.contexts.indexOf(back)][1].delay;
+  const order = [...document.querySelectorAll<HTMLElement>('[data-claim-back]')]
+    .sort((a, b) => delayOf(a)! - delayOf(b)!).map(back => back.closest<HTMLElement>('[data-claim-card]')!.dataset.claimCard!.slice(0, 2));
+  // Sorted low cards first, the fan's high end is its last card: the claim walks the fan from there, card by card.
+  const fan = [...document.querySelectorAll<HTMLElement>('[data-claim-back]')].map(back => back.closest<HTMLElement>('[data-claim-card]')!.dataset.claimCard!.slice(0, 2));
+  expect(order).toEqual([...fan].reverse());
+  expect(fan.at(-1)).not.toBe(fan[0]);
+});
 
 it('keeps the reveal on its first deadline when the same view arrives again', async () => {
   const { renderHook } = await import('@testing-library/react');

@@ -14,7 +14,8 @@ export function ClaimButton({ busy, onClaim }: { busy: boolean; onClaim: () => v
  * Only a live transition animates. Reloads show the saved reveal without making the reader wait. While it is true the
  * table shows the hands as they stood at the claim; afterwards, the hands as played (Game.tsx).
  */
-export function useClaimReveal(view: PlayerView | null, motion: MotionPref, root: React.RefObject<HTMLElement | null>) {
+/** `highFirst`: the hand is sorted high cards first; otherwise the claim turns up from the other end of the fan. */
+export function useClaimReveal(view: PlayerView | null, motion: MotionPref, root: React.RefObject<HTMLElement | null>, highFirst = true) {
   const previous = useRef<PlayerView | null>(null);
   const [active, setActive] = useState<string | null>(null);
   const key = view?.claim ? `${view.handNumber}:${view.claim.fromTrick}:${view.rev}` : null;
@@ -40,37 +41,49 @@ export function useClaimReveal(view: PlayerView | null, motion: MotionPref, root
     const still = motion === "off";
     const { revealMs, stepMs, sweepAt, outMs } = claimTimings(motion, claim.hands[claim.seat].length);
     const animations: Animation[] = [];
-    let step = 0;
-    root.current.querySelectorAll<HTMLElement>("[data-claim-card]").forEach(card => {
+    const cards = [...root.current.querySelectorAll<HTMLElement>("[data-claim-card]")];
+    // Your own cards sit in your hand, outside your seat's plate.
+    const ownerOf = (card: HTMLElement) => Number(card.closest("[data-claim-seat]")?.getAttribute("data-claim-seat") ?? view.seat);
+    // Card by card along the fan, from its high end, whichever way the hand is sorted.
+    const fan = cards.filter(card => ownerOf(card) === claim.seat);
+    const turn = new Map((highFirst ? fan : [...fan].reverse()).map((card, n) => [card, n]));
+    cards.forEach(card => {
       if (!card.animate) return;
       const from = card.getBoundingClientRect();
       const scale = from.width / card.offsetWidth || 1;
-      // Your own cards sit in your hand, outside your seat's plate.
-      const owner = Number(card.closest("[data-claim-seat]")?.getAttribute("data-claim-seat") ?? view.seat);
+      const owner = ownerOf(card);
       const claimed = owner === claim.seat;
       // The claimer's cards step toward the cloth along the seat's own axis, as a card lifted to be played does.
       const fan = (card.closest("[data-hand]") ?? card).getBoundingClientRect();
       const dx = box.left + box.width / 2 - fan.left - fan.width / 2, dy = box.top + box.height / 2 - fan.top - fan.height / 2;
       const [px, py] = Math.abs(dx) > Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy) || -1];
-      const lift = claimed && !still ? `translate(${(px * CLAIM_STEP_PX) / scale}px, ${(py * CLAIM_STEP_PX) / scale}px)` : "none";
-      // The claimer already sees its own cards, so they only step out; everyone else sees each one turn up. Each stands
-      // out while the next turns up, then settles back into the fan.
-      const mine = claimed && owner === view.seat;
-      const first = still ? { opacity: mine ? 1 : 0 } : mine ? { transform: "none", opacity: 1 } : { transform: "rotateY(90deg)", opacity: 0 };
-      const out = still ? { opacity: 1 } : { transform: lift, opacity: 1 };
-      const settled = still ? { opacity: 1 } : { transform: "none", opacity: 1 };
-      const span = revealMs * 2 + stepMs;
-      animations.push(claimed
-        ? card.animate([{ ...first, offset: 0 }, { ...out, offset: revealMs / span }, { ...out, offset: (revealMs + stepMs) / span }, { ...settled, offset: 1 }],
-          { delay: step++ * stepMs, duration: span, easing: "ease-out", fill: "both" })
-        : card.animate([first, settled], { duration: revealMs, easing: "ease-out", fill: "backwards" }));
-      animations.push(card.animate([settled, still ? { opacity: 0 } : claimSweep(from, to, scale)],
+      const lx = claimed && !still ? (px * CLAIM_STEP_PX) / scale : 0, ly = claimed && !still ? (py * CLAIM_STEP_PX) / scale : 0;
+      const pose = (out: number, turn: number) => `translate(${lx * out}px, ${ly * out}px) rotateY(${turn}deg)`;
+      const mine = owner === view.seat;
+      const at = claimed ? (turn.get(card) ?? 0) * stepMs : 0;
+      // Someone else's claim lies face down (Game.tsx lays a back over each card), and each card turns over halfway
+      // through its step out. Your own cards are already face up, so as the claimer you see them only step out. They stay
+      // out until the sweep. The other hands turn up together at the start; yours, already face up, stays as it is.
+      const back = claimed ? card.querySelector<HTMLElement>("[data-claim-back]") : null;
+      // The back goes the moment the card stands edge-on, halfway; without motion it fades instead.
+      if (back) animations.push(back.animate(still ? [{ opacity: 1 }, { opacity: 0 }] : [{ opacity: 1 }, { opacity: 1, offset: 0.5 }, { opacity: 0, offset: 0.5 }, { opacity: 0 }],
+        { delay: at, duration: revealMs, fill: "both" }));
+      const hidden = !mine && !back;
+      if (!still && (claimed || !mine)) {
+        // Linear overall, eased per half, so the card is edge-on exactly halfway, when its back goes.
+        animations.push(card.animate(mine ? [{ transform: pose(0, 0), easing: "ease-out" }, { transform: pose(1, 0) }]
+          : [{ transform: pose(0, 0), opacity: hidden ? 0 : 1, easing: "ease-in" }, { transform: pose(0.5, 90), offset: 0.5, easing: "ease-out" }, { transform: pose(1, 0), opacity: 1 }],
+        { delay: at, duration: revealMs, easing: "linear", fill: claimed ? "both" : "backwards" }));
+      } else if (still && hidden) {
+        animations.push(card.animate([{ opacity: 0 }, { opacity: 1 }], { delay: at, duration: revealMs, fill: "backwards" }));
+      }
+      animations.push(card.animate([still ? { opacity: 1 } : { transform: pose(1, 0), opacity: 1 }, still ? { opacity: 0 } : claimSweep(from, to, scale)],
         { delay: sweepAt, duration: outMs, easing: "ease-in-out", fill: "forwards" }));
     });
     const elapsed = performance.now() - startedAt.current;
     animations.forEach(animation => { animation.currentTime = elapsed; });
     return () => animations.forEach(animation => animation.cancel());
-  }, [revealing, view, motion, root]);
+  }, [revealing, view, motion, root, highFirst]);
   useEffect(() => {
     if (!revealing) return;
     const left = claimTimings(motion, claimedCount).totalMs - (performance.now() - startedAt.current);
@@ -79,3 +92,4 @@ export function useClaimReveal(view: PlayerView | null, motion: MotionPref, root
   }, [revealing, claimedCount, motion]);
   return revealing;
 }
+

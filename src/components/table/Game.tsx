@@ -149,7 +149,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const motion = reducedMotion ? "off" : cardPrefs.motion;
   const { slideMs, holdMs, sweepMs } = motionTimings(motion);
   const claimRoot = useRef<HTMLDivElement>(null);
-  const revealingClaim = useClaimReveal(view, motion, claimRoot);
+  const revealingClaim = useClaimReveal(view, motion, claimRoot, cardPrefs.sort.ranks === "high-first");
   // The claim shows the hands as they stood when it was made, and only while it plays out; looking at the table after
   // it, the hands are as they were played (or as dealt), as at any hand's end. Without face-up hands the claim stays.
   const claimShown = view?.claim && (revealingClaim || !view.revealed) ? view.claim : null;
@@ -814,7 +814,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
       friend: uid && status ? { status, add: () => addFriend(uid), accept: () => acceptFriend(uid) } : undefined,
       makeHost, standIn, refresh: uid ? refreshMates : undefined,
     };
-    return { seat, view, name: person.name, person, actions, score: scoreOf(seat), faceUp: revealedFor(seat), laid: laidOf(seat).length, standIn, compact: short, fold };
+    return { seat, view, name: person.name, person, actions, score: scoreOf(seat), faceUp: revealedFor(seat), backed: revealingClaim && claimShown?.seat === seat,
+      laid: laidOf(seat).length, standIn, compact: short, fold };
   };
   const them: Team = myTeam === "red" ? "blue" : "red";
   const peekingResult = over && !recapOpen && peekKey === `${view.handNumber}-${view.phase}`;
@@ -1125,7 +1126,7 @@ const SIDE = { left: "west", center: "north", right: "east" } as const;
 const MELD_W = 28;
 
 /** A player round the table: the name chip with its score tag, then their cards (backs while playing, face up at the end). */
-function OpponentRow({ seat, view, name, person, actions, align, score, laid, standIn, faceUp, compact = false, fold = false, className = "" }: {
+function OpponentRow({ seat, view, name, person, actions, align, score, laid, standIn, faceUp, backed = false, compact = false, fold = false, className = "" }: {
   faceUp?: CardId[]; seat: SeatIndex; view: PlayerView; name: string; align: "left" | "center" | "right"; score: SeatScore;
   person: SeatPerson; actions: SeatActions;
   /** how many of their cards lie on the table as meld */
@@ -1134,6 +1135,8 @@ function OpponentRow({ seat, view, name, person, actions, align, score, laid, st
   standIn?: { away: boolean; run: () => void }; compact?: boolean; className?: string;
   /** the shoot was just declared: this seat's cards fold away as you watch */
   fold?: boolean;
+  /** this seat just claimed: its cards lie face down over their faces until each turns up (Claim.tsx) */
+  backed?: boolean;
 }) {
   const four = useCardPrefs().prefs.fourColour;
   // The engine keeps meld in the hand; while it lies on the table it is not among the backs.
@@ -1156,7 +1159,7 @@ function OpponentRow({ seat, view, name, person, actions, align, score, laid, st
     </>
   );
   if (compact) {
-    return <CompactSeat {...{ seat, className, team, active, name, person, actions, chip, score, n, faceUp, standIn, align }} setAside={sittingOut && !faceUp} />;
+    return <CompactSeat {...{ seat, className, team, active, name, person, actions, chip, score, n, faceUp, backed, standIn, align }} setAside={sittingOut && !faceUp} />;
   }
   const plate = (
     <PlayerMenu person={person} team={team} actions={actions} align={align} plate={side}
@@ -1179,8 +1182,14 @@ function OpponentRow({ seat, view, name, person, actions, align, score, laid, st
     {faceUp ? faceUp.map((c, i) => vertical ? (
       <div key={c} data-claim-card={c} className="relative shrink-0" style={{ width: (REV_W * 7) / 5, height: i === faceUp.length - 1 ? REV_W : 17, zIndex: align === "right" ? faceUp.length - i : i }}>
         <PlayingCard card={c} width={REV_W} fourColour={four} style={{ position: "absolute", left: "50%", top: REV_W / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg)` }} />
+        {backed && <span data-claim-back="" className="pointer-events-none absolute inset-0">
+          <CardBack width={REV_W} team={team} style={{ position: "absolute", left: "50%", top: REV_W / 2, transform: `translate(-50%, -50%) rotate(${align === "left" ? 90 : -90}deg)` }} />
+        </span>}
       </div>
-    ) : <span key={c} data-claim-card={c} style={{ marginLeft: i ? -REV_W * 0.45 : 0 }}><PlayingCard card={c} width={REV_W} fourColour={four} /></span>)
+    ) : <span key={c} data-claim-card={c} className="relative" style={{ marginLeft: i ? -REV_W * 0.45 : 0 }}>
+      <PlayingCard card={c} width={REV_W} fourColour={four} />
+      {backed && <span data-claim-back="" className="pointer-events-none absolute inset-0"><CardBack width={REV_W} team={team} /></span>}
+    </span>)
     : Array.from({ length: n }).map((_, i) => (
       <CardBack key={i} width={34} team={team}
         style={vertical ? { marginTop: i ? -40 : 0, transform: align === "left" ? "rotate(90deg)" : "rotate(-90deg)" } : { marginLeft: i ? -24 : 0 }} />
@@ -1237,10 +1246,10 @@ function OpponentRow({ seat, view, name, person, actions, align, score, laid, st
  * Hands shown at the end stay face up in a tight overlapping fan; across the table it goes under the name, since
  * beside it the fan would be squeezed into a tall column down the middle of the screen.
  */
-function CompactSeat({ seat, className, team, active, name, person, actions, chip, score, n, faceUp, standIn, align, setAside }: {
+function CompactSeat({ seat, className, team, active, name, person, actions, chip, score, n, faceUp, backed, standIn, align, setAside }: {
   seat: SeatIndex; setAside: boolean; person: SeatPerson; actions: SeatActions;
   className: string; team: Team; active: boolean; name: string; chip: React.ReactNode; score: SeatScore; n: number;
-  faceUp?: CardId[]; standIn?: { away: boolean; run: () => void }; align: "left" | "center" | "right";
+  faceUp?: CardId[]; backed: boolean; standIn?: { away: boolean; run: () => void }; align: "left" | "center" | "right";
 }) {
   const across = align === "center";
   return (
@@ -1265,7 +1274,7 @@ function CompactSeat({ seat, className, team, active, name, person, actions, chi
           <ScoreTag score={score} name={name} align={align} />
         </div>
       </div>
-      {faceUp && faceUp.length > 0 && <SmallFan cards={faceUp} perRow={across ? faceUp.length : 5} label={`${n} cards`} hand={SIDE[align]} />}
+      {faceUp && faceUp.length > 0 && <SmallFan cards={faceUp} perRow={across ? faceUp.length : 5} label={`${n} cards`} hand={SIDE[align]} backs={backed ? team : undefined} />}
       {/* As on an upright phone: no hover here, so the hand-off shows once a seat seems away, and making a host waits for a bigger screen. */}
       {standIn?.away && (
         <button type="button" onClick={standIn.run} className="tap max-w-[120px] text-center text-xs text-chalk-faint underline hover:text-chalk">
@@ -1277,8 +1286,9 @@ function CompactSeat({ seat, className, team, active, name, person, actions, chi
 }
 
 /** Small face-up cards overlapping so each shows only its corner index, wrapping after `perRow`. */
-/** `fly`: the meld shown again comes back from its seat, card after card, the way a played card reaches the trick. */
-function SmallFan({ cards, perRow, label, width = MELD_W, lit, hand, fly }: { cards: CardId[]; perRow: number; label: string; width?: number; lit?: CardId[] | null; hand?: string; fly?: 0 | 1 | 2 | 3 }) {
+/** `fly`: the meld shown again comes back from its seat, card after card, the way a played card reaches the trick.
+ *  `backs`: a claim just made, each card face down over its face until it turns up (Claim.tsx). */
+function SmallFan({ cards, perRow, label, width = MELD_W, lit, hand, fly, backs }: { cards: CardId[]; perRow: number; label: string; width?: number; lit?: CardId[] | null; hand?: string; fly?: 0 | 1 | 2 | 3; backs?: Team }) {
   const four = useCardPrefs().prefs.fourColour;
   const w = width, h = (w * 7) / 5, peekX = Math.round(w / 2), peekY = Math.round(w * 0.72);
   const cols = Math.min(perRow, cards.length);
@@ -1286,11 +1296,12 @@ function SmallFan({ cards, perRow, label, width = MELD_W, lit, hand, fly }: { ca
     <div data-hand={hand} data-hand-cards={hand ? cards.length : undefined} className="flex flex-wrap" role="group" aria-label={label} title={label}
       style={{ width: w + (cols - 1) * peekX + 0.5, paddingLeft: w - peekX, paddingTop: h - peekY }}>
       {cards.map((c, i) => (
-        <span key={c} data-claim-card={c} style={{ marginLeft: peekX - w, marginTop: peekY - h, flexShrink: 0 }}>
+        <span key={c} data-claim-card={c} className="relative" style={{ marginLeft: peekX - w, marginTop: peekY - h, flexShrink: 0 }}>
           {fly === undefined ? <PlayingCard card={c} width={w} fourColour={four} selected={lit?.includes(c) ?? false} />
             : <span className="meld-fly block" style={{ ...flyFrom(fly, c), "--md": `${Math.min(i, 8) * 35}ms` } as React.CSSProperties}>
               <PlayingCard card={c} width={w} fourColour={four} selected={lit?.includes(c) ?? false} />
             </span>}
+          {backs && <span data-claim-back="" className="pointer-events-none absolute inset-0"><CardBack width={w} team={backs} /></span>}
         </span>
       ))}
     </div>
