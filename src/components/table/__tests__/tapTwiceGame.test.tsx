@@ -73,6 +73,8 @@ const screenReaderPress = (button: HTMLElement) => act(() => { fireEvent.click(b
 
 /** The cards the table sent as plays. */
 const played = () => sent.filter((a) => a.type === "play_card").map((a) => a.card);
+/** Whether a hand card is lifted. */
+const pressed = (button: HTMLElement) => button.getAttribute("aria-pressed");
 /** The line above the hand that says what the next tap does. */
 const status = () => document.querySelector("p[role=status]")?.textContent ?? "";
 
@@ -80,7 +82,7 @@ describe("tap twice to play, through the table", () => {
   it("a quick second tap plays the card", async () => {
     const button = await table();
     await tap(button);
-    expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(pressed(button)).toBe("true");
     expect(status()).toBe("");
     await wait(150);
     await tap(button);
@@ -91,25 +93,32 @@ describe("tap twice to play, through the table", () => {
     const button = await table();
     await tap(button);
     await wait(DOUBLE_TAP_MS + 200);
+    expect(pressed(button)).toBe("true");
     expect(status()).toBe("");
     await tap(button);
     expect(played()).toEqual([]);
+    expect(pressed(button)).toBe("false");
     expect(status()).toBe("");
   });
 
   it("a long first press still lifts the card on the quick timing", async () => {
     const button = await table();
     await tap(button, 1500);
-    expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(pressed(button)).toBe("true");
     expect(status()).toBe("");
+    await wait(150);
+    await tap(button);
+    expect(played()).toEqual([view.legal.playableCards[0]]);
   });
 
   it("a second press held over a second is late and puts the card back", async () => {
     const button = await table();
     await tap(button);
     await wait(DOUBLE_TAP_MS + 100);
+    expect(pressed(button)).toBe("true");
     await tap(button, 1200);
     expect(played()).toEqual([]);
+    expect(pressed(button)).toBe("false");
     expect(status()).toBe("");
   });
 
