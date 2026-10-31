@@ -80,7 +80,8 @@ describe("tap twice to play, through the table", () => {
   it("a quick second tap plays the card", async () => {
     const button = await table();
     await tap(button);
-    expect(status()).toMatch(/tap again to play$/);
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(status()).toBe("");
     await wait(150);
     await tap(button);
     expect(played()).toEqual([view.legal.playableCards[0]]);
@@ -99,7 +100,8 @@ describe("tap twice to play, through the table", () => {
   it("a long first press still lifts the card on the quick timing", async () => {
     const button = await table();
     await tap(button, 1500);
-    expect(status()).toMatch(/tap again to play$/);
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(status()).toBe("");
   });
 
   it("a second press held over a second is late and puts the card back", async () => {
