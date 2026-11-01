@@ -64,7 +64,7 @@ export const CLAIM_STEP_PX = 14;
  */
 export function dealTimings(pref: MotionPref) {
   if (pref === "off") return null;
-  return pref === "quick" ? { packetMs: 30, cardMs: 10, flyMs: 180, turnMs: 120 } : { packetMs: 62, cardMs: 22, flyMs: 300, turnMs: 200 };
+  return pref === "quick" ? { packetMs: 60, cardMs: 20, flyMs: 360, turnMs: 240 } : { packetMs: 124, cardMs: 44, flyMs: 600, turnMs: 400 };
 }
 export const DEAL_PACKET = 3;
 
