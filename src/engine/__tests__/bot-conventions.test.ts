@@ -151,7 +151,9 @@ describe('bid-history sampling', () => {
   });
 
   it('gives aces to the seat that bid and takes them from the seat that passed', () => {
-    const { view } = playingView('weights');
+    const { view: played } = playingView('weights');
+    // Isolate auction weights from the passing policy and public meld ownership.
+    const view: PlayerView = { ...played, melds: [[], [], [], []], recap: { ...played.recap, myPassedOut: [] } };
     const [a, b] = [((view.seat + 1) % 4) as SeatIndex, ((view.seat + 3) % 4) as SeatIndex];
     const ace = (c: CardId) => c[0] === 'A';
     const flat = shares({ ...view, bids: [] }, ace);

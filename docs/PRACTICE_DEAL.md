@@ -36,13 +36,13 @@ opening hand still needs help from the partner and points from trick play.
   difference in meld. North's missing jack is hidden until the pass, so it is a
   retrospective teaching point rather than information available during bidding.
 - **Passing and meld.** With hearts trump, the actual partner bot passes KH0,
-  JH1, AD0 and AS0. This completes the run and adds two aces. Returning 9C0, KC1,
-  TC1 and KS0 is the existing bot's choice for South. It keeps seven hearts,
-  all four aces, and Q spades with J diamonds for the pinochle, while breaking
-  the spade marriage. The learner can compare keeping that marriage with keeping
-  the extra ace or trump. The resulting 20 meld is run 15, pinochle 4 and
-  dix 1. The royal marriage is part of the run and does not score separately.
-- **Trick play.** With 20 personal meld against a 26 bid, counters and the
+  JH1, AD0 and AS0. This completes the run and adds two aces. Returning JD0,
+  QS0, KC1 and KS0 is the bot's choice for South. It keeps seven hearts and
+  all its aces while moving the whole weak pinochle to North. Neither piece
+  has enough suit length and high-card control to justify keeping it for tricks.
+  South's resulting 16 meld is run 15 and dix 1; North can declare the pinochle's
+  4 points and the transferred spade marriage's 2 points instead. The royal marriage is part of the run and does not score separately.
+- **Trick play.** With 16 personal meld against a 26 bid, counters and the
   partner's contribution still matter. Observe follow-suit, heading and trumping
   obligations. A side must take a trick to save its meld.
 
@@ -52,9 +52,9 @@ The coach (`src/engine/coach/advice.ts`, tests in `src/engine/__tests__/advice.t
 the same teaching path. Its bid limit for South is 31: 11 heart meld, about 15 in tricks, about 2
 from a partner who passed, and the chance that North holds the J♥ for the run, less a small
 margin. It suggests the minimum, 26, which wins the auction.
-It names hearts. On the pass back it suggests 9♣, K♣, 10♣ and A♦ instead of the bot's K♠:
-that keeps the spade marriage for 22 meld, leaves South void in clubs, and the A♦ still wins
-for North. The bot's choice stays as it is, so the two can be compared. Once everyone has
+It names hearts. On the pass back it suggests 9♣, K♣, 10♣ and A♦, keeping the spade marriage
+and pinochle for 22 personal meld. That leaves South void in clubs, and the A♦ still wins
+for North. Compare that with the bot's choice to transfer the pinochle and keep its aces. Once everyone has
 melded, practice waits for "Start play" before a computer leads, so the meld can be read first.
 
 Card IDs use rank, suit and copy number, with `T` for ten. Tests verify the actual
