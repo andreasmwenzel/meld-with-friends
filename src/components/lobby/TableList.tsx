@@ -13,7 +13,7 @@ function company(chairs: TableChair[], mySeat: SeatIndex, teams: boolean) {
     const list = others.length <= 1 ? others[0] ?? "" : `${others.slice(0, -1).join(", ")} and ${others[others.length - 1]}`;
     return others.length ? `Hearts with ${list}` : "Hearts, nobody else yet";
   }
-  const partner = at(2).name ? `With ${firstName(at(2).name)}` : "No partner yet";
+  const partner = at(2).name ? `Pinochle with ${firstName(at(2).name)}` : "Pinochle, no partner yet";
   const them = [at(1), at(3)].map((c) => c.name && firstName(c.name)).filter(Boolean);
   return them.length ? `${partner} vs ${them.join(" and ")}` : partner;
 }
@@ -63,7 +63,7 @@ export function TableList({ tables }: { tables: TableSummary[] }) {
                 {t.fresh && <span className="sr-only">(new moves since your last visit)</span>}
               </p>
               <p className="mt-0.5 truncate text-sm text-chalk-faint" title={company(t.chairs, t.mySeat, gameInfo(t.kind).teams)}>
-{gameInfo(t.kind).teams ? "Pinochle. " : ""}{company(t.chairs, t.mySeat, gameInfo(t.kind).teams)}
+{company(t.chairs, t.mySeat, gameInfo(t.kind).teams)}
               </p>
             </div>
             <div className="shrink-0 text-right">
@@ -71,7 +71,7 @@ export function TableList({ tables }: { tables: TableSummary[] }) {
               {t.score && (
                 <p className="mt-1 text-sm tabular-nums text-chalk-faint">
                   {t.kind === "hearts"
-                    ? <><span className="sr-only">Your points </span>{t.score.us}<span aria-hidden>, best other </span><span className="sr-only">, best opponent </span>{t.score.them}</>
+                    ? <><span className="sr-only">Your points </span>{t.score.us}<br /><span className="text-xs"><span aria-hidden>low </span><span className="sr-only">, best opponent </span>{t.score.them}</span></>
                     : <><span className="sr-only">Score, you </span>{t.score.us}<span aria-hidden> to </span><span className="sr-only">, them </span>{t.score.them}</>}
                 </p>
               )}

@@ -315,7 +315,7 @@ export function HeartsBoard({ code, me, snap, onTableChange, connection = "ok", 
     // The panel in the middle names the hand and the winner; the line under your seat says what it did to the scores.
     if (moon !== null && lastHand) return view.rules.moon === "add" ? "Everyone else scores 26." : `${nameOf(moon)} ${moon === mySeat ? "score" : "scores"} −26.`;
     if (view.phase === "hand_over") return "Hand over.";
-    return view.winner !== null ? `${view.score[view.winner]} points. Lowest score wins.` : "Game over.";
+    return view.winner !== null ? `${nameOf(view.winner)} ${view.winner === mySeat ? "win" : "wins"} with ${view.score[view.winner]} points.` : "Game over.";
   })();
 
   const seatBlock = (r: Rel, className: string) => {
@@ -326,15 +326,16 @@ export function HeartsBoard({ code, me, snap, onTableChange, connection = "ok", 
       <div className={`${className} flex min-w-0 flex-col items-center gap-1`}>
         <SeatPlate seat={seat} view={view} person={person(seat)} actions={actionsFor(seat)} active={view.turn === seat && view.phase === "playing"}
           align={r === 1 ? "left" : r === 3 ? "right" : "center"} passed={view.phase === "passing" && view.passed[seat]} compact={phone} />
-        {!over && <div className={r === 2 ? "short:hidden" : ""}><Backs n={n} vertical={vertical} /></div>}
+        {!over && <div className={r === 2 ? "short:hidden" : ""}><Backs n={n} vertical={vertical} width={phone ? 24 : 30} /></div>}
       </div>
     );
   };
 
   const score = <Scoresheet view={view} nameOf={nameOf} />;
   const menu = (
-    <Popover label="Table menu" place="left-0 top-full mt-2 w-[min(92vw,22rem)]" buttonClassName="btn btn-ghost btn-compact hit"
-      button={<span className="flex items-center gap-2"><span className="code text-chalk" style={{ fontSize: 15, letterSpacing: ".1em" }}>{code}</span><span className="text-chalk-faint">Menu</span></span>}>
+    <div className="relative shrink-0">
+    <Popover label="Table menu" place="right-0 top-full mt-2 w-[min(92vw,22rem)] max-h-[calc(100dvh-4.5rem)]" buttonClassName="btn btn-ghost btn-compact hit"
+      button={<span className="text-chalk">Menu</span>}>
       <div className="flex flex-col gap-4 text-sm">
         <div className="flex items-center justify-between gap-3">
           <p className="text-chalk-faint">Hearts table <span className="code text-chalk" style={{ fontSize: 16, letterSpacing: ".1em" }}>{code}</span></p>
@@ -350,37 +351,38 @@ export function HeartsBoard({ code, me, snap, onTableChange, connection = "ok", 
         </details>
         <details>
           <summary className="tap cursor-pointer text-chalk-faint hover:text-chalk">Table look</summary>
-          <div className="panel mt-2 p-3"><LookOptions team="red" /></div>
+          <div className="panel mt-2 p-3"><LookOptions team="red" game="hearts" /></div>
         </details>
       </div>
     </Popover>
+    </div>
   );
 
   return (
     <div className="relative mx-auto flex h-full w-full max-w-5xl flex-1 flex-col px-3 pt-2 sm:px-6" data-motion={motion} data-back={look.back}>
       <div className="flex shrink-0 items-center justify-between gap-2">
-        {menu}
+        <p className="flex items-baseline gap-2 text-sm text-chalk-faint"><span className="code text-chalk" style={{ fontSize: 15, letterSpacing: ".1em" }}>{code}</span>Hand {view.handNumber}</p>
         <p role="status" aria-live="polite" className="min-w-0 flex-1 truncate text-center text-sm text-chalk-faint">{reconnecting ? "Reconnecting…" : ""}</p>
-        <p className="shrink-0 text-sm text-chalk-faint">Hand {view.handNumber}</p>
+        {menu}
       </div>
       {error && <p className="mt-2 text-center text-sm text-deck-red-soft">{error}</p>}
 
       {/* Upright: the table, then your seat and what to do, then your hand. A phone held sideways puts your seat and the
           prompt in a column to the right of the table, so the table keeps its height. */}
-      <div className="flex min-h-0 flex-1 flex-col short:flex-row short:items-stretch short:gap-4">
+      <div className="flex min-h-0 flex-1 flex-col justify-center-safe overflow-y-auto overscroll-contain short:flex-row short:items-stretch short:gap-4 short:overflow-visible">
         {/* the table: north across, west and east either side, the trick in the middle. It hugs its contents and sits in the
             middle of whatever room the screen leaves, so a tall phone and a wide desktop both keep the seats close to the trick. */}
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
-          <div className={`grid w-full max-w-[640px] items-center gap-x-2 gap-y-2 sm:gap-x-6 sm:gap-y-3 short:gap-y-2 ${over ? "grid-cols-3 grid-rows-[auto_auto]" : "grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[auto_auto]"}`}>
-            {seatBlock(2, "col-start-2 row-start-1 justify-self-center")}
-            {seatBlock(1, `col-start-1 row-start-1 ${over ? "justify-self-start" : "row-span-2 self-center"}`)}
-            {seatBlock(3, `col-start-3 row-start-1 ${over ? "justify-self-end" : "row-span-2 self-center"}`)}
+        <div className="flex min-h-0 flex-col items-center justify-center-safe short:flex-1 short:overflow-y-auto">
+          <div className={`grid w-full max-w-[640px] items-center gap-x-2 gap-y-2 sm:gap-x-6 sm:gap-y-3 short:gap-y-2 ${over ? "" : "mb-4 short:mb-0"} ${over ? "grid-cols-3 grid-rows-[auto_auto]" : "grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[auto_auto]"}`}>
+            {seatBlock(2, `col-start-2 row-start-1 justify-self-center ${over ? "short:hidden" : ""}`)}
+            {seatBlock(1, `col-start-1 row-start-1 ${over ? "justify-self-start short:hidden" : "row-span-2 self-center"}`)}
+            {seatBlock(3, `col-start-3 row-start-1 ${over ? "justify-self-end short:hidden" : "row-span-2 self-center"}`)}
             {over ? (
               <div className="col-span-3 row-start-2 flex justify-center">
-                <HandEnd view={view} nameOf={nameOf} moon={moon} mySeat={mySeat} sheetOpen={sheetOpen} setSheetOpen={setSheetOpen} />
+                <HandEnd view={view} nameOf={nameOf} moon={moon} mySeat={mySeat} sheetOpen={sheetOpen} setSheetOpen={setSheetOpen} phone={phone} />
               </div>
             ) : (
-              <div className="col-start-2 row-start-2 flex min-h-0 flex-col items-center justify-center py-2 short:py-0">
+              <div className="col-start-2 row-start-2 flex min-h-0 flex-col items-center justify-center py-2 short:py-0 short:mt-3">
                 {view.phase === "passing"
                   ? <PassSign view={view} nameOf={nameOf} rel={rel} width={trickWidth} />
                   : <Trick trick={trick} rel={rel} sweeping={!!shown?.sweeping} slideMs={slideMs} sweepMs={sweepMs} width={trickWidth} fourColour={prefs.fourColour} />}
@@ -393,7 +395,12 @@ export function HeartsBoard({ code, me, snap, onTableChange, connection = "ok", 
         <div className="mt-1 flex shrink-0 flex-col items-center gap-2 short:w-60 short:justify-center short:self-stretch">
           <SeatPlate seat={mySeat} view={view} person={person(mySeat)} actions={actionsFor(mySeat)} active={myTurn} align="center" placement="above"
             passed={view.phase === "passing" && view.passed[mySeat]} compact={phone} me />
-          <p className={`text-center text-sm ${myTurn || passing ? "text-chalk" : "text-chalk-faint"}`}>{status}</p>
+          {myTurn || passing
+            ? <p className="display text-center text-brass" style={{ fontSize: phone ? 20 : 24 }}>{status}</p>
+            : <p className="text-center text-sm text-chalk-faint">{status}</p>}
+          {armed && prefs.confirmPlay && myTurn && (
+            <button type="button" className="btn btn-brass btn-compact" disabled={busy} onClick={() => void act({ type: "play_card", card: armed })}>Play the {cardName(armed)}</button>
+          )}
           <p data-announcer="" className="sr-only" aria-live="polite" aria-atomic="true">{spoken}</p>
           <p className="sr-only" aria-live="polite">{armedLine}</p>
           {passing && (
@@ -423,7 +430,7 @@ export function HeartsBoard({ code, me, snap, onTableChange, connection = "ok", 
       </div>
 
       {/* your hand */}
-      <div className="hand-scroll mt-2 shrink-0 overflow-x-auto pt-4 short:mt-1 short:pt-3" style={{ paddingBottom: "max(.75rem, env(safe-area-inset-bottom))" }}>
+      <div className={`hand-scroll mt-2 shrink-0 overflow-x-auto pt-4 short:mt-1 short:pt-3 ${hand.length ? "" : "hidden"}`} style={{ paddingBottom: "max(.75rem, env(safe-area-inset-bottom))" }}>
         <Hand cards={hand} width={cardWidth} selected={selected} armed={armed} playable={playable} received={received}
           interactive={passing || myTurn} onTap={tapCard} prefs={prefs} why={myTurn ? `Not playable. ${reasonLine(view)}` : ""} />
       </div>
@@ -458,10 +465,9 @@ function SeatPlate({ seat, view, person, actions, active, align, placement = "be
         <span className="flex items-baseline gap-1.5">
           <span className="truncate font-semibold">{me ? "You" : person.name}</span>
           <span className="tabular-nums text-ink-soft" aria-label={`${view.score[seat]} points`}>{view.score[seat]}</span>
-          {view.dealer === seat && <span className="rounded-full bg-ink px-1 text-[10px] font-semibold leading-4 text-chalk" title="Dealer">D</span>}
         </span>
         <span className="flex h-4 items-center">
-          {passed ? <span className="text-xs text-ink-soft">passed</span> : <Ledger taken={taken} compact />}
+          {passed ? <span className="text-xs text-ink-soft">passed</span> : <Ledger taken={taken} compact={compact} />}
         </span>
       </span>
     </PlayerMenu>
@@ -469,8 +475,8 @@ function SeatPlate({ seat, view, person, actions, active, align, placement = "be
 }
 
 /** An opponent's cards, face down, overlapping; along the side seats they lie sideways. */
-function Backs({ n, vertical }: { n: number; vertical: boolean }) {
-  const w = 22, step = 7;
+function Backs({ n, vertical, width: w }: { n: number; vertical: boolean; width: number }) {
+  const step = Math.round(w * 0.32);
   if (n === 0) return <div style={{ height: vertical ? 0 : (w * 7) / 5 }} />;
   return (
     <div role="img" aria-label={`${n} ${n === 1 ? "card" : "cards"}`} className="relative shrink-0" style={vertical ? { width: (w * 7) / 5, height: w + (n - 1) * step } : { width: w + (n - 1) * step, height: (w * 7) / 5 }}>
@@ -498,7 +504,7 @@ function PassSign({ view, nameOf, rel, width }: { view: HeartsView; nameOf: (s: 
             style={{ left: i * 12, top: i * 4, transform: to === null ? undefined : `translate(${dx * (i + 1)}px, ${dy * (i + 1)}px) rotate(${(i - 1) * 4}deg)`, opacity: 1 - i * 0.12 }} />
         ))}
       </div>
-      <p className="text-center text-sm text-chalk-faint">{to === null ? "No pass this hand." : `Three cards go to ${nameOf(to)}.`}</p>
+      <p className="text-center text-sm text-chalk-faint">{to === null ? "No pass this hand" : `To ${nameOf(to)}`}</p>
     </div>
   );
 }
@@ -518,7 +524,9 @@ function Trick({ trick, rel, sweeping, slideMs, sweepMs, width, fourColour }: {
   const winner = trick?.winner != null ? rel(trick.winner) : 0;
   return (
     <div className="relative" style={{ width: box.w, height: box.h }}>
-      <div className="absolute inset-[-6%] rounded-[40%]" style={{ boxShadow: "inset 0 0 0 1.5px var(--chalk-ghost)" }} />
+      <div className="absolute inset-[-8%] rounded-[46%] border-[5px] border-cloth-edge"
+        style={{ background: "radial-gradient(ellipse at 50% 40%, color-mix(in srgb, var(--cloth), var(--cloth-edge)), var(--cloth-deep))", boxShadow: "inset 0 10px 30px rgba(0,0,0,.35)" }} />
+      <span aria-hidden className="pointer-events-none absolute inset-0 flex select-none items-center justify-center leading-none" style={{ fontSize: width * 1.5, color: "#fff", opacity: 0.07 }}>♥</span>
       {trick?.plays.map((p, i) => (
         <div key={`${p.card}`} className="absolute" style={{ ...spot[rel(p.seat)], zIndex: i + 1 }}>
           <div className="trick-card" data-sweep={sweeping ? "" : undefined}
@@ -571,7 +579,7 @@ function Hand({ cards, width, selected, armed, playable, received, interactive, 
             className="absolute bottom-0 block rounded-[12px] aria-disabled:cursor-default"
             style={{ left: i * step, transform: up ? `translateY(-${LIFT_PX}px)` : undefined, transition: "transform .16s ease", zIndex: i }}>
             <PlayingCard card={card} width={width} selected={up} dimmed={dim} prefs={prefs} />
-            {received.has(card) && <span aria-hidden className="absolute left-1/2 top-1 h-2 w-2 -translate-x-1/2 rounded-full bg-brass" style={{ boxShadow: "0 0 0 1.5px var(--chalk)" }} />}
+            {received.has(card) && <span aria-hidden className="absolute h-2 w-2 rounded-full bg-brass" style={{ left: Math.round(step / 2) - 4, top: Math.round(width * 0.62), boxShadow: "0 0 0 1.5px var(--chalk)" }} />}
           </button>
         );
       })}
@@ -580,16 +588,17 @@ function Hand({ cards, width, selected, armed, playable, received, interactive, 
 }
 
 /** The end of a hand in the middle of the table: the moon, if anyone shot it, then the scoresheet. */
-function HandEnd({ view, nameOf, moon, mySeat, sheetOpen, setSheetOpen }: {
-  view: HeartsView; nameOf: (s: SeatIndex) => string; moon: SeatIndex | null; mySeat: SeatIndex; sheetOpen: boolean; setSheetOpen: (open: boolean) => void;
+function HandEnd({ view, nameOf, moon, mySeat, sheetOpen, setSheetOpen, phone }: {
+  view: HeartsView; nameOf: (s: SeatIndex) => string; moon: SeatIndex | null; mySeat: SeatIndex; sheetOpen: boolean; setSheetOpen: (open: boolean) => void; phone: boolean;
 }) {
   const last = view.history[view.history.length - 1];
   const winner = view.winner;
   return (
     <div className="flex w-full max-w-md flex-col items-center gap-3">
       {moon !== null && (
-        <div className="moon-rise relative z-10 flex h-36 w-36 items-center justify-center rounded-full sm:h-44 sm:w-44" style={{ background: "var(--chalk)", boxShadow: "0 0 70px 14px rgba(245,239,227,.28), var(--shadow-card)" }}>
-          <span className="display text-center text-ink" style={{ fontSize: 26, lineHeight: 1 }}>{moon === mySeat ? "You shot" : `${nameOf(moon)} shot`}<br />the moon</span>
+        <div className="moon-rise relative z-10 flex h-36 w-36 flex-col items-center justify-center rounded-full sm:h-44 sm:w-44 short:h-24 short:w-24" style={{ background: "var(--chalk)", boxShadow: "0 0 70px 14px rgba(245,239,227,.28), var(--shadow-card)" }}>
+          <span className="display max-w-[82%] truncate text-center text-ink" style={{ fontSize: phone ? 22 : 26, lineHeight: 1.05 }}>{moon === mySeat ? "You" : nameOf(moon)}</span>
+          <span className="display text-center text-ink" style={{ fontSize: phone ? 22 : 26, lineHeight: 1.05 }}>shot the moon</span>
         </div>
       )}
       <div className="panel w-full p-3 sm:p-4">
@@ -618,7 +627,7 @@ function HandEnd({ view, nameOf, moon, mySeat, sheetOpen, setSheetOpen }: {
         <button type="button" className="tap-link mt-1 text-xs text-ink-soft underline underline-offset-2 hover:text-ink" aria-expanded={sheetOpen} onClick={() => setSheetOpen(!sheetOpen)}>
           {sheetOpen ? "Hide scorepad" : "Show scorepad"}
         </button>
-        {sheetOpen && <div className="mt-2 max-h-[30vh] overflow-y-auto"><Scoresheet view={view} nameOf={nameOf} bare /></div>}
+        {sheetOpen && <div className="mt-2 max-h-[min(30vh,9rem)] overflow-y-auto"><Scoresheet view={view} nameOf={nameOf} bare /></div>}
       </div>
     </div>
   );

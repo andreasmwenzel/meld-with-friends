@@ -24,14 +24,16 @@ export function FrontDoor({ children }: { children: ReactNode }) {
   );
 }
 
-/** The house's games, held in one hand at the foot of the screen: a card for each, and one face down for the next. Decorative; it crops when space runs short. */
+/** A hand held face down at the bottom edge of the screen, whichever game it is for. Decorative; it crops when space runs short. */
 function HeldHand() {
-  const cards = [<GameCard key="p" kind="pinochle" width={88} />, <GameCard key="h" kind="hearts" width={88} />, <CardBack key="b" width={88} team="red" />];
+  const n = 6, w = 80;
   return (
     <div aria-hidden className="pointer-events-none relative min-h-0 flex-1 overflow-hidden">
-      <div className="absolute left-1/2 top-3 flex -translate-x-1/2" style={{ width: 88 + 2 * 48 }}>
-        {cards.map((card, i) => (
-          <div key={i} className="absolute bottom-0" style={{ left: i * 48, transformOrigin: "50% 130%", transform: `rotate(${(i - 1) * 9}deg)` }}>{card}</div>
+      <div className="absolute left-1/2 top-3 -translate-x-1/2" style={{ width: w + (n - 1) * w * 0.42, height: (w * 7) / 5 + 40 }}>
+        {Array.from({ length: n }, (_, i) => (
+          <div key={i} className="absolute top-0" style={{ left: i * w * 0.42, transformOrigin: "50% 120%", transform: `rotate(${(i - (n - 1) / 2) * 8}deg)` }}>
+            <CardBack width={w} team={i % 2 ? "blue" : "red"} />
+          </div>
         ))}
       </div>
     </div>
@@ -42,9 +44,9 @@ function HeldHand() {
 function GameFan() {
   const w = 64;
   return (
-    <div aria-hidden className="pointer-events-none absolute right-0 top-1 hidden min-[380px]:block" style={{ width: w + 2 * 26, height: (w * 7) / 5 + 24 }}>
-      {[<GameCard key="p" kind="pinochle" width={w} />, <GameCard key="h" kind="hearts" width={w} />, <CardBack key="b" width={w} team="red" />].map((card, i) => (
-        <div key={i} className="absolute bottom-0" style={{ left: i * 26, zIndex: 3 - i, transformOrigin: "50% 140%", transform: `rotate(${(i - 1) * 10}deg)` }}>{card}</div>
+    <div aria-hidden className="pointer-events-none absolute right-0 top-1 hidden min-[380px]:block" style={{ width: w + 2 * 38, height: (w * 7) / 5 + 24 }}>
+      {[<CardBack key="b" width={w} team="red" />, <GameCard key="p" kind="pinochle" width={w} />, <GameCard key="h" kind="hearts" width={w} />].map((card, i) => (
+        <div key={i} className="absolute bottom-0" style={{ left: i * 38, zIndex: i, transformOrigin: "50% 140%", transform: `rotate(${(i - 1) * 10}deg)` }}>{card}</div>
       ))}
     </div>
   );

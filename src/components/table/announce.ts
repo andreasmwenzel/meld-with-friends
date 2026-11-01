@@ -39,5 +39,7 @@ export function speakLine(line: string, nameOf: (seat: SeatIndex) => string): st
     const who = nameOf(SEATS.indexOf(seat as (typeof SEATS)[number]) as SeatIndex);
     return `${prep} ${who === "You" ? "you" : who}`;
   });
+  // A score line names every seat: "Hand 4: South 0, West 7, North 14, East 5".
+  if (/^Hand \d+:/.test(out)) out = out.replace(/\b(South|West|North|East)\b/g, (seat) => nameOf(SEATS.indexOf(seat as (typeof SEATS)[number]) as SeatIndex));
   return out;
 }

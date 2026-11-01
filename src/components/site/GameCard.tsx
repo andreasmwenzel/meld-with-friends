@@ -22,7 +22,13 @@ function Mini({ x, y, r, index, red = false }: { x: number; y: number; r: number
   );
 }
 
-function Face({ kind }: { kind: GameKind }) {
+function Face({ kind, small }: { kind: GameKind; small: boolean }) {
+  if (small) {
+    // Under 64px the name is unreadable and the mini cards blur: one big pip says the game instead.
+    return kind === "hearts"
+      ? <><text x="50" y="86" fontSize="64" textAnchor="middle" fill="var(--pip-red)">♥</text><text x="72" y="128" fontSize="18" fontWeight={600} fontFamily="var(--font-bodoni), serif" fill="var(--pip-black)">Q♠</text></>
+      : <><Mini x={36} y={68} r={-14} index="Q♠" /><Mini x={64} y={64} r={11} index="J♦" red /></>;
+  }
   if (kind === "hearts") {
     return (
       <>
@@ -52,8 +58,8 @@ export function GameCard({ kind, width = 96, selected = false, className, style 
       style={{ display: "block", borderRadius: Math.max(4, width * 0.085), boxShadow: selected ? "0 0 0 3px var(--brass), var(--shadow-card)" : EDGE, transition: "box-shadow .16s ease, transform .16s ease", ...style }}>
       <rect width="100" height="140" rx="8.5" fill="var(--chalk)" />
       <rect x="6" y="6" width="88" height="128" rx="5" fill="none" stroke="rgba(36,29,29,.14)" strokeWidth="1" />
-      <Face kind={kind} />
-      <text x="50" y="122" textAnchor="middle" fontSize="15" fontStyle="italic" fontWeight={600} fontFamily="var(--font-bodoni), serif" fill="var(--ink)">{info.name}</text>
+      <Face kind={kind} small={width < 64} />
+      {width >= 64 && <text x="50" y="122" textAnchor="middle" fontSize="15" fontStyle="italic" fontWeight={600} fontFamily="var(--font-bodoni), serif" fill="var(--ink)">{info.name}</text>}
     </svg>
   );
 }

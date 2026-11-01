@@ -50,7 +50,7 @@ export function Scoresheet({ view, nameOf, bare = false }: { view: HeartsView; n
       <tfoot>
         <tr className="border-t-2 border-ink/30 font-semibold">
           <th scope="row" className="pt-1 text-left font-normal text-ink-soft">Total</th>
-          {ALL_SEATS.map((s) => <td key={s} className="pt-1 text-right" style={view.score[s] === lowest && view.history.length ? { color: "var(--brass-deep)" } : undefined}>{view.score[s]}</td>)}
+          {ALL_SEATS.map((s) => <td key={s} className="pt-1 text-right"><span className={view.score[s] === lowest && view.history.length ? "rounded px-1" : ""} style={view.score[s] === lowest && view.history.length ? { background: "var(--brass)", color: "var(--ink)" } : undefined}>{view.score[s]}</span></td>)}
         </tr>
       </tfoot>
     </table>
