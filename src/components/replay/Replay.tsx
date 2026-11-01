@@ -6,6 +6,7 @@ import type { SeatIndex, Team } from "@/engine/types";
 import type { ReplayPayload } from "@/engine/replay";
 import { api } from "@/lib/api";
 import { teamOf } from "@/components/table/types";
+import { Dealing, DeadEnd, TrickPiles } from "@/components/site/TableScene";
 import { ReplayBoard } from "./ReplayBoard";
 import { moveAtFrame, walk, type Move, type MoveKind } from "./model";
 
@@ -30,14 +31,12 @@ export function ReplayLoader({ id }: { id: string }) {
   }, [id]);
   if (error) {
     return (
-      <section className="mx-auto max-w-md px-6 py-16">
-        <h1 className="display" style={{ fontSize: 40 }}>Nothing to replay here.</h1>
-        <p className="mt-3 text-chalk-faint">{error}</p>
-        <Link href="/" className="btn btn-chalk mt-6">Back to your tables</Link>
-      </section>
+      <DeadEnd art={<TrickPiles />} title="Nothing to replay here." actions={<Link href="/" className="btn btn-chalk">Back to your tables</Link>}>
+        {error}
+      </DeadEnd>
     );
   }
-  if (!payload) return <p className="px-6 py-10 text-chalk-faint">Dealing the hands back out.</p>;
+  if (!payload) return <Dealing label="Dealing the hands back out." />;
   return <ReplayView key={payload.gameId} payload={payload} />;
 }
 
@@ -140,11 +139,9 @@ export function ReplayView({ payload }: { payload: ReplayPayload }) {
 
   if (!game.walk) {
     return (
-      <section className="mx-auto max-w-md px-6 py-16">
-        <h1 className="display" style={{ fontSize: 40 }}>This game will not replay.</h1>
-        <p className="mt-3 text-chalk-faint">The rules have changed since it was played, so its moves no longer line up. {game.error}</p>
-        <Link href="/" className="btn btn-chalk mt-6">Back to your tables</Link>
-      </section>
+      <DeadEnd art={<TrickPiles askew />} title="This game will not replay." actions={<Link href="/" className="btn btn-chalk">Back to your tables</Link>}>
+        The rules have changed since it was played, so its moves no longer line up. {game.error}
+      </DeadEnd>
     );
   }
   const { frames } = game.walk;

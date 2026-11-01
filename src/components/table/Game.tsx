@@ -22,6 +22,8 @@ import { canCountdownAdvance } from "./nextHandCountdown";
 import { Recap, useSeenReporting } from "./Recap";
 import { itemLabel } from "./meldLabel";
 import { NameChange } from "@/components/site/NameChange";
+import { Wordmark } from "@/components/site/Wordmark";
+import { CodeHand, Dealing, DeadEnd, EmptySeat, TrickPiles } from "@/components/site/TableScene";
 import { useOpponentPointsPref } from "@/lib/prefs";
 import { useCardPrefs } from "@/lib/cardPrefs";
 import { usePushNotifications } from "@/lib/push";
@@ -78,6 +80,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   const [lit, setLit] = useState<CardId[] | null>(null);
   const [bidSlot, setBidSlot] = useState<HTMLDivElement | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** The board would not load because you have no seat at this game (the view's "not_seated" refusal). */
+  const [unseated, setUnseated] = useState(false);
   const [busy, setBusy] = useState(false);
   /** Card lifted awaiting a second tap; only valid for the view revision it was lifted in.
    *  While `open`, a second tap plays it (the card wears its ring); once the window closes a tap puts it down. */
@@ -130,7 +134,10 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     apply: (next) => { inspect?.(next); setView(next); setDegraded(false); checkBuild(next); },
     onError: (e) => {
       if (isTransientError(e)) setDegraded(true);
-      else setError(e instanceof ApiError && e.status === 404 ? "No table has this code." : (e as Error).message);
+      else {
+        setUnseated(e instanceof ApiError && (e.data as { code?: string } | undefined)?.code === "not_seated");
+        setError(e instanceof ApiError && e.status === 404 ? "No table has this code." : (e as Error).message);
+      }
     },
   }));
   const reconnecting = connection === "reconnecting" || degraded;
@@ -671,10 +678,21 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
 
   // The table has no header, so until the board loads (or if it cannot, say for someone without a seat) keep a way out.
   if (!view) {
+    if (!error) return <Dealing label="Dealing." />;
+    const home = !local && <Link href="/" className="btn btn-chalk">Back to your tables</Link>;
     return (
-      <div className="flex-1 px-6 py-6 text-chalk-faint">
-        <p>{error ?? "Dealing."}</p>
-        {!local && <Link href="/" className="tap-link mt-2 inline-flex underline underline-offset-4 hover:text-chalk">Back to your tables</Link>}
+      <div className="flex flex-1 flex-col overflow-y-auto">
+        {!local && <header className="mx-auto flex w-full max-w-6xl items-center px-6 py-6"><Wordmark size={30} /></header>}
+        {unseated ? (
+          <DeadEnd art={<EmptySeat />} title="This table is full." actions={<>{home}
+            {!local && <Link href="/join" className="tap-link text-chalk-faint underline underline-offset-4 hover:text-chalk">Join another table</Link>}</>}>
+            Four players are already in this game, and only they can see its cards. Once it is over, any of them can send you a link to replay it.
+          </DeadEnd>
+        ) : error === "No table has this code." ? (
+          <DeadEnd art={<CodeHand code={code} />} title={error} actions={home}>Check the code with whoever dealt the table.</DeadEnd>
+        ) : (
+          <DeadEnd art={<TrickPiles askew />} title="The table did not load." actions={home}>{error}</DeadEnd>
+        )}
       </div>
     );
   }

@@ -22,7 +22,8 @@ async function loadGame(code: string, userId: string) {
   const admin = createAdminClient();
   const { data: seat, error: seatError } = await admin.from("seats").select("seat").eq("table_id", table.id).eq("user_id", userId).maybeSingle();
   checkDb(seatError);
-  if (!seat) throw new ApiError(403, "You must be seated to view or play this game");
+  // The code lets the board tell a missing seat apart from other refusals (a suspended account is a 403 too).
+  if (!seat) throw new ApiError(403, "You must be seated to view or play this game", { error: "You must be seated to view or play this game", code: "not_seated" });
   if (!table.current_game_id) throw new ApiError(404, "Game has not started");
   const { data: game, error } = await admin.from("games").select("id,state,rev,ready").eq("id", table.current_game_id).maybeSingle();
   checkDb(error);
