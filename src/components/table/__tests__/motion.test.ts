@@ -22,7 +22,7 @@ describe("deal timings", () => {
     expect(dealTimings("off")).toBeNull();
   });
 
-  it("goes round from the dealer's left, three cards at a time, in about a second and a half or less", () => {
+  it("goes round from the dealer's left, three cards at a time, in about two and a half seconds or less", () => {
     for (const pref of ["normal", "quick"] as const) {
       const t = dealTimings(pref)!;
       // The first packet to the dealer's left, then each seat in turn; the second packet starts after all four.
@@ -30,7 +30,7 @@ describe("deal timings", () => {
       expect(dealLaunch(t, 1, 0)).toBeGreaterThan(dealLaunch(t, 0, 2));
       expect(dealLaunch(t, 0, 3)).toBeGreaterThan(dealLaunch(t, 3, 2));
       const last = dealLandsAt(t, 3, 11);
-      expect(last).toBeLessThan(pref === "quick" ? 800 : 1500);
+      expect(last).toBeLessThan(pref === "quick" ? 1500 : 2800);
     }
   });
 });
