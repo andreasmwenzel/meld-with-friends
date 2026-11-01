@@ -1,13 +1,14 @@
 import { z } from "zod";
 import { body, json, requireUser } from "@/server/http";
-import { rulesSchema } from "@/server/validation";
+import { gameKindSchema, rulesSchemaFor } from "@/server/validation";
 import { createTable } from "@/server/tables";
 import { notifyInvited } from "@/server/realtime";
 
 export async function POST(request: Request) {
   return json(async () => {
     const { user } = await requireUser();
-    const input = await body(request, z.object({ gameKind: z.literal("pinochle").default("pinochle"), rules: rulesSchema.default({}), groupId: z.uuid().optional() }).strict());
+    const input = await body(request, z.object({ gameKind: gameKindSchema.default("pinochle"), rules: z.record(z.string(), z.unknown()).default({}), groupId: z.uuid().optional() }).strict());
+    rulesSchemaFor(input.gameKind).parse(input.rules);
     if (!input.groupId) return createTable(input.gameKind, input.rules, user.id);
     // One transaction seats the host and invites the group; a failure deals nothing and reaches the host as an error.
     const { invited, ...table } = await createTable(input.gameKind, input.rules, user.id, input.groupId);

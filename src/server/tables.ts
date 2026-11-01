@@ -3,22 +3,22 @@ import { movePublicKey } from "./moveSigning";
 import { bump } from "./metrics";
 import { getSettings } from "./settings";
 import { enforce } from "./limits";
-import { resolveRules } from "@/engine/scoring";
-import { newGame } from "@/engine";
-import type { GameState, RulesConfig, SeatIndex } from "@/engine/types";
+import { newGameFor, resolveRulesFor, type AnyRules, type AnyState } from "@/engine/dispatch";
+import type { GameKind } from "@/engine/kinds";
+import type { SeatIndex } from "@/engine/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateTableCode } from "@/lib/codes";
 import { ApiError, checkDb } from "./errors";
 import { broadcastTable } from "./realtime";
 import { scheduleRematchTalk } from "./botTableTalk";
-import { codeSchema, rulesSchema } from "./validation";
+import { codeSchema, rulesSchemaFor } from "./validation";
 
 export interface PausedTable { by: string; name: string; reason: string | null; at: string }
 
 export interface TableRow {
   paused_by?: string | null; paused_reason?: string | null; paused_at?: string | null;
-  id: string; code: string; host: string; game_kind: "pinochle";
-  status: "open" | "playing" | "finished"; current_game_id: string | null; rules: Partial<RulesConfig>; created_at: string;
+  id: string; code: string; host: string; game_kind: GameKind;
+  status: "open" | "playing" | "finished"; current_game_id: string | null; rules: AnyRules; created_at: string;
 }
 export interface Profile { id: string; handle: string; display_name: string; avatar_seed: string; created_at: string }
 export interface Seat { table_id: string; seat: SeatIndex; user_id: string | null; bot: string | null; profile: Profile | null }
@@ -28,7 +28,7 @@ export async function tableByCode(code: string): Promise<TableRow> {
   const { data, error } = await createAdminClient().from("tables").select("*").eq("code", codeSchema.parse(code)).maybeSingle();
   checkDb(error);
   if (!data) throw new ApiError(404, "Table not found");
-  return { ...data, rules: resolveRules(data.rules) } as TableRow;
+  return { ...data, rules: resolveRulesFor(data.game_kind, data.rules) } as TableRow;
 }
 
 /**
@@ -36,7 +36,7 @@ export async function tableByCode(code: string): Promise<TableRow> {
  * group in the same transaction (deal_for_group), so the host is never locked out and never gets a
  * table whose invitations failed.
  */
-export async function createTable(gameKind: "pinochle", rules: Partial<RulesConfig>, userId: string, groupId?: string): Promise<TableRow & { invited?: string[] }> {
+export async function createTable(gameKind: GameKind, rules: unknown, userId: string, groupId?: string): Promise<TableRow & { invited?: string[] }> {
   const { limits } = await getSettings();
   await enforce(`tables:${userId}`, limits.tablesPerHour, 3600);
   const admin = createAdminClient();
@@ -44,7 +44,7 @@ export async function createTable(gameKind: "pinochle", rules: Partial<RulesConf
   checkDb(count.error);
   if ((count.count ?? 0) >= limits.maxOpenTablesPerHost) { bump("rate_limited"); throw new ApiError(429, "Slow down: too many unfinished tables"); }
   for (let attempt = 0; attempt < 8; attempt++) {
-    const args = { p_code: generateTableCode(), p_user: userId, p_kind: gameKind, p_rules: resolveRules(rulesSchema.parse(rules)) };
+    const args = { p_code: generateTableCode(), p_user: userId, p_kind: gameKind, p_rules: resolveRulesFor(gameKind, rulesSchemaFor(gameKind).parse(rules)) };
     const { data, error } = groupId
       ? await admin.rpc("deal_for_group", { ...args, p_group: groupId })
       : await admin.rpc("create_table", args);
@@ -61,13 +61,13 @@ export async function joinTable(code: string, userId: string) {
   return getTableSnapshot(code, userId);
 }
 
-export async function updateTableRules(code: string, rules: Partial<RulesConfig>, userId: string) {
+export async function updateTableRules(code: string, rules: unknown, userId: string) {
   const table = await tableByCode(code);
   if (table.host !== userId) throw new ApiError(403, "Only the host may change rules");
   if (table.status !== "open") throw new ApiError(409, "Rules can only change while the table is open");
-  const validatedRules = rulesSchema.parse(rules);
+  const validatedRules = rulesSchemaFor(table.game_kind).parse(rules);
   const { data, error } = await createAdminClient().from("tables")
-    .update({ rules: resolveRules(validatedRules) }).eq("id", table.id).eq("host", userId).eq("status", "open")
+    .update({ rules: resolveRulesFor(table.game_kind, validatedRules) }).eq("id", table.id).eq("host", userId).eq("status", "open")
     .select("id").maybeSingle();
   checkDb(error);
   if (!data) throw new ApiError(409, "Table changed before rules could be updated");
@@ -113,7 +113,7 @@ export async function answerSeatTrade(offerId: string, accept: boolean, userId: 
 export async function startGame(code: string, userId: string) {
   const table = await tableByCode(code);
   if (table.host !== userId) throw new ApiError(403, "Only the host may start");
-  const state = newGame(crypto.randomUUID(), table.rules);
+  const state = newGameFor(table.game_kind, crypto.randomUUID(), table.rules);
   const { error } = await createAdminClient().rpc("start_game", { p_table: table.id, p_user: userId, p_state: state });
   checkDb(error);
   await broadcastTable(table.code, { type: "game", rev: state.rev });
@@ -175,9 +175,9 @@ export async function rematch(code: string, userId: string) {
     .eq("id", table.current_game_id).maybeSingle();
   checkDb(gameError);
   if (!game) throw new ApiError(409, "Game has not started");
-  const previous = game.state as GameState;
+  const previous = game.state as AnyState;
   if (table.status !== "finished" && previous.phase !== "game_over") throw new ApiError(409, "Game is still in progress");
-  const state = newGame(crypto.randomUUID(), table.rules, ((previous.dealer + 1) % 4) as SeatIndex);
+  const state = newGameFor(table.game_kind, crypto.randomUUID(), table.rules, ((previous.dealer + 1) % 4) as SeatIndex);
   const { error } = await admin.rpc("rematch_game", {
     p_table: table.id, p_user: userId, p_previous: game.id, p_rules: table.rules, p_state: state,
   });

@@ -1,13 +1,19 @@
 import Link from "next/link";
 import type { SeatIndex } from "@/engine/types";
 import type { TableChair, TableSummary } from "@/lib/tableStatus";
+import { gameInfo } from "@/engine/kinds";
 
 const firstName = (name: string | null) => name?.trim().split(/\s+/)[0] ?? "";
 
-/** "With Sam vs Lee and Jo", from where you sit. */
-function company(chairs: TableChair[], mySeat: SeatIndex) {
+/** "With Sam vs Lee and Jo" at a partnership table, "Against Sam, Lee and Jo" at hearts, from where you sit. */
+function company(chairs: TableChair[], mySeat: SeatIndex, teams: boolean) {
   const at = (offset: number) => chairs[(mySeat + offset) % 4];
-  const partner = at(2).name ? `With ${firstName(at(2).name)}` : "No partner yet";
+  if (!teams) {
+    const others = [at(1), at(2), at(3)].map((c) => c.name && firstName(c.name)).filter((n): n is string => !!n);
+    const list = others.length <= 1 ? others[0] ?? "" : `${others.slice(0, -1).join(", ")} and ${others[others.length - 1]}`;
+    return others.length ? `Hearts with ${list}` : "Hearts, nobody else yet";
+  }
+  const partner = at(2).name ? `Pinochle with ${firstName(at(2).name)}` : "Pinochle, no partner yet";
   const them = [at(1), at(3)].map((c) => c.name && firstName(c.name)).filter(Boolean);
   return them.length ? `${partner} vs ${them.join(" and ")}` : partner;
 }
@@ -16,7 +22,7 @@ function company(chairs: TableChair[], mySeat: SeatIndex) {
  * The table seen from above with you in the near chair, partner across, opponents either side.
  * The chair the table is waiting on is lit.
  */
-export function MiniTable({ chairs, mySeat, size = 36 }: { chairs: TableChair[]; mySeat: SeatIndex; size?: number }) {
+export function MiniTable({ chairs, mySeat, size = 36, teams = true }: { chairs: TableChair[]; mySeat: SeatIndex; size?: number; teams?: boolean }) {
   const dot = Math.round(size * 0.46);
   const box = size + dot;
   // Chair centres on the felt's edges: bottom, left, top, right. The next seat sits on your left, as at the real table.
@@ -26,7 +32,7 @@ export function MiniTable({ chairs, mySeat, size = 36 }: { chairs: TableChair[];
       <div className="absolute rounded-[5px]" style={{ inset: dot / 2, background: "var(--cloth-deep)", boxShadow: "inset 0 0 0 1.5px var(--cloth-edge)" }} />
       {chairs.map((c) => {
         const [x, y] = spots[(c.seat - mySeat + 4) % 4];
-        const team = c.seat % 2 === 0 ? "var(--deck-red-soft)" : "var(--deck-blue-soft)";
+        const team = !teams ? "var(--chalk-faint)" : c.seat % 2 === 0 ? "var(--deck-red-soft)" : "var(--deck-blue-soft)";
         const look = c.up
           ? { background: "var(--brass)", color: "var(--ink)", boxShadow: "0 0 0 2px var(--cloth), 0 0 10px 1px rgba(214,166,74,.55)" }
           : c.name
@@ -49,20 +55,24 @@ export function TableList({ tables }: { tables: TableSummary[] }) {
       {tables.map((t) => (
         <li key={t.code}>
           <Link href={`/t/${t.code}`} className="group flex items-center gap-3.5 py-3 no-underline">
-            <MiniTable chairs={t.chairs} mySeat={t.mySeat} />
+            <MiniTable chairs={t.chairs} mySeat={t.mySeat} teams={gameInfo(t.kind).teams} />
             <div className="min-w-0 flex-1">
               <p className={`flex items-baseline gap-2 leading-snug ${t.yours ? "font-semibold text-brass" : "text-chalk"}`}>
                 {t.fresh && <span className="inline-block h-2 w-2 shrink-0 -translate-y-px rounded-full bg-brass" title="New moves since your last visit" />}
                 <span className="min-w-0 [overflow-wrap:anywhere]">{t.line}</span>
                 {t.fresh && <span className="sr-only">(new moves since your last visit)</span>}
               </p>
-              <p className="mt-0.5 truncate text-sm text-chalk-faint" title={company(t.chairs, t.mySeat)}>{company(t.chairs, t.mySeat)}</p>
+              <p className="mt-0.5 truncate text-sm text-chalk-faint" title={company(t.chairs, t.mySeat, gameInfo(t.kind).teams)}>
+{company(t.chairs, t.mySeat, gameInfo(t.kind).teams)}
+              </p>
             </div>
             <div className="shrink-0 text-right">
               <p className="code text-chalk group-hover:text-brass" style={{ fontSize: 15, letterSpacing: ".08em" }}>{t.code}</p>
               {t.score && (
                 <p className="mt-1 text-sm tabular-nums text-chalk-faint">
-                  <span className="sr-only">Score, you </span>{t.score.us}<span aria-hidden> to </span><span className="sr-only">, them </span>{t.score.them}
+                  {t.kind === "hearts"
+                    ? <><span className="sr-only">Your points </span>{t.score.us}<br /><span className="text-xs"><span aria-hidden>low </span><span className="sr-only">, best opponent </span>{t.score.them}</span></>
+                    : <><span className="sr-only">Score, you </span>{t.score.us}<span aria-hidden> to </span><span className="sr-only">, them </span>{t.score.them}</>}
                 </p>
               )}
             </div>

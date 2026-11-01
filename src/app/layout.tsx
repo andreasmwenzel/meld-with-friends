@@ -16,9 +16,9 @@ const albert = Albert_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Meld — pinochle with your friends",
+  title: "Meld — cards with your friends",
   description:
-    "Pull up a chair. Meld is a free online card table for pinochle: invite friends with a short code, pick your seats, and play in real time.",
+    "Pull up a chair. Meld is a free online card table for pinochle and hearts: invite friends with a short code, pick your seats, and play in real time.",
   appleWebApp: { capable: true, title: "Meld", statusBarStyle: "black-translucent" },
   icons: {
     icon: [

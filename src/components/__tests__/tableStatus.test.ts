@@ -5,7 +5,7 @@ import type { SeatIndex } from "@/engine/types";
 const ME = "me";
 function facts(over: Partial<TableFacts> = {}, game: Partial<NonNullable<TableFacts["game"]>> | null = {}): TableFacts {
   return {
-    code: "BCDFGH", status: "playing", host: ME, pausedBy: null, createdAt: "2026-10-01T00:00:00Z",
+    code: "BCDFGH", kind: "pinochle", status: "playing", host: ME, pausedBy: null, createdAt: "2026-10-01T00:00:00Z",
     seats: [
       { seat: 0, userId: ME, bot: null, name: "Andreas Wenzel" },
       { seat: 1, userId: "lee", bot: null, name: "Lee" },
@@ -14,7 +14,7 @@ function facts(over: Partial<TableFacts> = {}, game: Partial<NonNullable<TableFa
     ],
     game: game && {
       rev: 10, updatedAt: "2026-10-02T00:00:00Z", phase: "bidding", turn: 0, winner: null,
-      score: { red: 82, blue: 64 }, meldConfirmed: [false, false, false, false], ready: [], ...game,
+      score: { red: 82, blue: 64 }, awaiting: [false, false, false, false], ready: [], ...game,
     },
     lastSeenRev: 10,
     ...over,
@@ -44,7 +44,7 @@ describe("summarizeTable", () => {
   });
 
   it("lists everyone still to meld", () => {
-    const s = summarizeTable(facts({}, { phase: "melding", turn: null, meldConfirmed: [true, false, true, false] }), ME)!;
+    const s = summarizeTable(facts({}, { phase: "melding", turn: null, awaiting: [true, false, true, false] }), ME)!;
     expect(s.line).toBe("Waiting on Lee and Jo to meld");
     expect(s.yours).toBe(false);
   });

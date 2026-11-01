@@ -1,11 +1,30 @@
 import type { CSSProperties } from "react";
-import type { CardId, Suit, Rank } from "@/engine/types";
+import type { CardId, Suit } from "@/engine/types";
+import type { HeartsCardId, StdRank } from "@/engine/hearts/types";
 import type { CardPrefs } from "@/lib/cardPrefs";
+
+/** A pinochle card ("AS0", two of each) or a standard-deck card ("2C", one of each). Rank and suit are the first two letters of both. */
+export type AnyCardId = CardId | HeartsCardId;
+type Rank = StdRank;
 
 export const SUIT_GLYPH: Record<Suit, string> = { S: "♠", H: "♥", D: "♦", C: "♣" };
 export const SUIT_NAME: Record<Suit, string> = { S: "spades", H: "hearts", D: "diamonds", C: "clubs" };
-export const RANK_LABEL: Record<Rank, string> = { A: "A", T: "10", K: "K", Q: "Q", J: "J", "9": "9" };
-const RANK_NAME: Record<Rank, string> = { A: "ace", T: "ten", K: "king", Q: "queen", J: "jack", "9": "nine" };
+export const RANK_LABEL: Record<Rank, string> = { A: "A", T: "10", K: "K", Q: "Q", J: "J", "9": "9", "8": "8", "7": "7", "6": "6", "5": "5", "4": "4", "3": "3", "2": "2" };
+const RANK_NAME: Record<Rank, string> = { A: "ace", T: "ten", K: "king", Q: "queen", J: "jack", "9": "nine", "8": "eight", "7": "seven", "6": "six", "5": "five", "4": "four", "3": "three", "2": "two" };
+
+/** Pip positions for the number cards, in the 100x140 face; `r` pips stand on their heads in the lower half. */
+type Pip = [number, number, boolean?];
+const PIPS: Partial<Record<Rank, Pip[]>> = {
+  "2": [[50, 48], [50, 112, true]],
+  "3": [[50, 48], [50, 80], [50, 112, true]],
+  "4": [[36, 48], [64, 48], [36, 112, true], [64, 112, true]],
+  "5": [[36, 48], [64, 48], [50, 80], [36, 112, true], [64, 112, true]],
+  "6": [[36, 48], [64, 48], [36, 80], [64, 80], [36, 112, true], [64, 112, true]],
+  "7": [[36, 48], [64, 48], [50, 64], [36, 80], [64, 80], [36, 112, true], [64, 112, true]],
+  "8": [[36, 48], [64, 48], [50, 64], [36, 80], [64, 80], [50, 98, true], [36, 112, true], [64, 112, true]],
+  "9": [[36, 46], [64, 46], [36, 64], [64, 64], [50, 76], [36, 94, true], [64, 94, true], [36, 112, true], [64, 112, true]],
+  T: [[36, 44], [64, 44], [36, 62], [64, 62], [50, 53], [36, 92, true], [64, 92, true], [36, 110, true], [64, 110, true], [50, 101, true]],
+};
 
 export function suitInk(suit: Suit, fourColour: boolean): string {
   if (suit === "H") return "var(--pip-red)";
@@ -22,17 +41,17 @@ export function suitInkOnCloth(suit: Suit, fourColour: boolean): string {
   return "var(--chalk)";
 }
 
-export function splitCard(id: CardId): { rank: Rank; suit: Suit } {
+export function splitCard(id: AnyCardId): { rank: Rank; suit: Suit } {
   return { rank: id[0] as Rank, suit: id[1] as Suit };
 }
 
-export function cardName(id: CardId): string {
+export function cardName(id: AnyCardId): string {
   const { rank, suit } = splitCard(id);
   return `${RANK_NAME[rank]} of ${SUIT_NAME[suit]}`;
 }
 
 type Props = {
-  card: CardId;
+  card: AnyCardId;
   /** width in px; height follows the 5:7 card ratio */
   width?: number;
   selected?: boolean;
@@ -51,7 +70,7 @@ type Props = {
 };
 
 /**
- * A pinochle card. Chalk face, Bodoni rank, one large pip. Pure SVG so it scales from a 36px
+ * A playing card, from either deck. Chalk face, Bodoni rank, one large pip. Pure SVG so it scales from a 36px
  * trick thumbnail to a 220px hero card without losing its edge.
  */
 export function PlayingCard({ card, width = 96, selected, dimmed, className, style, title, prefs, trump, fourColour, tint }: Props) {
@@ -114,24 +133,10 @@ export function PlayingCard({ card, width = 96, selected, dimmed, className, sty
         </g>
       ) : rank === "A" ? (
         <text x="50" y="88" textAnchor="middle" fontSize="60" fill={ink}>{SUIT_GLYPH[suit]}</text>
-      ) : rank === "T" ? (
-        <g fill={ink} fontSize="20" textAnchor="middle">
-          {[
-            [36, 44], [64, 44], [36, 62], [64, 62], [50, 53],
-            [36, 92], [64, 92], [36, 110], [64, 110], [50, 101],
-          ].map(([x, y], i) => (
-            <text key={i} x={x} y={y} transform={i >= 5 ? `rotate(180 ${x} ${y - 6})` : undefined}>
-              {SUIT_GLYPH[suit]}
-            </text>
-          ))}
-        </g>
       ) : (
         <g fill={ink} fontSize="20" textAnchor="middle">
-          {[
-            [36, 46], [64, 46], [36, 64], [64, 64], [50, 76],
-            [36, 94], [64, 94], [36, 112], [64, 112],
-          ].map(([x, y], i) => (
-            <text key={i} x={x} y={y} transform={i >= 5 ? `rotate(180 ${x} ${y - 6})` : undefined}>
+          {(PIPS[rank] ?? []).map(([x, y, flip], i) => (
+            <text key={i} x={x} y={y} transform={flip ? `rotate(180 ${x} ${y - 6})` : undefined}>
               {SUIT_GLYPH[suit]}
             </text>
           ))}

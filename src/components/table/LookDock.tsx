@@ -20,7 +20,7 @@ function CogIcon() {
  * The table's look and every card option: the cloth, the pattern on the backs, then the deck, size and hand order.
  * Each choice applies at once, so the popover can show the table changing behind it.
  */
-export function LookOptions({ team, trump = null }: { team: Team; trump?: Suit | null }) {
+export function LookOptions({ team, trump = null, game = "pinochle" }: { team: Team; trump?: Suit | null; game?: "pinochle" | "hearts" }) {
   const { look, update } = useCardPrefs();
   const clothName = CLOTHS.find(([c]) => c === look.cloth)?.[1];
   const backName = BACKS.find(([b]) => b === look.back)?.[1];
@@ -54,11 +54,11 @@ export function LookOptions({ team, trump = null }: { team: Team; trump?: Suit |
             </button>
           ))}
         </div>
-        <p className="text-xs text-ink-soft">Backs keep each team&apos;s colour.</p>
+        {game === "pinochle" && <p className="text-xs text-ink-soft">Backs keep each team&apos;s colour.</p>}
       </div>
       <div className="flex flex-col gap-2.5 border-t border-chalk-dim pt-3">
         <p className="text-sm font-semibold text-ink">Cards</p>
-        <CardOptionsPanel trump={trump} />
+        <CardOptionsPanel trump={trump} game={game} />
       </div>
     </div>
   );

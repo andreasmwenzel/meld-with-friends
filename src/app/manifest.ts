@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Meld",
     short_name: "Meld",
     description:
-      "Pull up a chair. Meld is a free online card table for pinochle: invite friends with a short code, pick your seats, and play in real time.",
+      "Pull up a chair. Meld is a free online card table for pinochle and hearts: invite friends with a short code, pick your seats, and play in real time.",
     start_url: "/",
     display: "standalone",
     background_color: CLOTH,

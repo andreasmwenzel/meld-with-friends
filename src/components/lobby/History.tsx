@@ -6,8 +6,13 @@ import { api } from "@/lib/api";
 
 /** One finished game as `/api/history` returns it. */
 export interface HistoryEntry {
-  gameId: string; code: string; finishedAt: string; score: { red: number; blue: number };
+  gameId: string; code: string; finishedAt: string;
+  /** pinochle: by team; hearts: by seat */
+  score: Record<string, number>;
+  kind?: "pinochle" | "hearts";
   myTeam: "red" | "blue"; won: boolean; abandoned: boolean; hands: number; partner: string; opponents: [string, string];
+  /** hearts: everyone at the table in seat order with their final score */
+  players?: { seat: number; name: string; me: boolean; score: number }[];
 }
 
 const fmt = new Intl.NumberFormat("en-US");
@@ -45,9 +50,36 @@ export function HistoryList({ rows }: { rows: HistoryEntry[] }) {
   const unfinished = rows.filter((g) => g.abandoned).length;
   return (
     <>
-      <p className="mt-2 text-sm text-chalk-faint">{won} won, {rows.length - won - unfinished} lost{unfinished > 0 ? `, ${unfinished} unfinished` : ""}. Tap a game to replay it.</p>
+      <p className="mt-2 text-sm text-chalk-faint">{won} won, {rows.length - won - unfinished} lost{unfinished > 0 ? `, ${unfinished} unfinished` : ""}. Tap a pinochle game to replay it.</p>
       <ul className="mt-3 flex flex-col divide-y divide-chalk-ghost">
         {rows.map((g) => {
+          const hearts = g.kind === "hearts" && g.players;
+          const hands = g.abandoned && g.hands === 0 ? "hand 1" : `${g.hands} ${g.hands === 1 ? "hand" : "hands"}`;
+          const result = <span className={!g.abandoned && g.won ? "font-semibold text-brass" : "text-chalk-faint"}>{g.abandoned ? "Unfinished" : g.won ? "Won" : "Lost"}</span>;
+          const code = (
+            <div className="shrink-0 text-right">
+              <p className={`code text-chalk ${hearts ? "" : "group-hover:text-brass"}`} style={{ fontSize: 15, letterSpacing: ".08em" }}>{g.code}</p>
+              <p className="mt-1 text-sm text-chalk-faint"><time dateTime={g.finishedAt}>{finished(g.finishedAt)}</time></p>
+            </div>
+          );
+          if (hearts) {
+            // A hearts game: your points, then everyone in seat order. No replay for hearts yet (#157), so the row is not a link.
+            const me = g.players!.find((p) => p.me);
+            const table = g.players!.map((p) => `${p.me ? "You" : firstName(p.name)} ${fmt.format(p.score)}`).join(", ");
+            return (
+              <li key={g.gameId} className="flex min-h-11 items-center gap-4 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="leading-snug">
+                    {result}{" "}
+                    <span className="tabular-nums text-chalk">{me ? `with ${fmt.format(me.score)}` : ""}</span>
+                    <span className="text-chalk-faint"> at hearts in {hands}</span>
+                  </p>
+                  <p className="mt-0.5 truncate text-sm text-chalk-faint" title={table}>{table}</p>
+                </div>
+                {code}
+              </li>
+            );
+          }
           const mine = g.score[g.myTeam];
           const theirs = g.score[g.myTeam === "red" ? "blue" : "red"];
           const full = `With ${g.partner} vs ${g.opponents[0]} and ${g.opponents[1]}`;
@@ -57,9 +89,9 @@ export function HistoryList({ rows }: { rows: HistoryEntry[] }) {
                 <div className="min-w-0 flex-1">
                   <p className="leading-snug">
                     <span className="sr-only">Replay: </span>
-                    <span className={!g.abandoned && g.won ? "font-semibold text-brass" : "text-chalk-faint"}>{g.abandoned ? "Unfinished" : g.won ? "Won" : "Lost"}</span>{" "}
+                    {result}{" "}
                     <span className="tabular-nums text-chalk">{fmt.format(mine)} to {fmt.format(theirs)}</span>
-                    <span className="text-chalk-faint"> in {g.abandoned && g.hands === 0 ? "hand 1" : `${g.hands} ${g.hands === 1 ? "hand" : "hands"}`}</span>
+                    <span className="text-chalk-faint"> in {hands}</span>
                   </p>
                   {/* Screen readers get the full names; the visible line keeps first names and may truncate. */}
                   <p className="mt-0.5 truncate text-sm text-chalk-faint" title={full}>
@@ -67,10 +99,7 @@ export function HistoryList({ rows }: { rows: HistoryEntry[] }) {
                     <span className="sr-only">{full}</span>
                   </p>
                 </div>
-                <div className="shrink-0 text-right">
-                  <p className="code text-chalk group-hover:text-brass" style={{ fontSize: 15, letterSpacing: ".08em" }}>{g.code}</p>
-                  <p className="mt-1 text-sm text-chalk-faint"><time dateTime={g.finishedAt}>{finished(g.finishedAt)}</time></p>
-                </div>
+                {code}
               </Link>
             </li>
           );

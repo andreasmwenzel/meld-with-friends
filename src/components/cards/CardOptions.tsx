@@ -60,7 +60,9 @@ function OrderPreview({ sort, trump, fourColour, tint }: { sort: HandSortPrefs; 
 }
 
 /** Every card and table preference, as rows of pills. The table's menu shows it inline. */
-export function CardOptionsPanel({ trump = null }: { trump?: Suit | null }) {
+/** `game` hides the rows that mean nothing at a hearts table (trump tint, meld, opponent points, hand order). */
+export function CardOptionsPanel({ trump = null, game = "pinochle" }: { trump?: Suit | null; game?: "pinochle" | "hearts" }) {
+  const pinochle = game === "pinochle";
   const { prefs, size, update } = useCardPrefs();
   const sort = (patch: Partial<HandSortPrefs>) => update({ sort: { ...prefs.sort, ...patch } });
   const { hideOpponentPoints, setHideOpponentPoints } = useOpponentPointsPref();
@@ -77,26 +79,26 @@ export function CardOptionsPanel({ trump = null }: { trump?: Suit | null }) {
       <Row label="Size">
         {SIZES.map(([s, l]) => <Pill key={s} on={size === s} onClick={() => update({ size: s })}>{l}</Pill>)}
       </Row>
-      <Row label="Trump tint">
+      {pinochle && <Row label="Trump tint">
         <Pill on={prefs.trumpTint} onClick={() => update({ trumpTint: true })}>On</Pill>
         <Pill on={!prefs.trumpTint} onClick={() => update({ trumpTint: false })}>Off</Pill>
-      </Row>
+      </Row>}
       <Row label="Tap twice to play" stacked description={prefs.confirmPlay ? "The first tap lifts a card. Tap it again quickly to play it, or later to put it back." : "A tap plays the card."}>
         <Pill on={prefs.confirmPlay} onClick={() => update({ confirmPlay: true })}>On</Pill>
         <Pill on={!prefs.confirmPlay} onClick={() => update({ confirmPlay: false })}>Off</Pill>
       </Row>
-      <Row label="Meld" stacked description={prefs.autoMeld ? "Your best meld is laid down for you." : "Pick your meld cards and lay them down. Cards that score are outlined."}>
+      {pinochle && <Row label="Meld" stacked description={prefs.autoMeld ? "Your best meld is laid down for you." : "Pick your meld cards and lay them down. Cards that score are outlined."}>
         <Pill on={prefs.autoMeld} onClick={() => update({ autoMeld: true })}>Automatic</Pill>
         <Pill on={!prefs.autoMeld} onClick={() => update({ autoMeld: false })}>Pick my own</Pill>
-      </Row>
-      <Row label="Opponent points" stacked description="Always shown when the hand ends.">
+      </Row>}
+      {pinochle && <Row label="Opponent points" stacked description="Always shown when the hand ends.">
         <Pill on={!hideOpponentPoints} onClick={() => setHideOpponentPoints(false)}>Shown</Pill>
         <Pill on={hideOpponentPoints} onClick={() => setHideOpponentPoints(true)}>Hidden</Pill>
-      </Row>
+      </Row>}
       <Row label="Motion" stacked description="Off also follows your device's reduced-motion setting.">
         {MOTIONS.map(([motion, label]) => <Pill key={motion} on={prefs.motion === motion} onClick={() => update({ motion })}>{label}</Pill>)}
       </Row>
-      <div role="group" aria-label="Hand order" className="flex flex-col gap-2.5">
+      {pinochle && <div role="group" aria-label="Hand order" className="flex flex-col gap-2.5">
         <p className="text-sm text-ink-soft">Hand order</p>
         <Row label="Trump" stacked>
           {PLACEMENTS.map(([placement, label]) => <Pill key={placement} on={prefs.sort.trump === placement} onClick={() => sort({ trump: placement })}>{label}</Pill>)}
@@ -108,7 +110,7 @@ export function CardOptionsPanel({ trump = null }: { trump?: Suit | null }) {
           {RANKS.map(([ranks, label]) => <Pill key={ranks} on={prefs.sort.ranks === ranks} onClick={() => sort({ ranks })}>{label}</Pill>)}
         </Row>
         <OrderPreview sort={prefs.sort} trump={trump} fourColour={prefs.fourColour} tint={prefs.trumpTint} />
-      </div>
+      </div>}
     </>
   );
 }

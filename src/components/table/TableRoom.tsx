@@ -10,6 +10,7 @@ import { CodeHand, Dealing, DeadEnd } from "@/components/site/TableScene";
 import { AccountMenu } from "@/components/site/AccountMenu";
 import { Seating } from "./Seating";
 import { Game } from "./Game";
+import { HeartsBoard } from "@/components/hearts/HeartsBoard";
 import { Chat, useTableChat } from "./Chat";
 import { createGameFeed, routeTableEvent } from "./viewSync";
 import type { Snapshot } from "./types";
@@ -63,9 +64,10 @@ export function TableRoom({ code, me, guest = false }: { code: string; me: Profi
   const atBoard = snap.table.status === "playing" || snap.table.status === "finished";
   // At the board the table is the whole screen: the table code and the way out live in its menu, table talk in its corner button.
   if (atBoard) {
+    const Board = snap.table.game_kind === "hearts" ? HeartsBoard : Game;
     return (
       <main className="flex h-dvh flex-col overflow-hidden">
-        <Game key={snap.table.current_game_id ?? ""} connection={connection} code={code} me={me} snap={snap} guest={guest} feed={feed} onTableChange={refresh}
+        <Board key={snap.table.current_game_id ?? ""} connection={connection} code={code} me={me} snap={snap} guest={guest} feed={feed} onTableChange={refresh}
           chat={snap.mySeat !== null ? chat : undefined} />
       </main>
     );

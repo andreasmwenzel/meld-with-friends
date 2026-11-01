@@ -210,3 +210,24 @@ only while the page is mounted. The invitation card is static here (no session, 
 
 `/dev/game` (`?play`, `?meld`, `?end=1`, `?return`, `?shoot=`, `?redeal`, `?ready`) and `/dev/seating`
 still work. The lab covers everything `/dev/game` does.
+
+## Hearts
+
+`/dev/hearts` is a hearts table played in the browser against the engine's computer players; nothing is
+saved. `?state=` puts it in a position: `passing` (default), `play`, `midhand`, `late`, `hand-over`, `moon`
+(a finished hand with a moon written in), `game-over`. `?seed=` changes the deal, `?run=0` keeps the
+computer players still so a screenshot is the exact position. `/dev/seating?game=hearts` is the seating
+screen for a hearts table.
+
+`scripts/shots.mjs` knows only the pinochle lab presets, so shoot hearts by hand at every breakpoint:
+
+```
+mkdir -p .dev/shots
+for s in passing play hand-over moon game-over; do for sz in 390,844 360,640 844,390 768,1024 1440,900; do
+  google-chrome --headless --hide-scrollbars --virtual-time-budget=7000 --screenshot=.dev/shots/hearts-$s-$sz.png --window-size=$sz "http://localhost:3000/dev/hearts?state=$s&run=0"
+done; done
+```
+
+`scripts/fuzz.mjs` fuzzes the pinochle engine only; the hearts engine's own fuzz lives in its tests
+(`src/engine/hearts/__tests__`, fifty seeded games to the end).
+

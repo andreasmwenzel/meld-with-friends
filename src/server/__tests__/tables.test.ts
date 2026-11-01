@@ -94,7 +94,7 @@ it.each(['game', 'points'])('normalizes stored %s shooting rules before a table 
   mocks.from.mockReturnValueOnce(query({ data: { ...table, rules: { scoring: 'modern', shoot, shootPoints: 100 } }, error: null }));
   const { tableByCode } = await import('@/server/tables');
   const read = await tableByCode(table.code);
-  expect(read.rules.shoot).toBe('on');
+  expect((read.rules as { shoot?: string }).shoot).toBe('on');
   expect(read.rules).not.toHaveProperty('shootPoints');
 });
 

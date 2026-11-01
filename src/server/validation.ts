@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { resolveRules } from "@/engine/scoring";
 import { normalizeCode } from "@/lib/codes";
+import { GAME_KINDS, type GameKind } from "@/engine/kinds";
+
+export const gameKindSchema = z.enum(GAME_KINDS.map((g) => g.id) as [GameKind, ...GameKind[]]);
 
 export const codeSchema = z.string().transform(normalizeCode).pipe(z.string().regex(/^[23456789BCDFGHJKMNPQRSTVWXYZ]{6}$/, "Invalid table code"));
 export const idSchema = z.uuid();
@@ -38,8 +41,25 @@ export const rulesSchema = z.object({
   check(rules.lastTrickBonus <= 50 * factor, "lastTrickBonus", "Last trick bonus exceeds scoring scale maximum");
   check(!modern || rules.counting !== "classic", "counting", "Old-style counting requires classic scoring");
 });
+export const heartsRulesSchema = z.object({
+  pace: z.enum(["live", "leisurely"]).optional(),
+  target: z.union([z.literal(50), z.literal(75), z.literal(100), z.literal(150), z.literal(200)]).optional(),
+  passing: z.enum(["rotate", "none"]).optional(),
+  moon: z.enum(["add", "subtract"]).optional(),
+  jackOfDiamonds: z.boolean().optional(),
+  noPointsFirstTrick: z.boolean().optional(),
+}).strict();
+/** The house rules a table of this kind accepts. */
+export function rulesSchemaFor(kind: GameKind) { return kind === "hearts" ? heartsRulesSchema : rulesSchema; }
+
 const card = z.templateLiteral([z.enum(["A","T","K","Q","J","9"]), z.enum(["S","H","D","C"]), z.union([z.literal(0),z.literal(1)])]);
 const cards = z.array(card).max(12).refine(v => new Set(v).size === v.length, "Duplicate cards");
+const heartsCard = z.templateLiteral([z.enum(["2","3","4","5","6","7","8","9","T","J","Q","K","A"]), z.enum(["S","H","D","C"])]);
+export const heartsActionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("pass_cards"), seat: seatSchema, cards: z.array(heartsCard).length(3).refine(v => new Set(v).size === v.length, "Duplicate cards") }).strict(),
+  z.object({ type: z.literal("play_card"), seat: seatSchema, card: heartsCard }).strict(),
+  z.object({ type: z.literal("next_hand"), seat: seatSchema }).strict(),
+]);
 export const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("bid"), seat: seatSchema, amount: z.number().int().positive() }).strict(),
   z.object({ type: z.literal("pass_bid"), seat: seatSchema }).strict(),
@@ -55,6 +75,8 @@ export const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("concede"), seat: seatSchema }).strict(),
   z.object({ type: z.literal("next_hand"), seat: seatSchema }).strict(),
 ]);
+/** Any game's action; the engine of the table's kind rejects one meant for the other game. */
+export const anyActionSchema = z.union([actionSchema, heartsActionSchema]);
 export const handleSchema = z.string().trim().toLowerCase().regex(/^[a-z0-9_]{3,32}$/);
 export const MAX_GROUP_MEMBERS = 12;
 export const groupNameSchema = z.string().trim().min(1, "Name the group").max(40, "Keep the name under 40 characters");
