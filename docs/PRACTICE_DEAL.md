@@ -37,11 +37,11 @@ opening hand still needs help from the partner and points from trick play.
   retrospective teaching point rather than information available during bidding.
 - **Passing and meld.** With hearts trump, the actual partner bot passes KH0,
   JH1, AD0 and AS0. This completes the run and adds two aces. Returning JD0,
-  QS0, KC1 and 9C0 is the bot's choice for South. It keeps seven hearts and
+  QS0, KC1 and KS0 is the bot's choice for South. It keeps seven hearts and
   all its aces while moving the whole weak pinochle to North. Neither piece
   has enough suit length and high-card control to justify keeping it for tricks.
   South's resulting 16 meld is run 15 and dix 1; North can declare the pinochle's
-  4 points instead. The royal marriage is part of the run and does not score separately.
+  4 points and the transferred spade marriage's 2 points instead. The royal marriage is part of the run and does not score separately.
 - **Trick play.** With 16 personal meld against a 26 bid, counters and the
   partner's contribution still matter. Observe follow-suit, heading and trumping
   obligations. A side must take a trick to save its meld.

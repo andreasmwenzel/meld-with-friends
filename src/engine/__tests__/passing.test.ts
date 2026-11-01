@@ -99,6 +99,31 @@ describe('passing conventions', () => {
     });
   }
 
+  for (const phase of ['passing_to_bidder', 'passing_back'] as const) {
+    it(`does not turn a double pinochle into two singles during ${phase}`, () => {
+      const hand: CardId[] = ['QS0', 'QS1', 'JD0', 'JD1', 'TH0', '9H0', '9C0', '9C1', 'TC0', 'JC0', 'KD0', '9D0'];
+      const view = { ...passingView(hand, 4, phase), trump: 'H' as const };
+      const pass = choosePass(view);
+      expect(pass.filter(c => c.startsWith('QS') || c.startsWith('JD'))).toHaveLength(0);
+      const kept = hand.filter(c => !pass.includes(c));
+      expect(computeMeld(kept, 'H').items.some(m => m.kind === 'double_pinochle')).toBe(true);
+    });
+  }
+
+  for (const scoring of ['modern', 'classic'] as const) {
+    it(`returns one whole marriage rather than splitting two in ${scoring} scoring`, () => {
+      const hand: CardId[] = ['AH0', 'AH1', 'TH0', 'TH1', 'KH0', 'QH0', 'JH0', 'AS0', 'AD0', 'AC0', 'KC0', 'QC0', 'KD0', 'QD0', '9C0', 'JC0'];
+      const view = passingView(hand, 4, 'passing_back');
+      view.trump = 'H'; view.rules = { ...view.rules, scoring };
+      const pass = choosePass(view);
+      expect(pass).toEqual(expect.arrayContaining(['9C0', 'JC0']));
+      expect(pass.includes('KC0')).toBe(pass.includes('QC0'));
+      expect(pass.includes('KD0')).toBe(pass.includes('QD0'));
+      expect(pass.every(c => c[1] !== 'H' && c[0] !== 'A')).toBe(true);
+      expect(computeMeld(hand.filter(c => !pass.includes(c)), 'H', view.rules).total).toBe(scoring === 'modern' ? 27 : 270);
+    });
+  }
+
   it('returns twelve distinct cards from an enlarged bidder hand', () => {
     const hand = buildDeck().slice(0, 24);
     const view = passingView(hand, 12, 'passing_back');

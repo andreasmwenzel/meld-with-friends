@@ -33,7 +33,12 @@ export function choosePass(view: PlayerView) {
   const hand = [...new Set(view.hand)].sort();
   const count = view.legal.mustPassCount!;
   const meld = new Set(computeMeld(hand, view.trump!, view.rules).items.flatMap(m => m.cards));
-  const splitPinochle = (passed: CardId[], kept: CardId[]) => pinochles(hand) - pinochles(kept) - pinochles(passed);
+  const meldPoints = (cards: CardId[], onlyPinochle = false) => computeMeld(cards, view.trump!, view.rules).items
+    .filter(m => !onlyPinochle || m.kind === 'pinochle' || m.kind === 'double_pinochle')
+    .reduce((n, m) => n + m.points, 0);
+  const originalMeld = meldPoints(hand), originalPinochle = meldPoints(hand, true);
+  const splitPinochle = (passed: CardId[], kept: CardId[]) => originalPinochle - meldPoints(kept, true) - meldPoints(passed, true);
+  const meldLost = (passed: CardId[], kept: CardId[]) => originalMeld - meldPoints(kept) - meldPoints(passed);
   const value = (c: CardId) => (suitOf(c) === view.trump ? 100 : 0) + (c[0] === 'A' ? 60 : 0)
     + (meld.has(c) ? 30 : 0) + (pinochlePiece(c) ? 12 : 0) + strength(c);
   if (view.phase !== 'passing_to_bidder') {
@@ -49,28 +54,46 @@ export function choosePass(view: PlayerView) {
     const returnValue = (c: CardId) => value(c)
       - (suitOf(c) !== view.trump && 'KQ'.includes(c[0]) && !meld.has(c) && !pinochlePiece(c) ? 5 : 0)
       - (returnPieces && pinochlePiece(c) ? 1000 : 0);
-    // Only the at-most-four pinochle pieces interact. Fill each candidate with
-    // the cheapest ordinary cards instead of enumerating a 24-card return hand.
-    const ordinary = hand.filter(c => !pinochlePiece(c))
+    // Enumerate counts within meld-relevant faces, not subsets of the enlarged
+    // hand. At most eight two-copy faces: 3^8 = 6561 candidates, not C(24,12).
+    const relevant = hand.filter(c => pinochlePiece(c) || (suitOf(c) !== view.trump && 'KQ'.includes(c[0])
+      && hand.some(mate => mate[1] === c[1] && mate[0] === (c[0] === 'K' ? 'Q' : 'K'))));
+    const groups = [...new Set(relevant.map(c => c.slice(0, 2)))].map(face => relevant.filter(c => c.startsWith(face))
+      .sort((a, b) => returnValue(a) - returnValue(b) || a.localeCompare(b)));
+    const ordinary = hand.filter(c => !relevant.includes(c))
       .sort((a, b) => returnValue(a) - returnValue(b) || a.localeCompare(b));
     let best: CardId[] = [], bestScore: number[] | undefined;
-    for (let mask = 0; mask < 2 ** pieces.length; mask++) {
-      const selected = pieces.filter((_, i) => mask & (1 << i));
+    const selected: CardId[] = [];
+    const visit = (group: number) => {
+      if (selected.length > count) return;
+      if (group < groups.length) {
+        const cards = groups[group];
+        for (let n = 0; n <= cards.length; n++) {
+          selected.push(...cards.slice(0, n));
+          visit(group + 1);
+          selected.length -= n;
+        }
+        return;
+      }
       const needed = count - selected.length;
-      if (needed < 0 || needed > ordinary.length) continue;
+      if (needed > ordinary.length) return;
       const passed = [...selected, ...ordinary.slice(0, needed)];
       const kept = hand.filter(c => !passed.includes(c));
       const score = [
         -splitPinochle(passed, kept),
-        // A double must stay in one hand; only give it up when the pass size forces it.
-        -(pinochles(hand) === 2 ? selected.length : 0),
+        -(pinochles(hand) === 2 ? passed.filter(pinochlePiece).length : 0),
+        -passed.filter(c => suitOf(c) === view.trump).length,
+        -passed.filter(c => c[0] === 'A').length,
+        returnPieces ? passed.filter(pinochlePiece).length : 0,
+        -meldLost(passed, kept),
         -passed.reduce((n, c) => n + returnValue(c), 0),
       ];
       const difference = bestScore ? score.findIndex((n, i) => n !== bestScore![i]) : -1;
       if (!bestScore || (difference >= 0 && score[difference] > bestScore[difference])) {
         best = passed; bestScore = score;
       }
-    }
+    };
+    visit(0);
     return best.sort((a, b) => returnValue(a) - returnValue(b) || a.localeCompare(b));
   }
 
@@ -84,6 +107,7 @@ export function choosePass(view: PlayerView) {
     ...trumps.map(c => Number(passed.includes(c))),
     passed.filter(c => c[0] === 'A').length,
     -suits.reduce((n, suit) => n + pairs(hand, suit) - pairs(kept, suit) - pairs(passed, suit), 0),
+    -meldLost(passed, kept),
     computeMeld(kept, view.trump!, view.rules).items
       .filter(m => m.kind !== 'pinochle' && m.kind !== 'double_pinochle').reduce((n, m) => n + m.points, 0),
     passed.reduce((n, c) => n + strength(c) + (pinochlePiece(c) ? 12 : 0), 0),
