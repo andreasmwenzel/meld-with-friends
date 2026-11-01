@@ -57,3 +57,21 @@ export function claimTimings(pref: MotionPref, claimed: number) {
 
 /** How far a claimed card steps toward the cloth, as far as a card lifted to be played. */
 export const CLAIM_STEP_PX = 14;
+
+/**
+ * The deal: cards go out from the dealer's left, three at a time, a packet to each seat in turn, as a dealer would
+ * (the engine deals them one at a time; who gets which card is the same). Off deals at once, with no flight.
+ */
+export function dealTimings(pref: MotionPref) {
+  if (pref === "off") return null;
+  return pref === "quick" ? { packetMs: 30, cardMs: 10, flyMs: 180, turnMs: 120 } : { packetMs: 62, cardMs: 22, flyMs: 300, turnMs: 200 };
+}
+export const DEAL_PACKET = 3;
+
+/** When a seat's `i`th card (in the order it was dealt) lands, from the start of the deal. `q`: the seat's place from the dealer's left, 0-3. */
+export function dealLandsAt(t: NonNullable<ReturnType<typeof dealTimings>>, q: number, i: number) {
+  return dealLaunch(t, q, i) + t.flyMs;
+}
+export function dealLaunch(t: NonNullable<ReturnType<typeof dealTimings>>, q: number, i: number) {
+  return (Math.floor(i / DEAL_PACKET) * 4 + q) * t.packetMs + (i % DEAL_PACKET) * t.cardMs;
+}
