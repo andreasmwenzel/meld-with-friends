@@ -114,10 +114,11 @@ export function ResultSheet({ view, nameOf, host, busy, onNext, onRematch, ready
   const title = over ? (won ? "You and your partner win." : `${view.winner === "red" ? "Red" : "Blue"} team wins.`) : headline(view, nameOf);
 
   // One sunken track with the hands being shown lit in card stock: on the dark cloth the lit segment is the one in
-  // force, and the other is only words on the track (two pills, one light and one dark, read either way round).
+  // force, and the other is only words on the track (two pills, one light and one dark, read either way round). The
+  // track is opaque so the unlit words keep their contrast on the cream sheet as well as on the cloth.
   const toggle = passing && (
     <div className="flex rounded-full p-[3px] text-xs" role="group" aria-label="Which cards to show"
-      style={{ background: "rgba(20, 6, 9, .55)", boxShadow: "inset 0 1px 3px rgba(0, 0, 0, .5), inset 0 0 0 1px var(--chalk-ghost)" }}>
+      style={{ background: "color-mix(in srgb, var(--cloth-deep) 55%, black)", boxShadow: "inset 0 1px 3px rgba(0, 0, 0, .5), inset 0 0 0 1px var(--chalk-ghost)" }}>
       {([["atPlay", "After passing"], ["dealt", "As dealt"]] as const).map(([w, label]) => (
         <button key={w} type="button" data-overlay="peek" data-reveal={w} aria-pressed={which === w} onClick={() => setWhich(w)}
           className={`hit rounded-full px-3 py-1.5 transition-colors ${which === w
