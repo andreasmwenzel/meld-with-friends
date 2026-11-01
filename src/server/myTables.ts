@@ -1,15 +1,17 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Phase, SeatIndex, Team } from "@/engine/types";
+import type { Phase, SeatIndex } from "@/engine/types";
+import type { GameKind } from "@/engine/kinds";
 import { sortTables, summarizeTable, type TableFacts, type TableSummary } from "@/lib/tableStatus";
 import { checkDb } from "./errors";
 
 interface Row {
-  id: string; code: string; status: TableFacts["status"]; host: string; paused_by: string | null; created_at: string;
+  id: string; code: string; game_kind: GameKind; status: TableFacts["status"]; host: string; paused_by: string | null; created_at: string;
   seats: { seat: SeatIndex; user_id: string | null; bot: string | null; profile: { display_name: string } | null }[];
   game: {
-    rev: number; updated_at: string; ready: SeatIndex[] | null; phase: Phase; turn: SeatIndex | null; winner: Team | null;
-    score: Record<Team, number> | null; m0: boolean | null; m1: boolean | null; m2: boolean | null; m3: boolean | null;
+    rev: number; updated_at: string; ready: SeatIndex[] | null; phase: Phase | "passing"; turn: SeatIndex | null; winner: string | null;
+    score: Record<string, number> | null; m0: boolean | null; m1: boolean | null; m2: boolean | null; m3: boolean | null;
+    p0: boolean | null; p1: boolean | null; p2: boolean | null; p3: boolean | null;
   } | null;
 }
 
@@ -25,7 +27,7 @@ export async function listMyTables(userId: string): Promise<TableSummary[]> {
   if (!ids.length) return [];
   const [tables, visits] = await Promise.all([
     admin.from("tables")
-      .select("id,code,status,host,paused_by,created_at,seats(seat,user_id,bot,profile:profiles(display_name)),game:games!tables_current_game_id_fkey(rev,updated_at,ready,phase:state->>phase,turn:state->turn,winner:state->>winner,score:state->score,m0:state->players->0->meldConfirmed,m1:state->players->1->meldConfirmed,m2:state->players->2->meldConfirmed,m3:state->players->3->meldConfirmed)")
+      .select("id,code,game_kind,status,host,paused_by,created_at,seats(seat,user_id,bot,profile:profiles(display_name)),game:games!tables_current_game_id_fkey(rev,updated_at,ready,phase:state->>phase,turn:state->turn,winner:state->>winner,score:state->score,m0:state->players->0->meldConfirmed,m1:state->players->1->meldConfirmed,m2:state->players->2->meldConfirmed,m3:state->players->3->meldConfirmed,p0:state->players->0->passed,p1:state->players->1->passed,p2:state->players->2->passed,p3:state->players->3->passed)")
       .in("id", ids).neq("status", "finished"),
     admin.from("table_visits").select("table_id,last_rev").eq("user_id", userId).in("table_id", ids),
   ]);
@@ -35,11 +37,11 @@ export async function listMyTables(userId: string): Promise<TableSummary[]> {
   return sortTables(rows.flatMap((t) => {
     const g = t.game;
     const summary = summarizeTable({
-      code: t.code, status: t.status, host: t.host, pausedBy: t.paused_by, createdAt: t.created_at,
+      code: t.code, kind: t.game_kind, status: t.status, host: t.host, pausedBy: t.paused_by, createdAt: t.created_at,
       seats: t.seats.map((s) => ({ seat: s.seat, userId: s.user_id, bot: s.bot, name: s.profile?.display_name ?? s.bot })),
       game: g && {
         rev: g.rev, updatedAt: g.updated_at, phase: g.phase, turn: g.turn, winner: g.winner, score: g.score,
-        meldConfirmed: [!!g.m0, !!g.m1, !!g.m2, !!g.m3], ready: g.ready ?? [],
+        awaiting: t.game_kind === "hearts" ? [!!g.p0, !!g.p1, !!g.p2, !!g.p3] : [!!g.m0, !!g.m1, !!g.m2, !!g.m3], ready: g.ready ?? [],
       },
       lastSeenRev: seen.get(t.id) ?? null,
     }, userId);

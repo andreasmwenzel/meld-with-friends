@@ -27,6 +27,7 @@ export async function getReplay(gameId: string, viewerId: string | null): Promis
   checkDb(gameResult.error); checkDb(logResult.error); checkDb(resultResult.error);
   const game = gameResult.data as GameRow | null;
   if (!game) throw new ApiError(404, "No game has this link.");
+  if ((game.state as unknown as { kind?: string }).kind === "hearts") throw new ApiError(422, "Hearts games cannot be replayed yet.");
   const result = resultResult.data as { code: string; seats: SnapshotSeat[]; finished_at: string; abandoned: boolean } | null;
   const abandoned = result?.abandoned === true;
   const finished = game.state.phase === "game_over" || abandoned;

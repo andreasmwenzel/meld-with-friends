@@ -42,7 +42,7 @@ it.each([
   };
   mocks.from.mockReturnValue(query);
   expect(await listHistory("me")).toEqual([{
-    gameId: "game", code: "BCDFGH", finishedAt: "2026-10-20T00:00:00Z", score: { red: 1510, blue: 900 },
+    gameId: "game", code: "BCDFGH", finishedAt: "2026-10-20T00:00:00Z", score: { red: 1510, blue: 900 }, kind: "pinochle",
     hands, myTeam: "red", won: !abandoned, abandoned, partner: "Partner", opponents: ["Mabel", "Opponent"],
   }]);
   expect(query.eq).toHaveBeenCalledWith("game_result_players.user_id", "me");

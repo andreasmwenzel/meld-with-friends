@@ -210,3 +210,18 @@ only while the page is mounted. The invitation card is static here (no session, 
 
 `/dev/game` (`?play`, `?meld`, `?end=1`, `?return`, `?shoot=`, `?redeal`, `?ready`) and `/dev/seating`
 still work. The lab covers everything `/dev/game` does.
+
+## Hearts
+
+`/dev/hearts` is a hearts table played in the browser against the engine's computer players; nothing is
+saved. `?state=` puts it in a position: `passing` (default), `play`, `midhand`, `late`, `hand-over`, `moon`
+(a finished hand with a moon written in), `game-over`. `?seed=` changes the deal, `?run=0` keeps the
+computer players still so a screenshot is the exact position. `/dev/seating?game=hearts` is the seating
+screen for a hearts table.
+
+```
+for s in passing play hand-over moon game-over; do
+  google-chrome --headless --screenshot=.dev/shots/hearts-$s.png --window-size=390,844 "http://localhost:3000/dev/hearts?state=$s&run=0"
+done
+```
+

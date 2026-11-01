@@ -8,6 +8,10 @@ import { RulesForm } from "@/components/rules/RulesForm";
 import type { RulesPatch } from "@/components/rules/rules";
 import { useRulesPref } from "@/components/rules/useRulesPref";
 import { useCaptcha } from "@/lib/captcha";
+import { HeartsRulesForm } from "@/components/rules/HeartsRulesForm";
+import { DEFAULT_HEARTS_RULES, type HeartsRules } from "@/engine/hearts/types";
+import type { GameKind } from "@/engine/kinds";
+import { GamePicker } from "@/components/lobby/GamePicker";
 
 const ALPHABET = /[^23456789BCDFGHJKMNPQRSTVWXYZ]/g;
 
@@ -25,6 +29,8 @@ export function GuestStart({ mode = "both", code: initialCode = "", signedIn = f
   const [error, setError] = useState<string | null>(null);
   const { rules, setRules, remember } = useRulesPref(defaults);
   const [showRules, setShowRules] = useState(false);
+  const [kind, setKind] = useState<GameKind>("pinochle");
+  const [heartsRules, setHeartsRules] = useState<HeartsRules>(DEFAULT_HEARTS_RULES);
   const { captchaSlot, getToken } = useCaptcha();
 
   async function ensureSession() {
@@ -43,8 +49,8 @@ export function GuestStart({ mode = "both", code: initialCode = "", signedIn = f
     setBusy("deal"); setError(null);
     try {
       await ensureSession();
-      const t = await api<{ code: string }>("/api/tables", { body: { gameKind: "pinochle", rules } });
-      void remember(rules, signedIn);
+      const t = await api<{ code: string }>("/api/tables", { body: { gameKind: kind, rules: kind === "hearts" ? heartsRules : rules } });
+      if (kind === "pinochle") void remember(rules, signedIn);
       router.push(`/t/${t.code}`);
       router.refresh();
     } catch (err) { setError((err as Error).message); setBusy(null); }
@@ -74,7 +80,8 @@ export function GuestStart({ mode = "both", code: initialCode = "", signedIn = f
           <input className="field mt-1" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your first name" maxLength={40} autoComplete="given-name" />
         </label>
       )}
-      <div className={`grid gap-3 ${needsName ? "mt-4" : ""} ${mode === "both" ? "sm:grid-cols-2" : ""}`}>
+      {mode === "both" && <div className={needsName ? "mt-4" : ""}><GamePicker value={kind} onChange={setKind} compact /></div>}
+      <div className={`grid gap-3 ${needsName || mode === "both" ? "mt-3" : ""} ${mode === "both" ? "sm:grid-cols-2" : ""}`}>
         {mode === "both" && (
           <form onSubmit={deal}>
             <button className="btn btn-ink w-full" disabled={busy !== null || (needsName && !name.trim())}>
@@ -101,7 +108,7 @@ export function GuestStart({ mode = "both", code: initialCode = "", signedIn = f
           </button>
         </form>
       </div>
-      {mode === "both" && showRules && <div className="mt-3"><RulesForm value={rules} onChange={setRules} compact /></div>}
+      {mode === "both" && showRules && <div className="mt-3">{kind === "hearts" ? <HeartsRulesForm value={heartsRules} onChange={setHeartsRules} compact /> : <RulesForm value={rules} onChange={setRules} compact />}</div>}
       {needsName && captchaSlot}
       {error && <p className="mt-3 text-sm text-pip-red">{error}</p>}
       {needsName && (

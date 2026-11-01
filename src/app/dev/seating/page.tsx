@@ -12,17 +12,22 @@ const OTHERS = {
   3: { id: "u3", handle: "june", display_name: "June", avatar_seed: "" },
 };
 
-/** Local-only preview of the seating screen. `?seat=` picks your chair; the row above moves you so the table turns. */
+/** Local-only preview of the seating screen. `?seat=` picks your chair; the row above moves you so the table turns. `?game=hearts` seats a hearts table. */
 export default function DevSeatingPage() {
   if (process.env.NODE_ENV === "production") notFound();
   const [mySeat, setMySeat] = useState<SeatIndex | null>(0);
+  const [hearts, setHearts] = useState(false);
   useEffect(() => {
-    const raw = new URLSearchParams(window.location.search).get("seat");
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get("seat");
     if (raw !== null) setMySeat(raw === "none" ? null : (Number(raw) as SeatIndex)); // eslint-disable-line react-hooks/set-state-in-effect -- read once from the URL on mount
+    if (params.get("game") === "hearts") setHearts(true);
   }, []);
   // Margaret and June keep their chairs unless you take one; Otto the computer sits across from South.
   const snap: Snapshot = {
-    table: { id: "t", code: "KQJ9TA", host: "u0", status: "open", rules: { scoring: "modern", target: 150, passCount: 4 } },
+    table: hearts
+      ? { id: "t", code: "HRTSQN", host: "u0", game_kind: "hearts", status: "open", rules: { target: 100, passing: "rotate" } }
+      : { id: "t", code: "KQJ9TA", host: "u0", game_kind: "pinochle", status: "open", rules: { scoring: "modern", target: 150, passCount: 4 } },
     seats: ([0, 1, 2, 3] as SeatIndex[]).map(seat => seat === mySeat
       ? { seat, user_id: ME.id, profile: ME, bot: null }
       : seat === 2 ? { seat, user_id: null, profile: null, bot: "Otto" }
@@ -40,7 +45,7 @@ export default function DevSeatingPage() {
             onClick={() => setMySeat(s === "none" ? null : s)}>{s === "none" ? "standing" : ["South", "West", "North", "East"][s]}</button>
         ))}
       </div>
-      <Seating code="KQJ9TA" me={ME} snap={snap} onChange={() => {}} />
+      <Seating code={snap.table.code} me={ME} snap={snap} onChange={() => {}} />
     </>
   );
 }

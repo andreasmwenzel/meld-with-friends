@@ -6,8 +6,12 @@ import { useRouter } from "next/navigation";
 import { api, type Group } from "@/lib/api";
 import { useGroups } from "./groupsStore";
 import { RulesForm } from "@/components/rules/RulesForm";
+import { HeartsRulesForm } from "@/components/rules/HeartsRulesForm";
 import type { RulesPatch } from "@/components/rules/rules";
 import { useRulesPref } from "@/components/rules/useRulesPref";
+import { DEFAULT_HEARTS_RULES, type HeartsRules } from "@/engine/hearts/types";
+import { gameInfo, type GameKind } from "@/engine/kinds";
+import { GamePicker } from "./GamePicker";
 
 /** Pick a group and each member finds an invitation to the new table in their lobby. */
 function InviteGroup({ groups, value, onChange }: { groups: Group[]; value: string | null; onChange: (id: string | null) => void }) {
@@ -39,6 +43,8 @@ export function DealTable({ autoOpen = false, defaults = null, saved = false }: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { rules, setRules, remember } = useRulesPref(defaults);
+  const [kind, setKind] = useState<GameKind>("pinochle");
+  const [heartsRules, setHeartsRules] = useState<HeartsRules>(DEFAULT_HEARTS_RULES);
   // Groups are a saved-account feature; guests deal without the picker. The list is shared with the
   // groups editor, so a group made or deleted while this panel is open shows up or goes away here too.
   const shared = useGroups(open && saved).groups;
@@ -51,8 +57,8 @@ export function DealTable({ autoOpen = false, defaults = null, saved = false }: 
   async function deal() {
     setBusy(true); setError(null);
     try {
-      const t = await api<{ code: string }>("/api/tables", { body: { gameKind: "pinochle", rules, ...(groupId ? { groupId } : {}) } });
-      void remember(rules, true);
+      const t = await api<{ code: string }>("/api/tables", { body: { gameKind: kind, rules: kind === "hearts" ? heartsRules : rules, ...(groupId ? { groupId } : {}) } });
+      if (kind === "pinochle") void remember(rules, true);
       router.push(`/t/${t.code}`);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
@@ -64,8 +70,10 @@ export function DealTable({ autoOpen = false, defaults = null, saved = false }: 
     <Sheet label="Deal a table" onClose={() => setOpen(false)}>
     <div className="panel p-4 sm:p-5">
       <p className="display" style={{ fontSize: 26 }}>Deal a table</p>
-      <p className="mt-1 text-ink-soft">Four-hand partnership pinochle. Set the house rules; you can still change them at the table before the first deal.</p>
-      <div className="mt-4"><RulesForm value={rules} onChange={setRules} /></div>
+      <p className="mt-1 text-ink-soft">Pick the game, then set the house rules; you can still change them at the table before the first deal.</p>
+      <div className="mt-4"><GamePicker value={kind} onChange={setKind} /></div>
+      <p className="mt-3 text-sm text-ink-soft">{gameInfo(kind).blurb}</p>
+      <div className="mt-4">{kind === "hearts" ? <HeartsRulesForm value={heartsRules} onChange={setHeartsRules} /> : <RulesForm value={rules} onChange={setRules} />}</div>
       {groups.length > 0 && <InviteGroup groups={groups} value={groupId} onChange={setPicked} />}
       {error && <p className="mt-3 text-sm text-pip-red">{error}</p>}
       <div className="mt-4 flex flex-wrap gap-2">

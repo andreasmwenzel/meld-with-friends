@@ -2,13 +2,14 @@ import "server-only";
 import webPush from "web-push";
 import { Agent } from "node:https";
 import { after } from "next/server";
-import type { GameState, Phase } from "@/engine/types";
+import type { AnyState } from "@/engine/dispatch";
+import { seatsAwaited } from "@/engine/dispatch";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkDb } from "./errors";
 import { bump } from "./metrics";
 
-const sentences: Partial<Record<Phase, string>> = {
-  bidding: "Your bid.", playing: "Your play.", melding: "Lay down your meld.",
+const sentences: Partial<Record<AnyState["phase"], string>> = {
+  bidding: "Your bid.", playing: "Your play.", melding: "Lay down your meld.", passing: "Pass three cards.",
   declaring_trump: "Choose trump.", passing_to_bidder: "Pass cards to your partner.",
   passing_back: "Pass cards back to your partner.",
   deciding_shoot: "Shoot the moon, or play it out?",
@@ -40,7 +41,7 @@ export async function notifyTurn(gameId: string): Promise<void> {
     const game = await db.from("games").select("table_id,state").eq("id", gameId).abortSignal(signal).maybeSingle();
     checkDb(game.error);
     if (!game.data || signal.aborted) return;
-    const state = game.data.state as GameState;
+    const state = game.data.state as AnyState;
     const table = await db.from("tables").select("id,code,rules,current_game_id,paused_by,status").eq("id", game.data.table_id).abortSignal(signal).maybeSingle();
     checkDb(table.error);
     if (!table.data || table.data.rules?.pace !== "leisurely" || table.data.current_game_id !== gameId || table.data.paused_by) return;
@@ -51,8 +52,8 @@ export async function notifyTurn(gameId: string): Promise<void> {
     if (!terminal && !sentence) return;
     const seats = await db.from("seats").select("seat,user_id,bot").eq("table_id", row.id).abortSignal(signal);
     checkDb(seats.error);
-    const humans = (seats.data ?? []).filter(seat => seat.user_id && !seat.bot && (terminal ||
-      (state.phase === "melding" ? !state.players[seat.seat].meldConfirmed : seat.seat === state.turn)));
+    const awaited = seatsAwaited(state);
+    const humans = (seats.data ?? []).filter(seat => seat.user_id && !seat.bot && (terminal || awaited.includes(seat.seat)));
     await Promise.all(humans.map(async seat => {
       const subscriptions = await db.from("push_subscriptions").select("endpoint,keys").eq("user_id", seat.user_id).abortSignal(signal);
       checkDb(subscriptions.error);

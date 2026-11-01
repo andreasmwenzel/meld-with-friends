@@ -1,16 +1,23 @@
 import type { Phase, SeatIndex, Team } from "@/engine/types";
+import type { GameKind } from "@/engine/kinds";
 
 /** What the lobby knows about one of the player's tables, read on the server. */
 export interface TableFacts {
   code: string;
+  kind: GameKind;
   status: "open" | "playing" | "finished";
   host: string;
   pausedBy: string | null;
   createdAt: string;
   seats: { seat: SeatIndex; userId: string | null; bot: string | null; name: string | null }[];
   game: {
-    rev: number; updatedAt: string; phase: Phase; turn: SeatIndex | null; winner: Team | null;
-    score: Record<Team, number> | null; meldConfirmed: boolean[]; ready: SeatIndex[];
+    rev: number; updatedAt: string; phase: Phase | "passing"; turn: SeatIndex | null;
+    /** a team for pinochle, a seat (as text, straight from the json) for hearts */
+    winner: string | null;
+    /** by team for pinochle, by seat for hearts */
+    score: Record<string, number> | null;
+    /** pinochle: meld confirmed per seat; hearts: pass chosen per seat */
+    awaiting: boolean[]; ready: SeatIndex[];
   } | null;
   lastSeenRev: number | null;
 }
@@ -20,6 +27,7 @@ export interface TableChair { seat: SeatIndex; name: string | null; me: boolean;
 /** One row of "Your tables": who sits where, whose move it is, and the score from your side. */
 export interface TableSummary {
   code: string;
+  kind: GameKind;
   mySeat: SeatIndex;
   chairs: TableChair[];
   /** one sentence: "Your turn to bid", "Waiting on Lee to play", "3 of 4 chairs filled" */
@@ -28,6 +36,7 @@ export interface TableSummary {
   yours: boolean;
   /** moves were made since you last looked */
   fresh: boolean;
+  /** pinochle: our score and theirs; hearts: your points and the lowest at the table */
   score: { us: number; them: number } | null;
   activity: string;
 }
@@ -35,8 +44,9 @@ export interface TableSummary {
 const teamOf = (seat: SeatIndex): Team => seat % 2 === 0 ? "red" : "blue";
 const firstName = (name: string | null) => name?.trim().split(/\s+/)[0] || "someone";
 
-const MY_MOVE: Partial<Record<Phase, string>> = {
+const MY_MOVE: Partial<Record<Phase | "passing", string>> = {
   dealing: "Dealing",
+  passing: "Your turn to pass cards",
   bidding: "Your turn to bid",
   declaring_trump: "Your turn to name trump",
   passing_to_bidder: "Your turn to pass cards",
@@ -44,8 +54,9 @@ const MY_MOVE: Partial<Record<Phase, string>> = {
   deciding_shoot: "Your call: shoot or play it out",
   playing: "Your turn to play",
 };
-const THEIR_MOVE: Partial<Record<Phase, string>> = {
+const THEIR_MOVE: Partial<Record<Phase | "passing", string>> = {
   bidding: "to bid",
+  passing: "to pass cards",
   declaring_trump: "to name trump",
   passing_to_bidder: "to pass cards",
   passing_back: "to pass cards back",
@@ -77,7 +88,7 @@ export function summarizeTable(t: TableFacts, userId: string): TableSummary | nu
     else if (t.host === userId) { line = "Everyone is seated. Start the game"; yours = true; }
     else line = "Waiting for the host to start";
   } else if (g.phase === "game_over") {
-    const won = g.winner === teamOf(mine.seat);
+    const won = g.winner === (t.kind === "hearts" ? String(mine.seat) : teamOf(mine.seat));
     line = g.winner ? (won ? "Game over. You won" : "Game over. You lost") : "Game over";
   } else if (g.phase === "hand_over") {
     // The host counts as ready, as at the table; once nobody is pending, anyone may deal.
@@ -86,11 +97,12 @@ export function summarizeTable(t: TableFacts, userId: string): TableSummary | nu
     if (waiting.some((s) => s.seat === mine.seat)) { line = "Hand over. Ready up for the next deal"; yours = true; }
     else if (waiting.length) line = `Waiting on ${names(waiting.map((s) => firstName(s.name)))} to ready up`;
     else { line = "Hand over. Deal the next hand"; yours = true; }
-  } else if (g.phase === "melding") {
-    const waiting = t.seats.filter((s) => !g.meldConfirmed[s.seat]);
+  } else if (g.phase === "melding" || g.phase === "passing") {
+    const passing = g.phase === "passing";
+    const waiting = t.seats.filter((s) => !g.awaiting[s.seat]);
     waiting.forEach((s) => up.add(s.seat));
-    if (waiting.some((s) => s.seat === mine.seat)) { line = "Your turn to lay meld"; yours = true; }
-    else line = waiting.length ? `Waiting on ${names(waiting.map((s) => firstName(s.name)))} to meld` : "Meld is down";
+    if (waiting.some((s) => s.seat === mine.seat)) { line = passing ? "Your turn to pass cards" : "Your turn to lay meld"; yours = true; }
+    else line = waiting.length ? `Waiting on ${names(waiting.map((s) => firstName(s.name)))} to ${passing ? "pass" : "meld"}` : passing ? "Cards are passed" : "Meld is down";
   } else if (g.turn === null) {
     line = "Dealing";
   } else {
@@ -100,9 +112,12 @@ export function summarizeTable(t: TableFacts, userId: string): TableSummary | nu
   }
 
   const myTeam = teamOf(mine.seat);
-  const score = g?.score ? { us: g.score[myTeam], them: g.score[myTeam === "red" ? "blue" : "red"] } : null;
+  const score = !g?.score ? null : t.kind === "hearts"
+    ? { us: g.score[mine.seat] ?? 0, them: Math.min(...[0, 1, 2, 3].filter((s) => s !== mine.seat).map((s) => g.score![s] ?? 0)) }
+    : { us: g.score[myTeam], them: g.score[myTeam === "red" ? "blue" : "red"] };
   return {
     code: t.code,
+    kind: t.kind,
     mySeat: mine.seat,
     chairs: ([0, 1, 2, 3] as SeatIndex[]).map((seat) => {
       const s = t.seats.find((x) => x.seat === seat);

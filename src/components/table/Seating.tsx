@@ -7,6 +7,8 @@ import type { SeatIndex } from "@/engine/types";
 import { Avatar } from "@/components/site/Avatar";
 import { SEAT_LABEL, teamOf, type Snapshot } from "./types";
 import { RulesForm } from "@/components/rules/RulesForm";
+import { HeartsRulesForm } from "@/components/rules/HeartsRulesForm";
+import { gameInfo } from "@/engine/kinds";
 import { usePushNotifications } from "@/lib/push";
 import { resolveRules, type RulesPatch } from "@/components/rules/rules";
 import { useTableTurn } from "./turn";
@@ -27,9 +29,11 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
   const [note, setNote] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [editingRules, setEditingRules] = useState(false);
-  const [rulesDraft, setRulesDraft] = useState<RulesPatch>(snap.table.rules as RulesPatch);
+  const [rulesDraft, setRulesDraft] = useState<RulesPatch | Record<string, unknown>>(snap.table.rules as RulesPatch);
   const push = usePushNotifications();
-  const leisurely = resolveRules(snap.table.rules).pace === "leisurely";
+  const game = gameInfo(snap.table.game_kind);
+  const hearts = game.id === "hearts";
+  const leisurely = (hearts ? (snap.table.rules as { pace?: string }).pace : resolveRules(snap.table.rules).pace) === "leisurely";
   // A guest viewer gets no friend status, so the friend buttons stay hidden.
   const { mates, addFriend: befriend, acceptFriend: accept } = useTablemates(code, guest, snap.seats.map((s) => s.user_id ?? "").join(","));
   const addFriend = (userId: string) => befriend(userId).catch((e) => setNote((e as Error).message));
@@ -65,14 +69,14 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
   async function copy() {
     const url = `${window.location.origin}/join?code=${code}`;
     try {
-      if (navigator.share) await navigator.share({ title: "Pull up a chair", text: `Join my pinochle table on Meld. Code ${code}`, url });
+      if (navigator.share) await navigator.share({ title: "Pull up a chair", text: `Join my ${game.name.toLowerCase()} table on Meld. Code ${code}`, url });
       else { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1800); }
     } catch {}
   }
 
   const codeBlock = (
     <>
-      <p className="text-chalk-faint text-sm">Table code</p>
+      <p className="text-chalk-faint text-sm">{game.name} · table code</p>
       <p className="code mt-1 text-chalk" style={{ fontSize: "clamp(40px, 8vw, 64px)" }}>{code}</p>
       <button className="btn btn-ghost mt-3" style={{ height: "2.25rem" }} onClick={copy}>{copied ? "Link copied" : "Share invite link"}</button>
     </>
@@ -92,7 +96,7 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
             const s = snap.seats.find((x) => x.seat === i);
             const p = s?.profile ?? null;
             const mine = s?.user_id === me.id;
-            const team = teamOf(i);
+            const team = game.teams ? teamOf(i) : null;
             const bot = s?.bot ?? null;
             return (
               <div key={i} className={`absolute ${POS[rel(i)]} flex w-[96px] min-w-0 flex-col items-center gap-1 sm:w-[132px] sm:gap-1.5`}>
@@ -126,7 +130,7 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
                 ) : (
                   <button
                     className="flex w-full flex-col items-center gap-1 rounded-[14px] px-2 py-3 sm:px-3 sm:py-4 text-chalk-faint hover:text-chalk disabled:opacity-50"
-                    style={{ border: `2px dashed ${team === "red" ? "var(--deck-red-soft)" : "var(--deck-blue-soft)"}`, background: "rgba(0,0,0,.12)" }}
+                    style={{ border: `2px dashed ${team === "red" ? "var(--deck-red-soft)" : team === "blue" ? "var(--deck-blue-soft)" : "var(--chalk-faint)"}`, background: "rgba(0,0,0,.12)" }}
                     onClick={() => sit(i)} disabled={busy}
                     aria-label={`Sit at ${SEAT_LABEL[i]}`}
                   >
@@ -143,8 +147,10 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
           })}
         </div>
         <p className="mt-6 max-w-md text-center text-chalk-faint sm:mt-2">
-          Partners sit across from each other. <span className="text-deck-red-soft">South and North</span> are one team,{" "}
-          <span className="text-deck-blue-soft">West and East</span> the other.
+          {game.teams ? <>
+            Partners sit across from each other. <span className="text-deck-red-soft">South and North</span> are one team,{" "}
+            <span className="text-deck-blue-soft">West and East</span> the other.
+          </> : <>Every player for themselves. Cards pass to the left first, so sit where you like.</>}
         </p>
       </section>
 
@@ -198,7 +204,7 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
           </div>
           {editingRules ? (
             <div className="panel mt-2 p-4">
-              <RulesForm value={rulesDraft} onChange={setRulesDraft} compact />
+              {hearts ? <HeartsRulesForm value={rulesDraft} onChange={setRulesDraft} compact /> : <RulesForm value={rulesDraft as RulesPatch} onChange={setRulesDraft} compact />}
               <div className="mt-3 flex gap-2">
                 <button className="btn btn-ink" style={{ height: "2.25rem" }} onClick={saveRules} disabled={busy}>Save rules</button>
                 <button className="btn" style={{ height: "2.25rem", color: "var(--ink-soft)" }} onClick={() => setEditingRules(false)}>Cancel</button>
@@ -206,7 +212,7 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
             </div>
           ) : (
             // The same grid the host set them in, read-only: Change swaps each value for its select in place.
-            <div className="panel mt-2 p-4"><RulesForm value={snap.table.rules} compact /></div>
+            <div className="panel mt-2 p-4">{hearts ? <HeartsRulesForm value={snap.table.rules} compact /> : <RulesForm value={snap.table.rules} compact />}</div>
           )}
           {push.supported && leisurely && (
             <div className="mt-3">

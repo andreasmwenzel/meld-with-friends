@@ -1,6 +1,6 @@
 "use client";
 
-import type { Bid, CardId, HandRecord, MeldItem, Phase, Rank, SeatIndex, Suit, Team } from "@/engine/types";
+import type { Bid, CardId, HandRecord, MeldItem, Phase, SeatIndex, Suit, Team } from "@/engine/types";
 import { RANK_LABEL, SUIT_GLYPH, cardName, splitCard, suitInk, suitInkOnCloth } from "@/components/cards/PlayingCard";
 import { useCardPrefs } from "@/lib/cardPrefs";
 import { teamOf } from "./types";
@@ -109,7 +109,7 @@ function Rows({ rows, total = false }: { rows: [string, string][]; total?: boole
   );
 }
 
-const RANK_ORDER: Rank[] = ["A", "T", "K", "Q", "J", "9"];
+const RANK_ORDER: string[] = ["A", "T", "K", "Q", "J", "9"];
 // Black and red alternate, so aces around never puts two reds side by side.
 const SUIT_ORDER: Suit[] = ["S", "H", "C", "D"];
 /** A piece's cards in reading order: by suit, then high to low (A 10 K Q J, Q♠ J♦). */

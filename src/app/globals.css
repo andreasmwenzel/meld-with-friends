@@ -318,3 +318,9 @@ body {
 }
 .deal-turn { animation: deal-turn var(--dt, 200ms) cubic-bezier(.2,.8,.3,1) var(--dl) both; }
 .deal-wait { animation: card-fade 200ms linear var(--dl) both; }
+
+/* Shooting the moon (HeartsBoard): the one moment on the hearts table that moves on its own. A chalk moon rises out of
+   the cloth and settles; reduced motion shows it already up. */
+@keyframes moon-rise { from { transform: translateY(40px) scale(.6); opacity: 0; } 60% { opacity: 1; } to { transform: none; opacity: 1; } }
+.moon-rise { animation: moon-rise 900ms cubic-bezier(.2,.8,.25,1) both; }
+[data-motion="off"] .moon-rise { animation: none; }

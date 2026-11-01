@@ -1,8 +1,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { GitHubLink } from "@/components/site/GitHubLink";
-import { Fan } from "@/components/cards/Fan";
 import { Wordmark } from "@/components/site/Wordmark";
+import { GameCard } from "@/components/site/GameCard";
+import { CardBack } from "@/components/cards/CardBack";
 import { MeldTable } from "@/components/site/MeldTable";
 import { AuthPanel } from "@/components/site/AuthPanel";
 import { GuestStart } from "@/components/site/GuestStart";
@@ -23,13 +24,28 @@ export function FrontDoor({ children }: { children: ReactNode }) {
   );
 }
 
-/** Your hand, held at the bottom edge of the screen. Purely decorative; it crops when space runs short. */
+/** The house's games, held in one hand at the foot of the screen: a card for each, and one face down for the next. Decorative; it crops when space runs short. */
 function HeldHand() {
+  const cards = [<GameCard key="p" kind="pinochle" width={88} />, <GameCard key="h" kind="hearts" width={88} />, <CardBack key="b" width={88} team="red" />];
   return (
     <div aria-hidden className="pointer-events-none relative min-h-0 flex-1 overflow-hidden">
-      <div className="absolute left-1/2 top-3 -translate-x-1/2">
-        <Fan cards={["AS0", "TS0", "KS0", "QS0", "JS0", "JD0"]} width={80} spread={8} />
+      <div className="absolute left-1/2 top-3 flex -translate-x-1/2" style={{ width: 88 + 2 * 48 }}>
+        {cards.map((card, i) => (
+          <div key={i} className="absolute bottom-0" style={{ left: i * 48, transformOrigin: "50% 130%", transform: `rotate(${(i - 1) * 9}deg)` }}>{card}</div>
+        ))}
       </div>
+    </div>
+  );
+}
+
+/** The games, fanned beside the headline where the two short lines leave room. */
+function GameFan() {
+  const w = 64;
+  return (
+    <div aria-hidden className="pointer-events-none absolute right-0 top-1 hidden min-[380px]:block" style={{ width: w + 2 * 26, height: (w * 7) / 5 + 24 }}>
+      {[<GameCard key="p" kind="pinochle" width={w} />, <GameCard key="h" kind="hearts" width={w} />, <CardBack key="b" width={w} team="red" />].map((card, i) => (
+        <div key={i} className="absolute bottom-0" style={{ left: i * 26, zIndex: 3 - i, transformOrigin: "50% 140%", transform: `rotate(${(i - 1) * 10}deg)` }}>{card}</div>
+      ))}
     </div>
   );
 }
@@ -37,10 +53,11 @@ function HeldHand() {
 export function Welcome({ signIn = false }: { signIn?: boolean }) {
   return (
     <>
-      <section className="flex min-h-0 shrink flex-col">
+      <section className="relative flex min-h-0 shrink flex-col">
+        <GameFan />
         <h1 className="display shrink-0" style={{ fontSize: "clamp(52px, 15vw, 92px)" }}>Pull up<br />a chair.</h1>
         <p className="mt-3 max-w-md shrink-0 text-chalk-faint leading-relaxed">
-          Pinochle with your friends. Deal a table, send the six-letter code, and play. No account, no downloads, no strangers.
+          Pinochle or hearts with your friends. Deal a table, send the six-letter code, and play. No account, no downloads, no strangers.
         </p>
         <div className="-mx-2 mt-5 min-h-0 overflow-y-auto overscroll-contain px-2 pb-1">
           <SignInToggle guest={<GuestStart />} signIn={<AuthPanel next="/" />} initial={signIn} />
@@ -67,7 +84,7 @@ function Rules() {
           ["Deal a table", "Type your name and deal. No account needed. You get a six-letter code."],
           ["Hand out the code", "Text it, or invite from your friends list. Everyone lands at the same table."],
           ["Choose your chair", "Sit anywhere that's open. To switch partners, offer a trade and the other player accepts or declines."],
-          ["Play", "Bid, name trump, pass, lay your meld, take tricks. The scorepad keeps itself."],
+          ["Play", "Pinochle: bid, name trump, pass, lay your meld, take tricks. Hearts: pass three, dodge the queen. The scorepad keeps itself."],
         ].map(([title, body], i) => (
           <li key={title} className="flex gap-4">
             <span className="display text-chalk-faint" style={{ fontSize: 30, lineHeight: 1 }}>{i + 1}</span>
@@ -79,7 +96,16 @@ function Rules() {
         ))}
       </ol>
       <section>
-        <h3 className="display" style={{ fontSize: 26 }}>What your meld is worth</h3>
+        <h3 className="display" style={{ fontSize: 26 }}>Hearts</h3>
+        <p className="mb-2 mt-2 max-w-prose text-sm text-chalk-faint leading-relaxed">
+          Four players, 52 cards, no partners. Pass three cards left, right, across, then hold. The two of clubs leads;
+          follow suit when you can. Every heart you take is a point and the queen of spades is thirteen. Lowest score
+          when someone reaches 100 wins, unless you take every heart and the queen: that shoots the moon, and everyone
+          else takes 26.
+        </p>
+      </section>
+      <section>
+        <h3 className="display" style={{ fontSize: 26 }}>Pinochle: what your meld is worth</h3>
         <p className="mb-5 mt-2 max-w-prose text-sm text-chalk-faint leading-relaxed">
           Four-hand partnership pinochle, 48 cards, first to 150. Counters are aces, tens and kings at one
           apiece, plus one for the last trick. Classic ×10 scoring is a table option.

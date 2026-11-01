@@ -1,6 +1,7 @@
 import "server-only";
 import { after } from "next/server";
 import type { Action, GameState } from "@/engine/types";
+import { isHearts, type AnyAction, type AnyState } from "@/engine/dispatch";
 import { pickTableTalk, talkDue, type TalkFacts, type TalkSeat } from "@/lib/bots/tableTalk";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkDb } from "./errors";
@@ -10,8 +11,11 @@ import { broadcastChat } from "./realtime";
 type Table = { id: string; code: string };
 
 /** Call only after the revision-guarded commit succeeds, never on a retry/no-op. */
-export function scheduleHandTalk(table: Table, gameId: string, prev: GameState, next: GameState, action: Action) {
+export function scheduleHandTalk(table: Table, gameId: string, prevState: AnyState, nextState: AnyState, anyAction: AnyAction) {
   try {
+    // The lines are written about bids and meld; hearts tables are quiet for now.
+    if (isHearts(prevState) || isHearts(nextState)) return;
+    const prev = prevState as GameState, next = nextState as GameState, action = anyAction as Action;
     const scored = next.history.length === prev.history.length + 1;
     const redealt = prev.phase === "bidding" && next.phase === "bidding" && next.handNumber > prev.handNumber
       && (action.type === "misdeal" || action.type === "pass_bid");
