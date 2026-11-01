@@ -6,6 +6,8 @@ import { PastGames } from "@/components/lobby/PastGames";
 
 const SAMPLE_HISTORY: HistoryEntry[] = [
   { gameId: "g1", code: "KQJ9TA", finishedAt: "2026-10-26T21:40:00Z", score: { red: 152, blue: 118 }, myTeam: "red", won: true, abandoned: false, hands: 7, partner: "June", opponents: ["Margaret", "Theo"] },
+  { gameId: "g6", code: "HRTSQN", kind: "hearts", finishedAt: "2026-10-25T20:10:00Z", score: { 0: 41, 1: 103, 2: 67, 3: 58 }, myTeam: "red", won: true, abandoned: false, hands: 9, partner: "", opponents: ["", ""],
+    players: [{ seat: 0, name: "Andreas", me: true, score: 41 }, { seat: 1, name: "Priya", me: false, score: 103 }, { seat: 2, name: "Walt", me: false, score: 67 }, { seat: 3, name: "Nell", me: false, score: 58 }] },
   { gameId: "g2", code: "BRDGPX", finishedAt: "2026-10-24T19:05:00Z", score: { red: 96, blue: 150 }, myTeam: "red", won: false, abandoned: false, hands: 9, partner: "Otto", opponents: ["Lee", "Sam"] },
   { gameId: "g3", code: "MNPQRS", finishedAt: "2026-10-19T02:15:00Z", score: { red: 1210, blue: 1520 }, myTeam: "blue", won: true, abandoned: false, hands: 23, partner: "Bartholomew Featherstonehaugh", opponents: ["Maximiliana Oyelaran-Whitfield", "Jo"] },
   { gameId: "g4", code: "WXYZBC", finishedAt: "2026-10-02T23:59:00Z", score: { red: 0, blue: 0 }, myTeam: "blue", won: false, abandoned: true, hands: 0, partner: "Grace", opponents: ["Ruth", "Mabel"] },

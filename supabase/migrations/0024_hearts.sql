@@ -48,7 +48,7 @@ begin
   'name',coalesce(p.display_name,s.bot,'Empty seat'),'bot',s.bot is not null) order by s.seat)
  into snapshot from public.seats s left join public.profiles p on p.id=s.user_id where s.table_id=g.table_id;
  insert into public.game_results(game_id,table_id,code,finished_at,score,winner,hands,seats,abandoned)
- select g.id,g.table_id,t.code,now(),g.state->'score',null,jsonb_array_length(g.state->'history'),coalesce(snapshot,'[]'::jsonb),true
+ select g.id,g.table_id,t.code,g.updated_at,g.state->'score',null,jsonb_array_length(g.state->'history'),coalesce(snapshot,'[]'::jsonb),true
  from public.tables t where t.id=g.table_id on conflict(game_id) do nothing returning game_id into inserted;
  if inserted is null then return; end if;
  insert into public.game_result_players(game_id,user_id,team,won)
