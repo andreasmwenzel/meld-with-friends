@@ -837,6 +837,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   };
   const them: Team = myTeam === "red" ? "blue" : "red";
   const peekingResult = over && !recapOpen && peekKey === `${view.handNumber}-${view.phase}`;
+  // Looking at the table after a hand with passing, the prompt by your hand says which hands are face up.
+  const handsShown = peekingResult && view.rules.passCount > 0 && view.revealed && !claimShown ? which : null;
   // The result sheet is modal: while it is up, the board behind it is out of reach.
   const resultModal = over && !menu && !peekingResult && !revealingClaim;
   // The hand's one tab stop: the card last focused, else your first playable card, else the first card.
@@ -944,7 +946,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
               <div className="board-flat board-lift grid grid-cols-[minmax(64px,auto)_minmax(0,1fr)_minmax(64px,auto)] items-center gap-2"
                 style={{ transform: fit.top ? `translateY(${fit.top}px)` : undefined }}>
                 <OpponentRow className="board-west" align="left" {...seatProps(1)} />
-                <Centre compact={short} bidSlot={setBidSlot} view={view} trick={trickCards} rel={rel} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge} peek={peek}
+                <Centre compact={short} bidSlot={setBidSlot} view={view} trick={trickCards} rel={rel} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge} peek={peek} handsShown={handsShown}
                   laid={{ 0: clothMeld(seatAt(0)), 1: clothMeld(seatAt(1)), 2: clothMeld(seatAt(2)), 3: clothMeld(seatAt(3)) }} lit={lit}
                   mySeat={short && <MySeat view={view} me={me} score={scoreOf(view.seat)} profileHref={local ? undefined : "/#profile"} />} />
                 <OpponentRow className="board-east" align="right" {...seatProps(3)} />
@@ -957,7 +959,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
         <div ref={actionRef} {...keepFocus} data-overlay-zone="action" className="board-action mt-1 shrink-0 sm:mt-2">
           {/* Your chair faces the partner's across the cloth, with what the table waits for in front of you. */}
           {!short && <MySeat view={view} me={me} score={scoreOf(view.seat)} profileHref={local ? undefined : "/#profile"} />}
-          {!short && view.phase !== "playing" && <PhasePrompt view={view} trick={trickCards} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge} />}
+          {!short && view.phase !== "playing" && <PhasePrompt view={view} trick={trickCards} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge} handsShown={handsShown} />}
           <ActionBar key={view.rev} view={view} bidSlot={bidSlot} compact={short} boardScale={fit.scale} selected={selected} busy={busy || updating} act={act} nameOf={nameOf} autoMeld={cardPrefs.autoMeld} previewing={previewing} />
           {/* Whose turn it is lives here, by your hand, so the cloth holds only the cards. */}
           {view.phase === "playing" && (
@@ -1494,7 +1496,9 @@ function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact, busy, 
   );
 }
 
-function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = false, laid, lit, mySeat, bidSlot }: {
+function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = false, laid, lit, mySeat, bidSlot, handsShown = null }: {
+  /** at hand end, looking at the table: which hands are face up (after passing or as dealt), for the prompt */
+  handsShown?: Which | null;
   /** while you bid, the amounts lie open on the cloth (BidPicker portals them here) */
   bidSlot: (el: HTMLDivElement | null) => void;
   view: PlayerView; trick: PlayerView["currentTrick"]; rel: (s: SeatIndex) => 0 | 1 | 2 | 3; nameOf: (s: SeatIndex) => string;
@@ -1559,7 +1563,7 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
     {/* Upright, your chair and the prompt sit by your hand (Game), so the cloth is in the middle of the table;
         sideways they stay under it. */}
     {compact && mySeat}
-    {compact && !inPlay && <PhasePrompt view={view} trick={trick} nameOf={nameOf} stalled={stalled} nudge={nudge} compact />}
+    {compact && !inPlay && <PhasePrompt view={view} trick={trick} nameOf={nameOf} stalled={stalled} nudge={nudge} handsShown={handsShown} compact />}
     </div>
   );
 }
@@ -1569,8 +1573,10 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
  * the board above does not rescale as the bid line comes and goes (a third line comes only at hand end, or with a nudge).
  * The chips carry the contract once bidding ends.
  */
-function PhasePrompt({ view, trick, nameOf, stalled, nudge, compact = false }: {
+function PhasePrompt({ view, trick, nameOf, stalled, nudge, compact = false, handsShown = null }: {
   view: PlayerView; trick: PlayerView["currentTrick"]; nameOf: (s: SeatIndex) => string; stalled: boolean; nudge: () => void; compact?: boolean;
+  /** which hands are face up while you look at the table after a hand with passing */
+  handsShown?: Which | null;
 }) {
   const prompt = (() => {
     const who = view.turn !== null ? nameOf(view.turn) : null;
@@ -1586,13 +1592,16 @@ function PhasePrompt({ view, trick, nameOf, stalled, nudge, compact = false }: {
       default: return "";
     }
   })();
+  const shownLine = handsShown === "dealt" ? "Hands as dealt." : handsShown === "atPlay" ? "Hands after passing." : null;
   const mine = view.turn === view.seat && view.phase !== "hand_over" && view.phase !== "game_over";
   const done = !!trick && trick.winner !== null;
   const dim = trick !== view.currentTrick && (view.phase === "hand_over" || view.phase === "game_over");
   const took = done && view.sittingOut == null ? countersIn(trick, view.rules) : 0;
   return (
     <div className={`flex flex-col items-center gap-0.5 text-center ${compact ? "mt-0.5" : "mb-1 min-h-11"}`}>
-      <p className={mine ? "display" : "text-sm text-chalk"} style={mine ? { fontSize: compact ? 19 : 22, color: "var(--brass)" } : undefined}>{prompt}</p>
+      <p className={mine ? "display" : "text-sm text-chalk"} style={mine ? { fontSize: compact ? 19 : 22, color: "var(--brass)" } : undefined}>
+        {prompt}{shownLine && <> <span data-hands-shown={handsShown} className="font-semibold">{shownLine}</span></>}
+      </p>
       {view.phase === "deciding_shoot" && <p className="text-sm text-chalk-faint">{shootStake(view, nameOf)}</p>}
       {/* The high bid itself is marked on its seat's chip; only a shot moon needs saying. */}
       {view.highBid?.shoot && view.phase === "bidding" && <p className="text-sm text-chalk-faint">{shootLine(nameOf(view.highBid.seat))}</p>}
