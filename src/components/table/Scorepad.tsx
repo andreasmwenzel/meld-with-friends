@@ -78,9 +78,9 @@ function Row({ k, v, ink }: { k: string; v: string; ink?: string }) {
   );
 }
 
+/** Declared and kept meld share one row: kept meld counts, and meld that did not count is struck through. */
 export const BREAKDOWN_ROWS: [keyof HandScoreBreakdown, string][] = [
-  ["meldDeclared", "Meld declared"],
-  ["meldSaved", "Meld kept"],
+  ["meldSaved", "Meld"],
   ["counters", "Counters"],
   ["lastTrick", "Last trick"],
   ["setPenalty", "Set"],
@@ -89,11 +89,28 @@ export const BREAKDOWN_ROWS: [keyof HandScoreBreakdown, string][] = [
 
 const signed = (n: number) => `${n > 0 ? "+" : ""}${n}`;
 
+/** Whether a breakdown row has anything to show for this side. The meld row also shows meld that was declared but lost. */
+export const rowHasValue = (b: HandScoreBreakdown | undefined, k: keyof HandScoreBreakdown) =>
+  (b?.[k] ?? 0) !== 0 || (k === "meldSaved" && (b?.meldDeclared ?? 0) !== 0);
+
+/** One side's value in a breakdown row. */
+export function BreakdownCell({ b, k }: { b: HandScoreBreakdown | undefined; k: keyof HandScoreBreakdown }) {
+  const raw = b?.[k] ?? 0;
+  const v = k === "setPenalty" ? -raw : raw;
+  const lost = k === "meldSaved" ? (b?.meldDeclared ?? 0) - raw : 0;
+  return (
+    <span style={{ color: v < 0 ? "var(--pip-red)" : undefined }}>
+      {lost > 0 && <><s className="text-ink-soft" aria-hidden>{signed(b!.meldDeclared)}</s><span className="sr-only">{b!.meldDeclared} meld declared, not counted</span></>}
+      {v !== 0 && <>{lost > 0 && " "}{signed(v)}</>}
+    </span>
+  );
+}
+
 function PastHand({ h, cols, myTeam, nameOf, latestOpen }: { h: HandRecord; cols: Team[]; myTeam: Team; nameOf: (s: SeatIndex) => string; latestOpen: boolean }) {
   const [toggled, setToggled] = useState<boolean | null>(null);
   const open = toggled ?? latestOpen;
   const color = (t: Team) => (t === "red" ? "var(--deck-red)" : "var(--deck-blue)");
-  const rows = BREAKDOWN_ROWS.filter(([k]) => cols.some((t) => (h.breakdown?.[t]?.[k] ?? 0) !== 0));
+  const rows = BREAKDOWN_ROWS.filter(([k]) => cols.some((t) => rowHasValue(h.breakdown?.[t], k)));
   const id = `hand-${h.handNumber}-breakdown`;
   return (
     <li className="text-sm">
@@ -112,7 +129,7 @@ function PastHand({ h, cols, myTeam, nameOf, latestOpen }: { h: HandRecord; cols
           {rows.map(([k, name]) => (
             <Fragment key={k}>
               <span className="text-left text-ink-soft">{name}</span>
-              {cols.map((t) => { const raw = h.breakdown?.[t]?.[k] ?? 0; const v = k === "setPenalty" ? -raw : raw; return <span key={t} style={{ color: v < 0 ? "var(--pip-red)" : undefined }}>{v === 0 ? "" : signed(v)}</span>; })}
+              {cols.map((t) => <BreakdownCell key={t} b={h.breakdown?.[t]} k={k} />)}
             </Fragment>
           ))}
           <span className="col-span-3 border-t border-chalk-dim" />
