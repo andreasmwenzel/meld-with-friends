@@ -1265,8 +1265,9 @@ function OpponentRow({ seat, view, name, person, actions, align, score, laid, st
       <div className="relative flex max-w-full flex-row items-center">
         {plate}
         {/* Out of the layout flow, so nothing moves when a number appears. Its translate makes it a stacking context, so
-            it carries the z-index that lets the score's popover open over the cloth and the trick below (as MySeat's does). */}
-        <div className="absolute left-full top-1/2 z-20 ml-1 -translate-y-1/2 whitespace-nowrap">
+            it carries the z-index that lets the score's popover open over the cloth and the trick below; one above your own
+            chip's (MySeat), which a tall popover can reach on a phone held sideways. */}
+        <div className="absolute left-full top-1/2 z-[21] ml-1 -translate-y-1/2 whitespace-nowrap">
           <ScoreTag score={score} name={name} align={align} />
         </div>
       </div>
@@ -1308,7 +1309,7 @@ function CompactSeat({ seat, className, team, active, name, person, actions, chi
               </span>
           )}
         </PlayerMenu>
-        <div className={across ? "absolute left-full top-1/2 z-20 ml-1 -translate-y-1/2 whitespace-nowrap" : "flex h-7 items-center"}>
+        <div className={across ? "absolute left-full top-1/2 z-[21] ml-1 -translate-y-1/2 whitespace-nowrap" : "flex h-7 items-center"}>
           <ScoreTag score={score} name={name} align={align} />
         </div>
       </div>
