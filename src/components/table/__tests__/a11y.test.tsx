@@ -280,7 +280,7 @@ describe("the live region", () => {
   });
 
   it("announces the cards of a trick and who took it", async () => {
-    const { state, advance } = await table("play-complete-trick");
+    const { state, advance } = await table("play-must-head");
     const card = serving.legal.playableCards[0];
     await advance({ type: "play_card", seat: 0, card });
     expect(announced()).toMatch(/^You play (nine|ten|jack|queen|king|ace) of \w+\. (You take|.+ takes) the trick\./);

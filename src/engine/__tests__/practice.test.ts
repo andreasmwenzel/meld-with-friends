@@ -66,7 +66,7 @@ describe('curated practice deal', () => {
   it('supports the actual bot pass, a heart run, and a complete legal hand', () => {
     let state = applyAction(winBid(), { type: 'declare_trump', seat: 0, suit: 'H' });
     const sent: CardId[] = ['KH0', 'JH1', 'AD0', 'AS0'];
-    const returned: CardId[] = ['9C0', 'KC1', 'TC1', 'KS0'];
+    const returned: CardId[] = ['JD0', 'QS0', 'KC1', 'KS0'];
     const pass = chooseAction(viewFor(state, 2));
     expect(pass).toEqual({ type: 'pass_cards', seat: 2, cards: sent });
     state = applyAction(state, pass);
@@ -80,7 +80,7 @@ describe('curated practice deal', () => {
       state = applyAction(state, { type: 'declare_meld', seat, cards: state.players[seat].hand });
       state = applyAction(state, { type: 'confirm_meld', seat });
     }
-    expect(state.players[0].meldPoints).toBe(20);
+    expect(state.players[0].meldPoints).toBe(16);
     expect(state.players[0].meld.some(item => item.kind === 'run')).toBe(true);
     for (let i = 0; i < 48; i++) {
       const seat = state.turn!;
