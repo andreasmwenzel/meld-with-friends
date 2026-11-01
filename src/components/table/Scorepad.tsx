@@ -91,19 +91,16 @@ const signed = (n: number) => `${n > 0 ? "+" : ""}${n}`;
 
 /** Whether a breakdown row has anything to show for this side. The meld row also shows meld that was declared but lost. */
 export const rowHasValue = (b: HandScoreBreakdown | undefined, k: keyof HandScoreBreakdown) =>
-  (b?.[k] ?? 0) !== 0 || (k === "meldSaved" && (b?.meldDeclared ?? 0) !== 0);
+  (b?.[k] ?? 0) !== 0 || (k === "meldSaved" && (b?.meldDeclared ?? 0) > 0);
 
 /** One side's value in a breakdown row. */
 export function BreakdownCell({ b, k }: { b: HandScoreBreakdown | undefined; k: keyof HandScoreBreakdown }) {
   const raw = b?.[k] ?? 0;
   const v = k === "setPenalty" ? -raw : raw;
-  const lost = k === "meldSaved" ? (b?.meldDeclared ?? 0) - raw : 0;
-  return (
-    <span style={{ color: v < 0 ? "var(--pip-red)" : undefined }}>
-      {lost > 0 && <><s className="text-ink-soft" aria-hidden>{signed(b!.meldDeclared)}</s><span className="sr-only">{b!.meldDeclared} meld declared, not counted</span></>}
-      {v !== 0 && <>{lost > 0 && " "}{signed(v)}</>}
-    </span>
-  );
+  // Meld counts whole or not at all; older records can split it oddly, and then only the kept figure shows.
+  const lost = k === "meldSaved" && raw === 0 ? b?.meldDeclared ?? 0 : 0;
+  if (lost > 0) return <span><s className="text-ink-soft" aria-hidden>{signed(lost)}</s><span className="sr-only">{lost} meld declared, not counted</span></span>;
+  return <span style={{ color: v < 0 ? "var(--pip-red)" : undefined }}>{v === 0 ? "" : signed(v)}</span>;
 }
 
 function PastHand({ h, cols, myTeam, nameOf, latestOpen }: { h: HandRecord; cols: Team[]; myTeam: Team; nameOf: (s: SeatIndex) => string; latestOpen: boolean }) {
