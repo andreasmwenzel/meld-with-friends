@@ -33,6 +33,7 @@ import { RulesForm } from "@/components/rules/RulesForm";
 import { cardLabel } from "@/engine/deck";
 import { motionTimings, flyFrom, sweepTo } from "./motion";
 import { ClaimButton, useClaimReveal } from "./Claim";
+import { DealLayer, useDeal, type Deal } from "./Deal";
 import { ChatDock, type TableChat } from "./ChatDock";
 import { LookDock, LookOptions } from "./LookDock";
 import { FOLD_MS, SitOutStack } from "./SitOutStack";
@@ -160,6 +161,9 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   // The claim shows the hands as they stood when it was made, and only while it plays out; looking at the table after
   // it, the hands are as they were played (or as dealt), as at any hand's end. Without face-up hands the claim stays.
   const claimShown = view?.claim && (revealingClaim || !view.revealed) ? view.claim : null;
+  /** A new hand being dealt: the cards fly out and each hand shows a card once it lands; nothing is played meanwhile. */
+  const deal = useDeal(view, motion, code);
+  const dealing = !!deal;
   const router = useRouter();
 
   const load = useCallback(() => sync.load(), [sync]);
@@ -278,7 +282,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     setStalledSince(botTurn ? Date.now() : null);
   }, [botTurn, view?.rev]);
   useEffect(() => {
-    if (!botTurn || !view || updating) return;
+    // Computer players wait for the cards to be dealt.
+    if (!botTurn || !view || updating || dealing) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     const delay = (view.phase === "playing" ? pace : Math.min(pace, 600)) + (leader ? 0 : 2500);
@@ -305,7 +310,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     timer = setTimeout(run, nudgePending.current ? 0 : delay);
     nudgePending.current = false;
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [botTurn, view, code, load, sync, live, leader, pace, nudgeVersion, updating, mutate]);
+  }, [botTurn, view, code, load, sync, live, leader, pace, nudgeVersion, updating, mutate, dealing]);
 
   const [displayedTrick, setDisplayedTrick] = useState<PlayerView["currentTrick"]>(null);
   /** The revision at which you asked to see the last trick again; any move puts the table back. */
@@ -659,7 +664,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   // After each move, and when a played card leaves the hand (the trick shows it later than the move lands).
   useEffect(() => {
     const row = handRef.current;
-    if (!handFocused.current || !row) return;
+    // The hand and the action bar are out of reach while the cards are dealt; focus goes there once they land.
+    if (!handFocused.current || !row || dealing) return;
     const active = document.activeElement;
     if (active && active !== document.body && active !== row) {
       if (!inFocusZone(active)) handFocused.current = false;
@@ -672,7 +678,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     // Melding starts at "Lay down all meld"; picking cards is the less common path.
     if (action && (view?.phase === "melding" || !card)) action.focus({ preventScroll: true });
     else focusHand();
-  }, [view, hand, focusHand]);
+  }, [view, hand, focusHand, dealing]);
   const revealedFor = (seat: SeatIndex): CardId[] | undefined => claimShown && view ? sortHand(claimShown.hands[seat], view.trump, cardPrefs.sort)
     : view?.revealed ? sortHand(view.revealed[which][seat] ?? [], view.trump, cardPrefs.sort) : undefined;
 
@@ -833,7 +839,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
       makeHost, standIn, refresh: uid ? refreshMates : undefined,
     };
     return { seat, view, name: person.name, person, actions, score: scoreOf(seat), faceUp: revealedFor(seat), backed: revealingClaim && claimShown?.seat === seat,
-      laid: laidOf(seat).length, standIn, compact: short, fold };
+      laid: laidOf(seat).length, standIn, compact: short, fold, deal };
   };
   const them: Team = myTeam === "red" ? "blue" : "red";
   const peekingResult = over && !recapOpen && peekKey === `${view.handNumber}-${view.phase}`;
@@ -946,7 +952,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
               <div className="board-flat board-lift grid grid-cols-[minmax(64px,auto)_minmax(0,1fr)_minmax(64px,auto)] items-center gap-2"
                 style={{ transform: fit.top ? `translateY(${fit.top}px)` : undefined }}>
                 <OpponentRow className="board-west" align="left" {...seatProps(1)} />
-                <Centre compact={short} bidSlot={setBidSlot} view={view} trick={trickCards} rel={rel} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge} peek={peek} handsShown={handsShown}
+                <Centre compact={short} bidSlot={setBidSlot} dealWait={deal?.total} view={view} trick={trickCards} rel={rel} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge} peek={peek} handsShown={handsShown}
                   laid={{ 0: clothMeld(seatAt(0)), 1: clothMeld(seatAt(1)), 2: clothMeld(seatAt(2)), 3: clothMeld(seatAt(3)) }} lit={lit}
                   mySeat={short && <MySeat view={view} me={me} score={scoreOf(view.seat)} profileHref={local ? undefined : "/#profile"} />} />
                 <OpponentRow className="board-east" align="right" {...seatProps(3)} />
@@ -956,7 +962,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
         </div>
 
         {/* action bar: as tall as what it holds, so a waiting player's board has the whole room to centre in. */}
-        <div ref={actionRef} {...keepFocus} data-overlay-zone="action" className="board-action mt-1 shrink-0 sm:mt-2">
+        <div ref={actionRef} {...keepFocus} data-overlay-zone="action" inert={dealing || undefined} className={`board-action mt-1 shrink-0 sm:mt-2 ${deal ? "deal-wait" : ""}`}
+          style={deal ? { "--dl": `${deal.total}ms` } as React.CSSProperties : undefined}>
           {/* Your chair faces the partner's across the cloth, with what the table waits for in front of you. */}
           {!short && <MySeat view={view} me={me} score={scoreOf(view.seat)} profileHref={local ? undefined : "/#profile"} />}
           {!short && view.phase !== "playing" && <PhasePrompt view={view} trick={trickCards} nameOf={nameOf} stalled={stalled && !paused} nudge={nudge} handsShown={handsShown} />}
@@ -978,7 +985,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
         </div>
 
         {/* my hand */}
-        <div ref={handRef} tabIndex={-1} {...keepFocus} data-hand="mine" data-hand-cards={hand.length + myStack} role="group" aria-label="Your hand" onKeyDown={moveInHand} className={`board-hand relative mt-1 flex shrink-0 outline-none sm:mt-2 ${scrollHand ? "hand-scroll overflow-x-auto" : "justify-center"}`} style={{ minHeight: (cardW * 7) / 5 + (short ? 8 : 20), paddingTop: scrollHand ? 16 : undefined }}>
+        <div ref={handRef} tabIndex={-1} {...keepFocus} inert={dealing || undefined} data-hand="mine" data-hand-cards={hand.length + myStack} role="group" aria-label="Your hand" onKeyDown={moveInHand} className={`board-hand relative mt-1 flex shrink-0 outline-none sm:mt-2 ${scrollHand ? "hand-scroll overflow-x-auto" : "justify-center"}`} style={{ minHeight: (cardW * 7) / 5 + (short ? 8 : 20), paddingTop: scrollHand ? 16 : undefined }}>
           <div className={`flex items-end ${scrollHand ? "mx-auto w-max" : ""}`} style={{ paddingLeft: overlap }}>
             {/* Your partner is shooting: your cards are set aside in a small stack, in the room the fan had. */}
             {view.sittingOut === view.seat && view.phase === "playing" && (
@@ -993,7 +1000,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
               const ringed = (sel && !isArmed) || (isArmed && armed!.open);
               const blocked = view.phase === "playing" && isMyTurn && !playable && !!constraintText;
               return (
-                <span key={c} data-claim-card={claimShown ? c : undefined} data-keep-armed={isArmed || armedCard ? "" : undefined} className="shrink-0" style={{ marginLeft: -overlap }} onClick={() => { if (view.phase === "playing" && isMyTurn && !playable) showHint(); }}>
+                <span key={c} data-claim-card={claimShown ? c : undefined} data-keep-armed={isArmed || armedCard ? "" : undefined} className={`shrink-0 ${deal ? "deal-turn" : ""}`}
+                  style={{ marginLeft: -overlap, ...(deal && { "--dl": `${deal.landAt(view.seat, Math.max(0, deal.hand.indexOf(c)))}ms`, "--dt": `${deal.turnMs}ms` }) } as React.CSSProperties} onClick={() => { if (view.phase === "playing" && isMyTurn && !playable) showHint(); }}>
                   <button data-hand-card={c}
                     onPointerDown={(e) => { lastPress.current = { card: c, pointerId: e.pointerId, real: isRealPress(e.pointerType, window.matchMedia("(any-pointer: fine)").matches), upAt: null }; }}
                     onPointerUp={(e) => { lastPress.current = releasePress(lastPress.current, c, e.pointerId, e.timeStamp); }}
@@ -1032,6 +1040,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
           which={which} setWhich={setWhich} peek={peekKey === key} setPeek={(p) => setPeekKey(p ? key : null)} replayHref={replayHref}
           talk={resultModal ? talk : undefined} /></div>;
       })()}
+      {deal && <DealLayer deal={deal} root={claimRoot} mySeat={view.seat} />}
       <Announcer view={view} nameOf={nameOf} seats={snap.seats} paused={paused} myId={me.id} peek={peekSpoken} />
 
       {menu && <button inert={updating || undefined} type="button" aria-label="Close the menu" tabIndex={-1} onClick={() => setMenu(false)} className="fixed inset-0 z-30 bg-black/50 lg:hidden" />}
@@ -1147,7 +1156,7 @@ const SIDE = { left: "west", center: "north", right: "east" } as const;
 const MELD_W = 28;
 
 /** A player round the table: the name chip with its score tag, then their cards (backs while playing, face up at the end). */
-function OpponentRow({ seat, view, name, person, actions, align, score, laid, standIn, faceUp, backed = false, compact = false, fold = false, className = "" }: {
+function OpponentRow({ seat, view, name, person, actions, align, score, laid, standIn, faceUp, backed = false, compact = false, fold = false, deal = null, className = "" }: {
   faceUp?: CardId[]; seat: SeatIndex; view: PlayerView; name: string; align: "left" | "center" | "right"; score: SeatScore;
   person: SeatPerson; actions: SeatActions;
   /** how many of their cards lie on the table as meld */
@@ -1158,6 +1167,8 @@ function OpponentRow({ seat, view, name, person, actions, align, score, laid, st
   fold?: boolean;
   /** this seat just claimed: its cards lie face down over their faces until each turns up (Claim.tsx) */
   backed?: boolean;
+  /** a new hand being dealt: each back shows once its card lands */
+  deal?: Deal | null;
 }) {
   const four = useCardPrefs().prefs.fourColour;
   // The engine keeps meld in the hand; while it lies on the table it is not among the backs.
@@ -1180,7 +1191,8 @@ function OpponentRow({ seat, view, name, person, actions, align, score, laid, st
     </>
   );
   if (compact) {
-    return <CompactSeat {...{ seat, className, team, active, name, person, actions, chip, score, n, faceUp, backed, standIn, align }} setAside={sittingOut && !faceUp} />;
+    return <CompactSeat {...{ seat, className, team, active, name, person, actions, chip, score, n, faceUp, backed, standIn, align }} setAside={sittingOut && !faceUp}
+      countAt={deal ? deal.landAt(seat, n - 1) : undefined} />;
   }
   const plate = (
     <PlayerMenu person={person} team={team} actions={actions} align={align} plate={side}
@@ -1212,8 +1224,9 @@ function OpponentRow({ seat, view, name, person, actions, align, score, laid, st
       {backed && <span data-claim-back="" className="pointer-events-none absolute inset-0"><CardBack width={REV_W} team={team} /></span>}
     </span>)
     : Array.from({ length: n }).map((_, i) => (
-      <CardBack key={i} width={34} team={team}
-        style={vertical ? { marginTop: i ? -40 : 0, transform: align === "left" ? "rotate(90deg)" : "rotate(-90deg)" } : { marginLeft: i ? -24 : 0 }} />
+      <CardBack key={i} width={34} team={team} className={deal ? "deal-show" : undefined}
+        style={{ ...(vertical ? { marginTop: i ? -40 : 0, transform: align === "left" ? "rotate(90deg)" : "rotate(-90deg)" } : { marginLeft: i ? -24 : 0 }),
+          ...(deal && { "--dl": `${deal.landAt(seat, i)}ms` }) } as React.CSSProperties} />
     ))}
   </div>;
   if (vertical) {
@@ -1267,8 +1280,10 @@ function OpponentRow({ seat, view, name, person, actions, align, score, laid, st
  * Hands shown at the end stay face up in a tight overlapping fan; across the table it goes under the name, since
  * beside it the fan would be squeezed into a tall column down the middle of the screen.
  */
-function CompactSeat({ seat, className, team, active, name, person, actions, chip, score, n, faceUp, backed, standIn, align, setAside }: {
-  seat: SeatIndex; setAside: boolean; person: SeatPerson; actions: SeatActions;
+function CompactSeat({ seat, className, team, active, name, person, actions, chip, score, n, faceUp, backed, standIn, align, setAside, countAt }: {
+  seat: SeatIndex; setAside: boolean;
+  /** a new hand being dealt: the count shows once the seat's last card lands */
+  countAt?: number; person: SeatPerson; actions: SeatActions;
   className: string; team: Team; active: boolean; name: string; chip: React.ReactNode; score: SeatScore; n: number;
   faceUp?: CardId[]; backed: boolean; standIn?: { away: boolean; run: () => void }; align: "left" | "center" | "right";
 }) {
@@ -1286,7 +1301,8 @@ function CompactSeat({ seat, className, team, active, name, person, actions, chi
               ? <span className="flex items-center gap-1 text-xs tabular-nums text-chalk-faint" role="img" aria-label={`${name} sits this hand out; cards set aside`}>
                 <CardBack width={12} team={team} style={{ opacity: 0.6, transform: "rotate(-4deg)" }} /><span aria-hidden className="invisible">{n}</span>
               </span>
-              : <span className="flex items-center gap-1 text-xs tabular-nums text-chalk-faint" role="img" aria-label={`${n} cards`}>
+              : <span className={`flex items-center gap-1 text-xs tabular-nums text-chalk-faint ${countAt !== undefined ? "deal-show" : ""}`} role="img" aria-label={`${n} cards`}
+                style={countAt !== undefined ? { "--dl": `${countAt}ms` } as React.CSSProperties : undefined}>
                 <CardBack width={12} team={team} />{n}
               </span>
           )}
@@ -1496,9 +1512,11 @@ function PlayStatus({ view, trick, nameOf, peek, stalled, nudge, compact, busy, 
   );
 }
 
-function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = false, laid, lit, mySeat, bidSlot, handsShown = null }: {
+function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = false, laid, lit, mySeat, bidSlot, handsShown = null, dealWait }: {
   /** at hand end, looking at the table: which hands are face up (after passing or as dealt), for the prompt */
   handsShown?: Which | null;
+  /** a new hand being dealt: your bids come up on the cloth once the last card is down (ms) */
+  dealWait?: number;
   /** while you bid, the amounts lie open on the cloth (BidPicker portals them here) */
   bidSlot: (el: HTMLDivElement | null) => void;
   view: PlayerView; trick: PlayerView["currentTrick"]; rel: (s: SeatIndex) => 0 | 1 | 2 | 3; nameOf: (s: SeatIndex) => string;
@@ -1545,7 +1563,8 @@ function Centre({ view, trick, rel, nameOf, stalled, nudge, peek, compact = fals
         </div>
       ))}
       {view.phase === "bidding" && view.legal.canBid && (
-        <div ref={bidSlot} className="absolute inset-0 z-10 flex items-center justify-center" onClick={(e) => e.stopPropagation()} />
+        <div ref={bidSlot} inert={dealWait !== undefined || undefined} className={`absolute inset-0 z-10 flex items-center justify-center ${dealWait !== undefined ? "deal-wait" : ""}`}
+          style={dealWait !== undefined ? { "--dl": `${dealWait}ms` } as React.CSSProperties : undefined} onClick={(e) => e.stopPropagation()} />
       )}
       {shown?.plays.map((p) => {
         const r = rel(p.seat);

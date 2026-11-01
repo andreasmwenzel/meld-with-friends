@@ -299,3 +299,22 @@ body {
 @keyframes deal-6 { 0%, 48% { transform: none; opacity: 0; } 49% { opacity: 1; } 54%, 86% { transform: var(--to); opacity: 1; } 94%, 100% { transform: var(--to); opacity: 0; } }
 @keyframes deal-7 { 0%, 55% { transform: none; opacity: 0; } 56% { opacity: 1; } 61%, 86% { transform: var(--to); opacity: 1; } 94%, 100% { transform: var(--to); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .deal-card { animation: none !important; } }
+
+/* A new hand (Deal.tsx): each card waits in the deck, flies to its place in a hand (turning to lie along a side seat's
+   fan), and is gone the moment that hand shows it. Your own cards turn face up as they land; the rest of the board
+   (your bids, the meld readout) comes up once the last card is down. */
+@keyframes deal-fly {
+  from { transform: translate(var(--fx), var(--fy)) rotate(var(--r0)) scale(var(--s0)); }
+  to { transform: rotate(var(--r1)); opacity: var(--o1, 1); }
+}
+@keyframes deal-gone { to { opacity: 0; } }
+.deal-fly { animation: deal-fly var(--df) cubic-bezier(.25,.75,.3,1) var(--dd) both, deal-gone 1ms linear calc(var(--dd) + var(--df)) forwards; will-change: transform; }
+@keyframes deal-show { from { opacity: 0; } to { opacity: 1; } }
+.deal-show { animation: deal-show 1ms linear var(--dl) both; }
+@keyframes deal-turn {
+  from { opacity: 0; transform: perspective(500px) rotateY(80deg); }
+  1% { opacity: 1; }
+  to { opacity: 1; transform: none; }
+}
+.deal-turn { animation: deal-turn var(--dt, 200ms) cubic-bezier(.2,.8,.3,1) var(--dl) both; }
+.deal-wait { animation: card-fade 200ms linear var(--dl) both; }
