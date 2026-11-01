@@ -59,7 +59,7 @@ export interface HeartsHandRecord {
   handNumber: number;
   dealer: SeatIndex;
   pass: PassDirection;
-  /** points each seat took in tricks (hearts and the queen, less the jack) */
+  /** raw points each seat took in tricks (hearts and the queen, less the jack), before any moon is applied */
   taken: Record<SeatIndex, number>;
   /** the change applied to each seat's score once a moon is accounted for */
   delta: Record<SeatIndex, number>;
@@ -103,7 +103,7 @@ export type HeartsPlayReason =
   | "lead_two_clubs" // the two of clubs opens every hand
   | "follow_suit"
   | "hearts_not_broken" // on lead, hearts may not be led until one has been discarded (or only hearts remain)
-  | "no_points_first_trick"
+  | "no_points_first_trick" // unless the hand is nothing but hearts and the queen
   | "lead_any"
   | "any";
 

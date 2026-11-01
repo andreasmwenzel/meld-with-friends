@@ -36,7 +36,7 @@ export interface TableSummary {
   yours: boolean;
   /** moves were made since you last looked */
   fresh: boolean;
-  /** pinochle: our score and theirs; hearts: your points and the lowest at the table */
+  /** pinochle: our score and theirs; hearts: your points and the best (lowest) of the other three */
   score: { us: number; them: number } | null;
   activity: string;
 }

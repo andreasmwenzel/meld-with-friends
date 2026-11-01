@@ -8,11 +8,11 @@ type Value = HeartsRules[Key];
 /** Hearts house rules, in the same grid as pinochle's: a label, a select, a line of help where one word cannot say it. */
 const FIELDS: { k: Key; label: string; values: Value[]; text: (v: Value) => string; help?: (r: HeartsRules) => string | null }[] = [
   { k: "target", label: "Play to", values: [50, 75, 100, 150, 200], text: (v) => `${v} points` ,
-    help: () => "The game ends when someone reaches it. Lowest score wins." },
+    help: () => "The game ends when someone reaches it, and the lowest score wins. A tie for lowest plays another hand." },
   { k: "passing", label: "Passing", values: ["rotate", "none"], text: (v) => v === "rotate" ? "Left, right, across, hold" : "No passing" },
-  { k: "moon", label: "Shooting the moon", values: ["add", "subtract"], text: (v) => v === "add" ? "Everyone else takes 26" : "Shooter drops 26" },
+  { k: "moon", label: "Shooting the moon", values: ["add", "subtract"], text: (v) => v === "add" ? "Everyone else scores 26" : "Shooter scores −26" },
   { k: "jackOfDiamonds", label: "Jack of diamonds", values: [false, true], text: (v) => v ? "Worth −10" : "Just a card" },
-  { k: "noPointsFirstTrick", label: "First trick", values: [true, false], text: (v) => v ? "No points on it" : "Anything goes" },
+  { k: "noPointsFirstTrick", label: "First trick", values: [true, false], text: (v) => v ? "No points on it" : "Points allowed" },
   { k: "pace", label: "Pace", values: ["live", "leisurely"], text: (v) => v === "leisurely" ? "Leisurely (a trick a day is fine)" : "Live",
     help: (r) => r.pace === "leisurely" ? "The table waits weeks for your turn." : null },
 ];

@@ -76,7 +76,7 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
 
   const codeBlock = (
     <>
-      <p className="text-chalk-faint text-sm">{game.name} · table code</p>
+      <p className="text-chalk-faint text-sm">{hearts ? "Hearts table code" : "Table code"}</p>
       <p className="code mt-1 text-chalk" style={{ fontSize: "clamp(40px, 8vw, 64px)" }}>{code}</p>
       <button className="btn btn-ghost mt-3" style={{ height: "2.25rem" }} onClick={copy}>{copied ? "Link copied" : "Share invite link"}</button>
     </>
@@ -150,7 +150,7 @@ export function Seating({ code, me, snap, onChange, guest = false }: { code: str
           {game.teams ? <>
             Partners sit across from each other. <span className="text-deck-red-soft">South and North</span> are one team,{" "}
             <span className="text-deck-blue-soft">West and East</span> the other.
-          </> : <>Every player for themselves. Cards pass to the left first, so sit where you like.</>}
+          </> : <>Every player for themselves, so sit anywhere.</>}
         </p>
       </section>
 

@@ -83,8 +83,8 @@ function Rules() {
         {[
           ["Deal a table", "Type your name and deal. No account needed. You get a six-letter code."],
           ["Hand out the code", "Text it, or invite from your friends list. Everyone lands at the same table."],
-          ["Choose your chair", "Sit anywhere that's open. To switch partners, offer a trade and the other player accepts or declines."],
-          ["Play", "Pinochle: bid, name trump, pass, lay your meld, take tricks. Hearts: pass three, dodge the queen. The scorepad keeps itself."],
+          ["Choose your chair", "Sit anywhere that's open. To change seats, offer a swap and the other player accepts or declines."],
+          ["Play", "Pinochle: bid, name trump, pass, lay your meld, take tricks. Hearts: pass three cards, avoid the hearts and the queen of spades. The scorepad keeps itself."],
         ].map(([title, body], i) => (
           <li key={title} className="flex gap-4">
             <span className="display text-chalk-faint" style={{ fontSize: 30, lineHeight: 1 }}>{i + 1}</span>
@@ -96,12 +96,12 @@ function Rules() {
         ))}
       </ol>
       <section>
-        <h3 className="display" style={{ fontSize: 26 }}>Hearts</h3>
+        <h3 className="display" style={{ fontSize: 26 }}>Hearts: how it plays</h3>
         <p className="mb-2 mt-2 max-w-prose text-sm text-chalk-faint leading-relaxed">
-          Four players, 52 cards, no partners. Pass three cards left, right, across, then hold. The two of clubs leads;
-          follow suit when you can. Every heart you take is a point and the queen of spades is thirteen. Lowest score
-          when someone reaches 100 wins, unless you take every heart and the queen: that shoots the moon, and everyone
-          else takes 26.
+          Four players, 52 cards, no partners. Pass three cards left, right, across, then hold. The two of clubs leads,
+          and you follow suit when you can. You can&rsquo;t lead a heart until one has been played on another suit. Each
+          heart you take scores 1 and the queen of spades scores 13. Take all 13 hearts and the queen and you shoot the
+          moon: everyone else scores 26. The game ends when someone reaches 100, and the lowest score wins.
         </p>
       </section>
       <section>

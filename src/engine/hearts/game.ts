@@ -165,7 +165,8 @@ export function applyHeartsAction(state: HeartsState, action: HeartsAction): Hea
         next.players[best.seat].taken.push(...cards);
         next.tricks.push(trick);
         next.lastTrick = trick;
-        next.log.push(`${NAMES[best.seat]} takes the trick (${cards.reduce((n, c) => n + cardPoints(c, next.rules), 0)} points)`);
+        const points = cards.reduce((n, c) => n + cardPoints(c, next.rules), 0);
+        next.log.push(`${NAMES[best.seat]} takes the trick${points ? `, ${points} ${Math.abs(points) === 1 ? 'point' : 'points'}` : ''}`);
         next.currentTrick = { leader: best.seat, plays: [], winner: null };
         next.turn = best.seat;
         if (next.tricks.length === 13) { next.currentTrick = null; finishHand(next); }
@@ -177,7 +178,7 @@ export function applyHeartsAction(state: HeartsState, action: HeartsAction): Hea
       next.handNumber++;
       next.dealer = nextSeat(next.dealer);
       deal(next);
-      next.log.push(`Hand ${next.handNumber}: pass ${next.pass}`);
+      next.log.push(`Hand ${next.handNumber}: ${next.pass === 'hold' ? 'no pass' : `pass ${next.pass}`}`);
       break;
     default: throw new IllegalAction('Unknown action');
   }

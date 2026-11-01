@@ -6,7 +6,9 @@ import { api, ApiError, isTransientError, type Profile } from "@/lib/api";
 import { ViewSync, type GameFeed } from "@/components/table/viewSync";
 import type { HeartsAction, HeartsCardId, HeartsTrick, HeartsView, PassDirection, SeatIndex } from "@/engine/hearts/types";
 import { sortHeartsHand } from "@/engine/hearts/deck";
-import { PlayingCard, CardBack, cardName } from "@/components/cards/PlayingCard";
+import { PlayingCard, CardBack, cardName, SUIT_NAME } from "@/components/cards/PlayingCard";
+import { newLogLines, speakLine } from "@/components/table/announce";
+import { parseHeartsCard } from "@/engine/hearts/deck";
 import { Avatar } from "@/components/site/Avatar";
 import { SEAT_LABEL, type Snapshot } from "@/components/table/types";
 import { PlayerMenu, type SeatActions, type SeatPerson } from "@/components/table/PlayerMenu";
@@ -36,14 +38,28 @@ export interface LocalHearts {
 
 const ALL_SEATS: SeatIndex[] = [0, 1, 2, 3];
 const DIRECTION: Record<PassDirection, string> = { left: "to the left", right: "to the right", across: "across the table", hold: "nowhere" };
-const REASON: Record<NonNullable<HeartsView["legal"]["playReason"]>, string> = {
-  lead_two_clubs: "The two of clubs leads.",
-  follow_suit: "Follow suit.",
-  hearts_not_broken: "Hearts have not been broken yet.",
-  no_points_first_trick: "No points on the first trick.",
-  lead_any: "Your lead.",
-  any: "Play anything.",
-};
+/** Why the playable cards are what they are, said to the player on turn. */
+function reasonLine(view: HeartsView): string {
+  const led = view.currentTrick?.plays[0]?.card;
+  switch (view.legal.playReason) {
+    case "lead_two_clubs": return view.pass === "hold" && view.handNumber > 1 ? "No passing this hand. The two of clubs leads." : "The two of clubs leads.";
+    case "follow_suit": return led ? `Follow suit: ${SUIT_NAME[parseHeartsCard(led).suit]}.` : "Follow suit.";
+    case "hearts_not_broken": return "Hearts aren't broken. Lead another suit.";
+    case "no_points_first_trick": return "No points on the first trick.";
+    case "lead_any": return "Your lead.";
+    default: return "Play any card.";
+  }
+}
+function listNames(list: string[]) {
+  return list.length <= 1 ? list[0] ?? "" : `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}`;
+}
+/** What the screen reader hears when it becomes your move. */
+function yourTurnLine(view: HeartsView): string | null {
+  if (view.phase === "passing" && view.legal.mustPassCount !== null) return `Your turn. Choose three cards to pass ${DIRECTION[view.pass]}`;
+  if (view.phase === "playing" && view.turn === view.seat) return `Your turn. ${reasonLine(view)}`;
+  if (view.phase === "hand_over") return "Hand over";
+  return null;
+}
 const LIFT_PX = 14;
 
 /**
@@ -160,23 +176,49 @@ export function HeartsBoard({ code, me, snap, onTableChange, connection = "ok", 
     return () => { cancelled = true; clearTimeout(timer); };
   }, [botTurn, view, code, load, sync, live, leader, pace, local]);
 
-  // A finished trick rests on the cloth a moment, then sweeps to the player who took it.
+  // A finished trick rests on the cloth a moment, then sweeps to the player who took it. The hold is keyed by the
+  // trick, not the view object, so a resync or another player's move neither restarts nor cancels it; a hold that
+  // ends while the hand is over still lets the result through afterwards.
   const [shown, setShown] = useState<{ trick: HeartsTrick; sweeping: boolean } | null>(null);
-  const holdKey = useRef("");
+  const holdKey = useRef<string | null>(null);
   const holding = !!shown;
+  const last = view?.lastTrick ?? null;
+  const trickKey = view ? `${view.handNumber}:${last?.plays.map((p) => p.card).join(",") ?? ""}` : null;
+  const trickComplete = !!last && last.winner != null && last.plays.length === 4;
   useLayoutEffect(() => {
+    if (trickKey === null) return;
+    // Arriving at the table (or a new hand being dealt from one) shows the board as it stands, with no replay of the old trick.
+    if (holdKey.current === null || !trickComplete) { holdKey.current = trickKey; setShown(null); return; }
+    if (trickKey === holdKey.current) return;
+    holdKey.current = trickKey;
+    const trick = last!;
+    setShown({ trick, sweeping: false });
+    const sweep = setTimeout(() => setShown({ trick, sweeping: true }), holdMs);
+    const done = setTimeout(() => setShown(null), holdMs + sweepMs);
+    return () => { clearTimeout(sweep); clearTimeout(done); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `last` is captured by trickKey; timings are fixed per preference
+  }, [trickKey, trickComplete, holdMs, sweepMs]);
+
+  // A selection only means something for the hand it was made in, and only for cards still in the hand: a new hand
+  // or phase clears it, and a card that left the hand (played from another tab) drops out of it.
+  const handKey = view ? `${view.handNumber}:${view.phase}` : null;
+  const [selectedFor, setSelectedFor] = useState(handKey);
+  if (handKey !== selectedFor) { setSelectedFor(handKey); setSelected([]); setArmed(null); }
+  if (view && selected.some((c) => !view.hand.includes(c))) setSelected(selected.filter((c) => view.hand.includes(c)));
+  if (view && armed && !view.hand.includes(armed)) setArmed(null);
+  // Spoken for screen readers: the log lines since the last view, and your turn when it comes.
+  const spokenPrev = useRef<{ log: string[]; turn: string | null } | null>(null);
+  const [spoken, setSpoken] = useState("");
+  useEffect(() => {
     if (!view) return;
-    const last = view.lastTrick;
-    const key = `${view.handNumber}:${last?.plays.map((p) => p.card).join(",") ?? ""}`;
-    if (last?.winner != null && last.plays.length === 4 && key !== holdKey.current && holdKey.current !== "" && !(view.currentTrick?.plays.length)) {
-      holdKey.current = key;
-      setShown({ trick: last, sweeping: false });
-      const sweep = setTimeout(() => setShown({ trick: last, sweeping: true }), holdMs);
-      const done = setTimeout(() => setShown(null), holdMs + sweepMs);
-      return () => { clearTimeout(sweep); clearTimeout(done); };
-    }
-    if (holdKey.current === "" || key !== holdKey.current && last == null) holdKey.current = key;
-  }, [view, holdMs, sweepMs]);
+    const before = spokenPrev.current;
+    const turn = yourTurnLine(view);
+    spokenPrev.current = { log: view.log, turn };
+    if (!before) return;
+    const parts = newLogLines(before.log, view.log).map((l) => speakLine(l, nameOf));
+    if (turn && turn !== before.turn) parts.push(turn);
+    if (parts.length) setSpoken((t) => `${parts.map((p) => p.replace(/\.$/, "")).join(". ")}.${t.endsWith(" ") ? "" : " "}`);
+  }, [view, nameOf]);
 
   async function postReady() {
     if (local) return;
@@ -204,14 +246,14 @@ export function HeartsBoard({ code, me, snap, onTableChange, connection = "ok", 
       <div className="flex flex-1 flex-col">
         <TopBar code={code} />
         {unseated
-          ? <DeadEnd art={<EmptySeat />} title="This game is already under way." actions={<Link href="/" className="btn btn-chalk">Back to the lobby</Link>}>
-              Four players are already in this game, and only they can see its cards.
+          ? <DeadEnd art={<EmptySeat />} title="This game is full." actions={<Link href="/" className="btn btn-chalk">Back to your tables</Link>}>
+              Four players are seated, and only they can see the cards.
             </DeadEnd>
-          : <DeadEnd art={<CodeHand code={code} />} title={error} actions={<Link href="/" className="btn btn-chalk">Back to the lobby</Link>} />}
+          : <DeadEnd art={<CodeHand code={code} />} title={error} actions={<Link href="/" className="btn btn-chalk">Back to your tables</Link>} />}
       </div>
     );
   }
-  if (!view) return <div className="flex flex-1 flex-col"><TopBar code={code} /><Dealing label="Dealing the hearts." /></div>;
+  if (!view) return <div className="flex flex-1 flex-col"><TopBar code={code} /><Dealing label="Dealing." /></div>;
 
   const mySeat = view.seat;
   const rel = (seat: SeatIndex): Rel => (((seat - mySeat + 4) % 4) as Rel);
@@ -221,7 +263,8 @@ export function HeartsBoard({ code, me, snap, onTableChange, connection = "ok", 
   const myTurn = view.turn === mySeat && view.phase === "playing" && !holding;
   const playable = new Set(myTurn ? view.legal.playableCards : []);
   const received = new Set(view.received);
-  const over = view.phase === "hand_over" || view.phase === "game_over";
+  // The hand's last trick finishes its hold before the result takes the table.
+  const over = (view.phase === "hand_over" || view.phase === "game_over") && !holding;
   const lastHand = view.history[view.history.length - 1];
   const moon = over && lastHand?.moon != null ? lastHand.moon : null;
   const readySeats = view.ready ?? [];
@@ -258,18 +301,19 @@ export function HeartsBoard({ code, me, snap, onTableChange, connection = "ok", 
   const status = (() => {
     if (snap.paused) return `Paused by ${snap.paused.name}.`;
     if (view.phase === "passing") {
-      if (view.pass === "hold") return "No passing this hand.";
       if (passing) return selected.length === 3 ? `Pass these three ${DIRECTION[view.pass]}.` : `Choose three cards to pass ${DIRECTION[view.pass]}.`;
       const waiting = ALL_SEATS.filter((s) => !view.passed[s] && s !== mySeat).map(nameOf);
-      return waiting.length ? `Waiting on ${waiting.join(", ")} to pass.` : "Passing.";
+      return `Waiting on ${listNames(waiting)} to pass.`;
     }
+    if (holding && shown) return `${nameOf(shown.trick.winner!)} ${shown.trick.winner === mySeat ? "take" : "takes"} the trick.`;
     if (view.phase === "playing") {
-      if (myTurn) return `Your turn. ${view.legal.playReason ? REASON[view.legal.playReason] : ""}`.trim();
-      if (holding && shown) return `${nameOf(shown.trick.winner!)} ${shown.trick.winner === mySeat ? "take" : "takes"} the trick.`;
+      if (myTurn) return reasonLine(view);
       return view.turn !== null ? `${nameOf(view.turn)} to play.` : "";
     }
-    if (view.phase === "hand_over") return moon !== null ? `${nameOf(moon)} shot the moon.` : "Hand over.";
-    return view.winner !== null ? `${nameOf(view.winner)} ${view.winner === mySeat ? "win" : "wins"} with ${view.score[view.winner]}.` : "Game over.";
+    // The panel in the middle names the hand and the winner; the line under your seat says what it did to the scores.
+    if (moon !== null && lastHand) return view.rules.moon === "add" ? "Everyone else scores 26." : `${nameOf(moon)} ${moon === mySeat ? "score" : "scores"} −26.`;
+    if (view.phase === "hand_over") return "Hand over.";
+    return view.winner !== null ? `${view.score[view.winner]} points. Lowest score wins.` : "Game over.";
   })();
 
   const seatBlock = (r: Rel, className: string) => {
@@ -291,10 +335,13 @@ export function HeartsBoard({ code, me, snap, onTableChange, connection = "ok", 
       button={<span className="flex items-center gap-2"><span className="code text-chalk" style={{ fontSize: 15, letterSpacing: ".1em" }}>{code}</span><span className="text-chalk-faint">Menu</span></span>}>
       <div className="flex flex-col gap-4 text-sm">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-chalk-faint">Hearts · table <span className="code text-chalk" style={{ fontSize: 16, letterSpacing: ".1em" }}>{code}</span></p>
-          <Link href="/" className="tap-link text-chalk-faint underline underline-offset-4 hover:text-chalk">Leave the table</Link>
+          <p className="text-chalk-faint">Hearts table <span className="code text-chalk" style={{ fontSize: 16, letterSpacing: ".1em" }}>{code}</span></p>
+          <Link href="/" className="tap-link text-chalk-faint underline underline-offset-4 hover:text-chalk">Your tables</Link>
         </div>
         {score}
+        <div className="max-h-32 overflow-y-auto text-xs leading-relaxed text-chalk-faint">
+          {view.log.slice(-8).map((l, i) => <p key={i}>{speakLine(l, nameOf)}</p>)}
+        </div>
         <details>
           <summary className="cursor-pointer text-chalk-faint hover:text-chalk">House rules</summary>
           <div className="panel mt-2 p-3"><HeartsRulesForm value={view.rules} compact /></div>
@@ -345,6 +392,7 @@ export function HeartsBoard({ code, me, snap, onTableChange, connection = "ok", 
           <SeatPlate seat={mySeat} view={view} person={person(mySeat)} actions={actionsFor(mySeat)} active={myTurn} align="center" placement="above"
             passed={view.phase === "passing" && view.passed[mySeat]} compact={phone} me />
           <p className={`text-center text-sm ${myTurn || passing ? "text-chalk" : "text-chalk-faint"}`}>{status}</p>
+          <p data-announcer="" className="sr-only" aria-live="polite" aria-atomic="true">{spoken}</p>
           {passing && (
             <button type="button" className="btn btn-brass btn-compact" disabled={selected.length !== 3 || busy} onClick={() => void act({ type: "pass_cards", cards: selected })}>
               Pass three cards
@@ -365,7 +413,7 @@ export function HeartsBoard({ code, me, snap, onTableChange, connection = "ok", 
           {view.phase === "game_over" && (
             <div className="flex flex-wrap items-center justify-center gap-3">
               {isHost && !local && <button type="button" className="btn btn-brass btn-compact" disabled={busy} onClick={() => void rematch()}>Play again</button>}
-              <Link href="/" className="btn btn-ghost btn-compact">Back to the lobby</Link>
+              <Link href="/" className="btn btn-ghost btn-compact">Back to your tables</Link>
             </div>
           )}
         </div>
@@ -422,7 +470,7 @@ function Backs({ n, vertical }: { n: number; vertical: boolean }) {
   const w = 22, step = 7;
   if (n === 0) return <div style={{ height: vertical ? 0 : (w * 7) / 5 }} />;
   return (
-    <div aria-label={`${n} cards`} className="relative shrink-0" style={vertical ? { width: (w * 7) / 5, height: w + (n - 1) * step } : { width: w + (n - 1) * step, height: (w * 7) / 5 }}>
+    <div role="img" aria-label={`${n} ${n === 1 ? "card" : "cards"}`} className="relative shrink-0" style={vertical ? { width: (w * 7) / 5, height: w + (n - 1) * step } : { width: w + (n - 1) * step, height: (w * 7) / 5 }}>
       {Array.from({ length: n }, (_, i) => (
         <CardBack key={i} width={w} team="red" className="absolute" style={vertical
           ? { top: i * step, left: 0, transform: "rotate(90deg)", transformOrigin: `${(w * 7) / 10}px ${(w * 7) / 10}px` }
@@ -495,7 +543,8 @@ function Hand({ cards, width, selected, armed, playable, received, interactive, 
         const can = interactive && (playable.size === 0 || playable.has(card));
         const dim = interactive && playable.size > 0 && !playable.has(card);
         return (
-          <button key={card} type="button" data-hand-card={card} aria-label={`${cardName(card)}${received.has(card) ? ", passed to you" : ""}${up ? ", lifted" : ""}`}
+          <button key={card} type="button" data-hand-card={card}
+            aria-label={`${cardName(card)}${received.has(card) ? ", passed to you" : ""}${selected.includes(card) ? ", chosen to pass" : armed === card ? ", tap again to play" : ""}`}
             aria-pressed={up} disabled={!can} onClick={() => onTap(card)}
             className="absolute bottom-0 block rounded-[12px] disabled:cursor-default"
             style={{ left: i * step, transform: up ? `translateY(-${LIFT_PX}px)` : undefined, transition: "transform .16s ease", zIndex: i }}>
@@ -536,16 +585,16 @@ function HandEnd({ view, nameOf, moon, mySeat, sheetOpen, setSheetOpen }: {
                 <li key={s}>
                   <p className="truncate text-xs text-ink-soft">{nameOf(s)}</p>
                   <p className="display tabular-nums" style={{ fontSize: 26, color }}>
-                    {big < 0 && <span className="font-sans font-light" aria-hidden>−</span>}{Math.abs(big)}
+                    {big < 0 && <><span className="font-sans font-light" aria-hidden>−</span><span className="sr-only">minus </span></>}{Math.abs(big)}
                   </p>
-                  <p className="text-xs tabular-nums text-ink-soft">{done ? `last hand ${last.delta[s]}` : view.score[s]}</p>
+                  <p className="text-xs tabular-nums text-ink-soft">{done ? `last hand ${last.delta[s] < 0 ? "−" : ""}${Math.abs(last.delta[s])}` : `total ${view.score[s]}`}</p>
                 </li>
               );
             })}
           </ul>
         )}
         <button type="button" className="tap-link mt-1 text-xs text-ink-soft underline underline-offset-2 hover:text-ink" aria-expanded={sheetOpen} onClick={() => setSheetOpen(!sheetOpen)}>
-          {sheetOpen ? "Hide the scoresheet" : "Whole scoresheet"}
+          {sheetOpen ? "Hide scorepad" : "Show scorepad"}
         </button>
         {sheetOpen && <div className="mt-2 max-h-[30vh] overflow-y-auto"><Scoresheet view={view} nameOf={nameOf} bare /></div>}
       </div>
