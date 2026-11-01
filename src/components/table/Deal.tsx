@@ -7,8 +7,9 @@ import { CardBack } from "@/components/cards/PlayingCard";
 import { teamOf } from "./types";
 import { dealLandsAt, dealLaunch, dealTimings } from "./motion";
 
-/** The last deal this tab has shown, so a reload or a remount does not deal the same cards again. */
-const SEEN = "meld.dealt";
+/** The last deal this tab has shown at each table, so a reload, a remount or a visit to another table does not deal the
+ *  same cards again. */
+const seenKey = (code: string) => `meld.dealt.${code}`;
 
 export type Deal = {
   dealer: SeatIndex;
@@ -27,25 +28,27 @@ export type Deal = {
  * Plays once per hand in this tab, on a fresh deal (bidding, nobody has bid), and not at all with motion off.
  */
 export function useDeal(view: PlayerView | null, motion: MotionPref, code: string): Deal | null {
-  const key = view && view.phase === "bidding" && view.bids.length === 0 ? `${code}|${view.handNumber}|${view.hand.join()}` : null;
+  const key = view && view.phase === "bidding" && view.bids.length === 0 ? `${view.handNumber}|${view.hand.join()}` : null;
   const [deal, setDeal] = useState<Deal | null>(null);
   // Before paint, so the hand never shows whole and then empties to be dealt.
   useLayoutEffect(() => {
     const t = dealTimings(motion);
+    // Motion turned off (or reduced motion turned on) mid-deal: the cards are all down at once.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- ends a deal the motion setting no longer allows
+    if (!t) setDeal(null);
     if (!key || !view) return;
     try {
-      if (sessionStorage.getItem(SEEN) === key) return;
-      sessionStorage.setItem(SEEN, key);
+      if (sessionStorage.getItem(seenKey(code)) === key) return;
+      sessionStorage.setItem(seenKey(code), key);
     } catch { return; }
     if (!t) return;
     const dealer = view.dealer;
     const q = (seat: SeatIndex) => (seat - dealer + 3) % 4;
     const landAt = (seat: SeatIndex, i: number) => dealLandsAt(t, q(seat), i);
     const last = Math.max(...([0, 1, 2, 3] as const).map((s) => landAt(s, Math.max(0, view.handCounts[s] - 1))));
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- a new deal starts once, keyed by the hand
     setDeal({ dealer, hand: view.hand, counts: view.handCounts, landAt, launchAt: (seat, i) => dealLaunch(t, q(seat), i),
       flyMs: t.flyMs, turnMs: t.turnMs, total: last + t.turnMs });
-  }, [key, motion, view]);
+  }, [key, motion, view, code]);
   useEffect(() => {
     if (!deal) return;
     const timer = setTimeout(() => setDeal(null), deal.total + 50);

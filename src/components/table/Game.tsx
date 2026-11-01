@@ -664,7 +664,8 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
   // After each move, and when a played card leaves the hand (the trick shows it later than the move lands).
   useEffect(() => {
     const row = handRef.current;
-    if (!handFocused.current || !row) return;
+    // The hand and the action bar are out of reach while the cards are dealt; focus goes there once they land.
+    if (!handFocused.current || !row || dealing) return;
     const active = document.activeElement;
     if (active && active !== document.body && active !== row) {
       if (!inFocusZone(active)) handFocused.current = false;
@@ -677,7 +678,7 @@ export function Game({ code, me, snap, rev, feed, inspect, onTableChange, connec
     // Melding starts at "Lay down all meld"; picking cards is the less common path.
     if (action && (view?.phase === "melding" || !card)) action.focus({ preventScroll: true });
     else focusHand();
-  }, [view, hand, focusHand]);
+  }, [view, hand, focusHand, dealing]);
   const revealedFor = (seat: SeatIndex): CardId[] | undefined => claimShown && view ? sortHand(claimShown.hands[seat], view.trump, cardPrefs.sort)
     : view?.revealed ? sortHand(view.revealed[which][seat] ?? [], view.trump, cardPrefs.sort) : undefined;
 
