@@ -8,7 +8,7 @@ import type { Snapshot } from "@/components/table/types";
 
 /** Your hand's cards (the seat plates also mention cards in their labels, so the hand is found by its attribute). */
 const handCards = () => [...document.querySelectorAll<HTMLButtonElement>("button[data-hand-card]")];
-const enabledCards = () => handCards().filter((c) => !c.disabled);
+const enabledCards = () => handCards().filter((c) => c.getAttribute("aria-disabled") !== "true");
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }) }));
 

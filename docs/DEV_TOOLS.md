@@ -219,9 +219,15 @@ saved. `?state=` puts it in a position: `passing` (default), `play`, `midhand`, 
 computer players still so a screenshot is the exact position. `/dev/seating?game=hearts` is the seating
 screen for a hearts table.
 
+`scripts/shots.mjs` knows only the pinochle lab presets, so shoot hearts by hand at every breakpoint:
+
 ```
-for s in passing play hand-over moon game-over; do
-  google-chrome --headless --screenshot=.dev/shots/hearts-$s.png --window-size=390,844 "http://localhost:3000/dev/hearts?state=$s&run=0"
-done
+mkdir -p .dev/shots
+for s in passing play hand-over moon game-over; do for sz in 390,844 360,640 844,390 768,1024 1440,900; do
+  google-chrome --headless --hide-scrollbars --virtual-time-budget=7000 --screenshot=.dev/shots/hearts-$s-$sz.png --window-size=$sz "http://localhost:3000/dev/hearts?state=$s&run=0"
+done; done
 ```
+
+`scripts/fuzz.mjs` fuzzes the pinochle engine only; the hearts engine's own fuzz lives in its tests
+(`src/engine/hearts/__tests__`, fifty seeded games to the end).
 

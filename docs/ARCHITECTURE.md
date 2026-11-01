@@ -26,9 +26,40 @@ rules are validated per kind (`rulesSchemaFor`). Only pinochle moves travel sign
 clients fetch their view on every game event. The board is chosen in `TableRoom` by `table.game_kind`
 (`src/components/table/Game.tsx` for pinochle, `src/components/hearts/HeartsBoard.tsx` for hearts).
 Results: `record_game_result` stores a hearts winner as the seat (`'0'..'3'`) and each player's "team" as
-`s0..s3`. Replays and the practice coach are pinochle only for now.
+`s0..s3` (`game_results.winner` and `game_result_players.team` accept both encodings since migration 0024;
+`src/server/history.ts` tells the games apart by that prefix). Replays and the practice coach are pinochle only
+for now. Both `tables.game_kind` and `games.game_kind` hold the kind; the game's row copies it from the table
+when a game starts.
 
-## Shooting the moon
+### Hearts rules
+
+`HeartsRules` (src/engine/hearts/types.ts): `target` (default 100), `passing` (rotate left, right, across, hold;
+or none), `moon` (add 26 to everyone else, or subtract 26 from the shooter), `jackOfDiamonds` (−10 to whoever
+takes it), `noPointsFirstTrick`, and `pace` as for pinochle. The two of clubs leads, hearts may not be led
+until one has been discarded (unless the hand is all hearts), and the game ends after the hand in which someone
+reaches the target; the unique lowest score wins, and a tie for lowest plays another hand.
+
+### Adding a third game
+
+1. Name it in `src/engine/kinds.ts`.
+2. Write its engine under `src/engine/<game>/` (types, deck, game, ai, tests) with the same shape of exports as
+   hearts: new game, apply action, view for a seat, a bot's action.
+3. Teach `src/engine/dispatch.ts` every branch (`resolveRulesFor`, `newGameFor`, `applyFor`, `viewForAny`,
+   `botActionFor`, `seatsAwaited`), and `src/server/validation.ts` its rules schema (`rulesSchemaFor`) and action
+   schema (`anyActionSchema`).
+4. A migration: the `tables.game_kind` check, the `game_results.winner` and `game_result_players.team` checks, and
+   the per-kind branches of `record_game_result` and `record_abandoned_game`. Then `src/server/history.ts`, which
+   reads the team encoding, and `src/server/replay.ts`, which declines kinds it cannot rebuild.
+5. The board: a component for it and the switch in `src/components/table/TableRoom.tsx`; its rules form; a face for
+   its card in `src/components/site/GameCard.tsx`; and the lobby lines in `src/lib/tableStatus.ts` if its phases
+   differ.
+6. A dev board (`src/app/dev/<game>/`) so the screens can be screenshotted without a database.
+
+Migrations live in `supabase/migrations/`, numbered in order, each wrapped in `begin; … commit;`; apply them with
+the Supabase CLI (`supabase db push`) or by pasting into the SQL editor of the project before the code that
+needs them deploys.
+
+## Pinochle: shooting the moon
 
 With `rules.shoot: "on"`, the bid winner decides after passing and before meld. A shoot skips meld
 and sets `sittingOut` to the partner's seat. The engine retains that hand for card conservation and

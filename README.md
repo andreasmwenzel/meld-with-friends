@@ -6,7 +6,7 @@ Play it at **[meld.insulatorgap.com](https://meld.insulatorgap.com)**.
 
 Cards with your friends, in the browser, in real time. Type a name, deal a table, hand out a
 six-letter code, pick your seats (or offer to swap), and play four-hand partnership pinochle to 150
-or hearts to 100.
+or hearts to 100 (by default; the target is a house rule).
 No account needed; guests can add an email later to keep history and friends. Short a player? The host
 can seat computer players that bid, pass, meld and play from the same information a human sees.
 New to the game? `/practice` walks you through a hand against three computers. Playing a trick a day

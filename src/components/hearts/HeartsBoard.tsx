@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import { api, ApiError, isTransientError, type Profile } from "@/lib/api";
 import { ViewSync, type GameFeed } from "@/components/table/viewSync";
@@ -206,6 +206,8 @@ export function HeartsBoard({ code, me, snap, onTableChange, connection = "ok", 
   if (handKey !== selectedFor) { setSelectedFor(handKey); setSelected([]); setArmed(null); }
   if (view && selected.some((c) => !view.hand.includes(c))) setSelected(selected.filter((c) => view.hand.includes(c)));
   if (view && armed && !view.hand.includes(armed)) setArmed(null);
+  // A card lifted for a second tap says so, since the lift alone is silent.
+  const armedLine = armed && prefs.confirmPlay ? `Press again to play the ${cardName(armed)}.` : "";
   // Spoken for screen readers: the log lines since the last view, and your turn when it comes.
   const spokenPrev = useRef<{ log: string[]; turn: string | null } | null>(null);
   const [spoken, setSpoken] = useState("");
@@ -343,11 +345,11 @@ export function HeartsBoard({ code, me, snap, onTableChange, connection = "ok", 
           {view.log.slice(-8).map((l, i) => <p key={i}>{speakLine(l, nameOf)}</p>)}
         </div>
         <details>
-          <summary className="cursor-pointer text-chalk-faint hover:text-chalk">House rules</summary>
+          <summary className="tap cursor-pointer text-chalk-faint hover:text-chalk">House rules</summary>
           <div className="panel mt-2 p-3"><HeartsRulesForm value={view.rules} compact /></div>
         </details>
         <details>
-          <summary className="cursor-pointer text-chalk-faint hover:text-chalk">Table look</summary>
+          <summary className="tap cursor-pointer text-chalk-faint hover:text-chalk">Table look</summary>
           <div className="panel mt-2 p-3"><LookOptions team="red" /></div>
         </details>
       </div>
@@ -393,6 +395,7 @@ export function HeartsBoard({ code, me, snap, onTableChange, connection = "ok", 
             passed={view.phase === "passing" && view.passed[mySeat]} compact={phone} me />
           <p className={`text-center text-sm ${myTurn || passing ? "text-chalk" : "text-chalk-faint"}`}>{status}</p>
           <p data-announcer="" className="sr-only" aria-live="polite" aria-atomic="true">{spoken}</p>
+          <p className="sr-only" aria-live="polite">{armedLine}</p>
           {passing && (
             <button type="button" className="btn btn-brass btn-compact" disabled={selected.length !== 3 || busy} onClick={() => void act({ type: "pass_cards", cards: selected })}>
               Pass three cards
@@ -422,7 +425,7 @@ export function HeartsBoard({ code, me, snap, onTableChange, connection = "ok", 
       {/* your hand */}
       <div className="hand-scroll mt-2 shrink-0 overflow-x-auto pt-4 short:mt-1 short:pt-3" style={{ paddingBottom: "max(.75rem, env(safe-area-inset-bottom))" }}>
         <Hand cards={hand} width={cardWidth} selected={selected} armed={armed} playable={playable} received={received}
-          interactive={passing || myTurn} onTap={tapCard} prefs={prefs} />
+          interactive={passing || myTurn} onTap={tapCard} prefs={prefs} why={myTurn ? `Not playable. ${reasonLine(view)}` : ""} />
       </div>
 
       {chat && <div className="absolute bottom-3 right-3 z-30"><ChatDock chat={chat} open={talkOpen} setOpen={setTalkOpen} text={talkDraft} setText={setTalkDraft} /></div>}
@@ -529,24 +532,43 @@ function Trick({ trick, rel, sweeping, slideMs, sweepMs, width, fourColour }: {
 }
 
 /** Your cards, overlapping, the playable ones lifted; cards you were passed carry a brass dot until you first play. */
-function Hand({ cards, width, selected, armed, playable, received, interactive, onTap, prefs }: {
+function Hand({ cards, width, selected, armed, playable, received, interactive, onTap, prefs, why }: {
   cards: HeartsCardId[]; width: number; selected: HeartsCardId[]; armed: HeartsCardId | null; playable: Set<HeartsCardId>; received: Set<HeartsCardId>;
   interactive: boolean; onTap: (card: HeartsCardId) => void; prefs: ReturnType<typeof useCardPrefs>["prefs"];
+  /** why the cards that cannot be played cannot, read to anyone who lands on one */
+  why: string;
 }) {
   const step = Math.round(width * 0.42);
   const total = width + (cards.length - 1) * step;
   const h = (width * 7) / 5;
+  const whyId = useId();
+  const root = useRef<HTMLDivElement>(null);
+  // Arrow keys walk the hand, as on the pinochle board; Home and End jump to its ends.
+  const move = (e: React.KeyboardEvent) => {
+    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+    const buttons = [...(root.current?.querySelectorAll<HTMLButtonElement>("[data-hand-card]") ?? [])];
+    const i = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (i < 0) return;
+    const to = e.key === "ArrowRight" || e.key === "ArrowDown" ? Math.min(buttons.length - 1, i + 1)
+      : e.key === "ArrowLeft" || e.key === "ArrowUp" ? Math.max(0, i - 1)
+      : e.key === "Home" ? 0 : e.key === "End" ? buttons.length - 1 : -1;
+    if (to < 0) return;
+    e.preventDefault();
+    buttons[to].focus();
+  };
   return (
-    <div className="relative mx-auto" style={{ width: total, height: h + LIFT_PX + 6 }}>
+    <div ref={root} role="group" aria-label="Your hand" onKeyDown={move} className="relative mx-auto" style={{ width: total, height: h + LIFT_PX + 6 }}>
+      <span id={whyId} className="sr-only">{why}</span>
       {cards.map((card, i) => {
         const up = selected.includes(card) || armed === card;
         const can = interactive && (playable.size === 0 || playable.has(card));
         const dim = interactive && playable.size > 0 && !playable.has(card);
         return (
+          // A card that cannot be played stays focusable and says why, rather than vanishing from the keyboard.
           <button key={card} type="button" data-hand-card={card}
             aria-label={`${cardName(card)}${received.has(card) ? ", passed to you" : ""}${selected.includes(card) ? ", chosen to pass" : armed === card ? ", tap again to play" : ""}`}
-            aria-pressed={up} disabled={!can} onClick={() => onTap(card)}
-            className="absolute bottom-0 block rounded-[12px] disabled:cursor-default"
+            aria-pressed={up} aria-disabled={!can || undefined} aria-describedby={dim ? whyId : undefined} onClick={() => { if (can) onTap(card); }}
+            className="absolute bottom-0 block rounded-[12px] aria-disabled:cursor-default"
             style={{ left: i * step, transform: up ? `translateY(-${LIFT_PX}px)` : undefined, transition: "transform .16s ease", zIndex: i }}>
             <PlayingCard card={card} width={width} selected={up} dimmed={dim} prefs={prefs} />
             {received.has(card) && <span aria-hidden className="absolute left-1/2 top-1 h-2 w-2 -translate-x-1/2 rounded-full bg-brass" style={{ boxShadow: "0 0 0 1.5px var(--chalk)" }} />}
