@@ -44,9 +44,9 @@ function HeldHand() {
 function GameFan() {
   const w = 64;
   return (
-    <div aria-hidden className="pointer-events-none absolute right-0 top-1 hidden min-[380px]:block" style={{ width: w + 2 * 38, height: (w * 7) / 5 + 24 }}>
+    <div aria-hidden className="pointer-events-none absolute right-0 top-1 hidden min-[380px]:block" style={{ width: w + 2 * 46, height: (w * 7) / 5 + 24 }}>
       {[<CardBack key="b" width={w} team="red" />, <GameCard key="p" kind="pinochle" width={w} />, <GameCard key="h" kind="hearts" width={w} />].map((card, i) => (
-        <div key={i} className="absolute bottom-0" style={{ left: i * 38, zIndex: i, transformOrigin: "50% 140%", transform: `rotate(${(i - 1) * 10}deg)` }}>{card}</div>
+        <div key={i} className="absolute bottom-0" style={{ left: i * 46, zIndex: i, transformOrigin: "50% 140%", transform: `rotate(${(i - 1) * 10}deg)` }}>{card}</div>
       ))}
     </div>
   );

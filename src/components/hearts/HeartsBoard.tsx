@@ -342,15 +342,15 @@ export function HeartsBoard({ code, me, snap, onTableChange, connection = "ok", 
           <Link href="/" className="tap-link text-chalk-faint underline underline-offset-4 hover:text-chalk">Your tables</Link>
         </div>
         {score}
-        <div className="max-h-32 overflow-y-auto text-xs leading-relaxed text-chalk-faint">
-          {view.log.slice(-8).map((l, i) => <p key={i}>{speakLine(l, nameOf)}</p>)}
+        <div className="text-xs leading-relaxed text-chalk-faint">
+          {[...view.log.slice(-6)].reverse().map((l, i) => <p key={i}>{speakLine(l, nameOf)}</p>)}
         </div>
-        <details>
-          <summary className="tap cursor-pointer text-chalk-faint hover:text-chalk">House rules</summary>
+        <details className="group border-t border-chalk-ghost">
+          <summary className="tap cursor-pointer list-none text-chalk-faint hover:text-chalk"><span aria-hidden className="mr-2 inline-block transition-transform group-open:rotate-90">▸</span>House rules</summary>
           <div className="panel mt-2 p-3"><HeartsRulesForm value={view.rules} compact /></div>
         </details>
-        <details>
-          <summary className="tap cursor-pointer text-chalk-faint hover:text-chalk">Table look</summary>
+        <details className="group border-t border-chalk-ghost">
+          <summary className="tap cursor-pointer list-none text-chalk-faint hover:text-chalk"><span aria-hidden className="mr-2 inline-block transition-transform group-open:rotate-90">▸</span>Table look</summary>
           <div className="panel mt-2 p-3"><LookOptions team="red" game="hearts" /></div>
         </details>
       </div>
@@ -497,14 +497,16 @@ function PassSign({ view, nameOf, rel, width }: { view: HeartsView; nameOf: (s: 
   const slide: Record<Rel, [number, number]> = { 0: [0, 0], 1: [-18, 0], 2: [0, -18], 3: [18, 0] };
   const [dx, dy] = slide[r];
   return (
-    <div className="flex flex-col items-center gap-3" style={{ width: width * 2.6, minHeight: h * 2.1, justifyContent: "center" }}>
+    <div className="relative flex flex-col items-center gap-3" style={{ width: width * 2.6, minHeight: h * 2.1, justifyContent: "center" }}>
+      <div className="absolute inset-[-8%] rounded-[46%] border-[5px] border-cloth-edge"
+        style={{ background: "radial-gradient(ellipse at 50% 40%, color-mix(in srgb, var(--cloth), var(--cloth-edge)), var(--cloth-deep))", boxShadow: "inset 0 10px 30px rgba(0,0,0,.35)" }} />
       <div className="relative" style={{ width: width + 24, height: h + 8 }}>
         {[0, 1, 2].map((i) => (
           <CardBack key={i} width={width} team="red" className="absolute"
             style={{ left: i * 12, top: i * 4, transform: to === null ? undefined : `translate(${dx * (i + 1)}px, ${dy * (i + 1)}px) rotate(${(i - 1) * 4}deg)`, opacity: 1 - i * 0.12 }} />
         ))}
       </div>
-      <p className="text-center text-sm text-chalk-faint">{to === null ? "No pass this hand" : `To ${nameOf(to)}`}</p>
+      <p className="relative text-center text-sm text-chalk-faint">{to === null ? "No pass this hand" : `To ${nameOf(to)}`}</p>
     </div>
   );
 }
@@ -594,7 +596,7 @@ function HandEnd({ view, nameOf, moon, mySeat, sheetOpen, setSheetOpen, phone }:
   const last = view.history[view.history.length - 1];
   const winner = view.winner;
   return (
-    <div className="flex w-full max-w-md flex-col items-center gap-3">
+    <div className="flex w-full max-w-md flex-col items-center gap-3 short:gap-4">
       {moon !== null && (
         <div className="moon-rise relative z-10 flex h-36 w-36 flex-col items-center justify-center rounded-full sm:h-44 sm:w-44 short:h-24 short:w-24" style={{ background: "var(--chalk)", boxShadow: "0 0 70px 14px rgba(245,239,227,.28), var(--shadow-card)" }}>
           <span className="display max-w-[82%] truncate text-center text-ink" style={{ fontSize: phone ? 22 : 26, lineHeight: 1.05 }}>{moon === mySeat ? "You" : nameOf(moon)}</span>
