@@ -89,7 +89,7 @@ export function GuestStart({ mode = "both", code: initialCode = "", signedIn = f
             </button>
             <p className="mt-1.5 flex items-center justify-between gap-3 text-xs text-ink-soft">
               You get a code to share.
-              <button type="button" className="text-sm text-deck-blue underline" aria-expanded={showRules} onClick={() => setShowRules((v) => !v)}>
+              <button type="button" className="shrink-0 whitespace-nowrap text-sm text-deck-blue underline" aria-expanded={showRules} onClick={() => setShowRules((v) => !v)}>
                 {showRules ? "Hide house rules" : "House rules"}
               </button>
             </p>
