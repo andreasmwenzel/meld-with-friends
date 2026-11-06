@@ -60,11 +60,11 @@ export function Welcome({ signIn = false }: { signIn?: boolean }) {
   return (
     <>
       {/* Sideways on a phone the headline and the form sit side by side, so the form starts on the first screen. */}
-      <section className="relative flex shrink-0 flex-col short:grid short:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] short:items-start short:gap-x-8">
+      <section className="relative flex shrink-0 flex-col short:grid short:grid-cols-[minmax(0,1fr)_minmax(0,min(30rem,58%))] short:items-start short:gap-x-8">
         <GameFan />
         <div>
-          {/* Sized by height as well as width, so a short screen keeps room for the form. */}
-          <h1 className="display" style={{ fontSize: "clamp(44px, min(15vw, 11dvh), 92px)" }}>Pull up<br />a chair.</h1>
+          {/* Sized by height as well as width, so a short screen keeps room for the form. The class is the fallback where dvh is unknown. */}
+          <h1 className="display text-[clamp(52px,15vw,92px)]" style={{ fontSize: "clamp(44px, min(15vw, 11dvh), 92px)" }}>Pull up<br />a chair.</h1>
           <p className="mt-3 max-w-md text-chalk-faint leading-relaxed">
             Pinochle or hearts with your friends. Deal a table, send the six-letter code, and play. No account, no downloads, no strangers.
           </p>
