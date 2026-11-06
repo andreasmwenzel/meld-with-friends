@@ -10,12 +10,16 @@ import { GuestStart } from "@/components/site/GuestStart";
 import { SignInToggle } from "@/components/site/SignInToggle";
 import { HowToPlay } from "@/components/site/HowToPlay";
 
-/** The front door frame: one screen tall, never scrolls; only the table list scrolls inside it. */
+/**
+ * The front door frame: one screen tall where everything fits, with the held hand filling what is left.
+ * When the screen is too short for the form (a small phone, a phone held sideways) the page scrolls
+ * instead of hiding fields inside a clipped box.
+ */
 export function FrontDoor({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto flex h-dvh w-full max-w-xl flex-col overflow-hidden px-5 sm:px-6"
+    <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col px-5 sm:px-6 short:max-w-4xl"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-      <header className="flex shrink-0 items-center justify-between gap-3 py-4">
+      <header className="flex shrink-0 items-center justify-between gap-3 py-4 short:py-2">
         <Wordmark size={28} />
         <HowToPlay><Rules /></HowToPlay>
       </header>
@@ -28,7 +32,7 @@ export function FrontDoor({ children }: { children: ReactNode }) {
 function HeldHand() {
   const n = 6, w = 80;
   return (
-    <div aria-hidden className="pointer-events-none relative min-h-0 flex-1 overflow-hidden">
+    <div aria-hidden className="pointer-events-none relative min-h-0 flex-1 overflow-hidden short:hidden">
       <div className="absolute left-1/2 top-3 -translate-x-1/2" style={{ width: w + (n - 1) * w * 0.42, height: (w * 7) / 5 + 40 }}>
         {Array.from({ length: n }, (_, i) => (
           <div key={i} className="absolute top-0" style={{ left: i * w * 0.42, transformOrigin: "50% 120%", transform: `rotate(${(i - (n - 1) / 2) * 8}deg)` }}>
@@ -40,11 +44,11 @@ function HeldHand() {
   );
 }
 
-/** The games, fanned beside the headline where the two short lines leave room. */
+/** The games, fanned beside the headline where the two short lines leave room. Smaller on phones so it clears "chair.". */
 function GameFan() {
   const w = 64;
   return (
-    <div aria-hidden className="pointer-events-none absolute right-0 top-1 hidden min-[380px]:block" style={{ width: w + 2 * 46, height: (w * 7) / 5 + 24 }}>
+    <div aria-hidden className="pointer-events-none absolute right-3 top-1 hidden origin-top-right scale-75 min-[380px]:block min-[480px]:scale-100 short:hidden!" style={{ width: w + 2 * 46, height: (w * 7) / 5 + 24 }}>
       {[<CardBack key="b" width={w} team="red" />, <GameCard key="p" kind="pinochle" width={w} />, <GameCard key="h" kind="hearts" width={w} />].map((card, i) => (
         <div key={i} className="absolute bottom-0" style={{ left: i * 46, zIndex: i, transformOrigin: "50% 140%", transform: `rotate(${(i - 1) * 10}deg)` }}>{card}</div>
       ))}
@@ -55,13 +59,17 @@ function GameFan() {
 export function Welcome({ signIn = false }: { signIn?: boolean }) {
   return (
     <>
-      <section className="relative flex min-h-0 shrink flex-col">
+      {/* Sideways on a phone the headline and the form sit side by side, so the form starts on the first screen. */}
+      <section className="relative flex shrink-0 flex-col short:grid short:grid-cols-[minmax(0,1fr)_minmax(0,min(30rem,58%))] short:items-start short:gap-x-8">
         <GameFan />
-        <h1 className="display shrink-0" style={{ fontSize: "clamp(52px, 15vw, 92px)" }}>Pull up<br />a chair.</h1>
-        <p className="mt-3 max-w-md shrink-0 text-chalk-faint leading-relaxed">
-          Pinochle or hearts with your friends. Deal a table, send the six-letter code, and play. No account, no downloads, no strangers.
-        </p>
-        <div className="-mx-2 mt-5 min-h-0 overflow-y-auto overscroll-contain px-2 pb-1">
+        <div>
+          {/* Sized by height as well as width, so a short screen keeps room for the form. The class is the fallback where dvh is unknown. */}
+          <h1 className="display text-[clamp(52px,15vw,92px)]" style={{ fontSize: "clamp(44px, min(15vw, 11dvh), 92px)" }}>Pull up<br />a chair.</h1>
+          <p className="mt-3 max-w-md text-chalk-faint leading-relaxed">
+            Pinochle or hearts with your friends. Deal a table, send the six-letter code, and play. No account, no downloads, no strangers.
+          </p>
+        </div>
+        <div className="-mx-2 mt-5 px-2 pb-1 short:mt-0">
           <SignInToggle guest={<GuestStart />} signIn={<AuthPanel next="/" />} initial={signIn} />
         </div>
       </section>
